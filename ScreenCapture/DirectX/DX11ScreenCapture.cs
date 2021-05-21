@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using ScreenCapture.Events;
 using SharpGen.Runtime;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -15,7 +16,7 @@ using Usage = Vortice.Direct3D11.Usage;
 namespace ScreenCapture
 {
     // ReSharper disable once InconsistentNaming
-    public class DX11ScreenCapture : IScreenCapture
+    public sealed class DX11ScreenCapture : IScreenCapture
     {
         #region Constants
 
@@ -48,6 +49,12 @@ namespace ScreenCapture
         private ID3D11Texture2D? _captureTexture;
 
         private readonly Dictionary<CaptureZone, (ID3D11Texture2D stagingTexture, ID3D11Texture2D? scalingTexture, ID3D11ShaderResourceView? _scalingTextureView)> _captureZones = new();
+
+        #endregion
+
+        #region Events
+
+        public event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;
 
         #endregion
 
@@ -117,6 +124,12 @@ namespace ScreenCapture
                 try
                 {
                     UpdateZones();
+                }
+                catch { /**/ }
+
+                try
+                {
+                    Updated?.Invoke(this, new ScreenCaptureUpdatedEventArgs(result));
                 }
                 catch { /**/ }
 

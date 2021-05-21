@@ -1,4 +1,6 @@
-﻿namespace ScreenCapture
+﻿using System;
+
+namespace ScreenCapture
 {
     public sealed class CaptureZone
     {
@@ -27,6 +29,12 @@
 
         public bool AutoUpdate { get; set; } = true;
         public bool IsUpdateRequested { get; private set; }
+
+        #endregion
+
+        #region Events
+
+        public event EventHandler? Updated;
 
         #endregion
 
@@ -61,6 +69,8 @@
         {
             IsUpdateRequested = false;
             BlackBars.InvalidateCache();
+
+            Updated?.Invoke(this, new EventArgs());
         }
 
         public override int GetHashCode() => Id;
