@@ -1,9 +1,40 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <Authors>Darth Affe</Authors>
+    <Company>Wyrez</Company>
+    <Language>en-US</Language>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Title>ScreenCapture</Title>
+    <AssemblyName>ScreenCapture</AssemblyName>
+    <AssemblyTitle>ScreenCapture</AssemblyTitle>
+    <PackageId>ScreenCapture</PackageId>
+    <RootNamespace>ScreenCapture</RootNamespace>
+    <Description>Vortice based Screen-Capturing</Description>
+    <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
+    <Copyright>Copyright © Darth Affe 2021</Copyright>
+    <PackageCopyright>Copyright © Darth Affe 2021</PackageCopyright>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/DarthAffe/ScreenCapture</PackageProjectUrl>
+    <PackageLicenseUrl>LGPL-2.1-only</PackageLicenseUrl>
+    <RepositoryType>Github</RepositoryType>
+    <RepositoryUrl>https://github.com/DarthAffe/ScreenCapture</RepositoryUrl>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+    <PackageReleaseNotes>Initial release</PackageReleaseNotes>
+
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>1.0.0</FileVersion>
+
+    <OutputPath>..\bin\</OutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSource>True</IncludeSource>
+    <IncludeSymbols>True</IncludeSymbols>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
@@ -21,7 +52,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Vortice.Direct3D11" Version="1.9.41" />
+    <None Include="Resources\icon.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="1.9.65" />
   </ItemGroup>
 
 </Project>
