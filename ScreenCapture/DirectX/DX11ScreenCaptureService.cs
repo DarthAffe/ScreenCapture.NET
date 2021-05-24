@@ -1,8 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Vortice.DXGI;
 
 namespace ScreenCapture
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public class DX11ScreenCaptureService : IScreenCaptureService
     {
         #region Properties & Fields
@@ -15,6 +19,9 @@ namespace ScreenCapture
 
         #region Constructors
 
+        /// <summary>
+        /// 
+        /// </summary>
         public DX11ScreenCaptureService()
         {
             DXGI.CreateDXGIFactory1(out _factory).CheckError();
@@ -24,6 +31,7 @@ namespace ScreenCapture
 
         #region Methods
 
+        /// <inheritdoc />
         public IEnumerable<GraphicsCard> GetGraphicsCards()
         {
             int i = 0;
@@ -35,6 +43,7 @@ namespace ScreenCapture
             }
         }
 
+        /// <inheritdoc />
         public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
         {
             using IDXGIAdapter1? adapter = _factory.GetAdapter1(graphicsCard.Index);
@@ -50,6 +59,7 @@ namespace ScreenCapture
             }
         }
 
+        /// <inheritdoc />
         public IScreenCapture GetScreenCapture(Display display)
         {
             if (!_screenCaptures.TryGetValue(display, out DX11ScreenCapture? screenCapture))
@@ -57,6 +67,7 @@ namespace ScreenCapture
             return screenCapture;
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             foreach (DX11ScreenCapture screenCapture in _screenCaptures.Values)
@@ -64,6 +75,8 @@ namespace ScreenCapture
             _screenCaptures.Clear();
 
             _factory.Dispose();
+
+            GC.SuppressFinalize(this);
         }
 
         #endregion

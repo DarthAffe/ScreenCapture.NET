@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
-using ScreenCapture.Events;
 using SharpGen.Runtime;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -15,6 +14,10 @@ using Usage = Vortice.Direct3D11.Usage;
 
 namespace ScreenCapture
 {
+    /// <summary>
+    /// Represents a ScreenCapture using DirectX 11 desktop duplicaton.
+    /// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
+    /// </summary>
     // ReSharper disable once InconsistentNaming
     public sealed class DX11ScreenCapture : IScreenCapture
     {
@@ -36,8 +39,14 @@ namespace ScreenCapture
 
         private int _indexCounter = 0;
 
+        /// <inheritdoc />
         public Display Display { get; }
 
+        /// <summary>
+        /// Gets or sets the timeout in ms used for screen-capturing. (default 1000ms)
+        /// This is used in <see cref="CaptureScreen"/> https://docs.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgioutputduplication-acquirenextframe
+        /// </summary>
+        // ReSharper disable once MemberCanBePrivate.Global
         public int Timeout { get; set; } = 1000;
 
         private readonly IDXGIFactory1 _factory;
@@ -54,12 +63,18 @@ namespace ScreenCapture
 
         #region Events
 
+        /// <inheritdoc />
         public event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;
 
         #endregion
 
         #region Constructors
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DX11ScreenCapture"/> class.
+        /// </summary>
+        /// <param name="factory">The <see cref="IDXGIFactory1"/> used to create underlying objects.</param>
+        /// <param name="display">The <see cref="Display"/> to duplicate.</param>
         public DX11ScreenCapture(IDXGIFactory1 factory, Display display)
         {
             this._factory = factory;
@@ -72,6 +87,7 @@ namespace ScreenCapture
 
         #region Methods
 
+        /// <inheritdoc />
         public bool CaptureScreen()
         {
             bool result = false;
@@ -171,6 +187,7 @@ namespace ScreenCapture
             }
         }
 
+        /// <inheritdoc />
         public CaptureZone RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
         {
             if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
@@ -209,6 +226,7 @@ namespace ScreenCapture
             return captureZone;
         }
 
+        /// <inheritdoc />
         public bool UnregisterCaptureZone(CaptureZone captureZone)
         {
             lock (_captureZones)
@@ -268,6 +286,7 @@ namespace ScreenCapture
             _captureZones[captureZone] = (stagingTexture, scalingTexture, scalingTextureView);
         }
 
+        /// <inheritdoc />
         public void Restart()
         {
             lock (_captureLock)
@@ -312,6 +331,7 @@ namespace ScreenCapture
             }
         }
 
+        /// <inheritdoc />
         public void Dispose() => Dispose(true);
 
         private void Dispose(bool removeCaptureZones)

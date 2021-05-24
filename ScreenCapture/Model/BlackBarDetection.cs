@@ -1,7 +1,11 @@
-﻿using System;
+﻿// ReSharper disable MemberCanBePrivate.Global
+using System;
 
 namespace ScreenCapture
 {
+    /// <summary>
+    /// Represents the configuration for the detection and removal of black bars around the screen image.
+    /// </summary>
     public sealed class BlackBarDetection
     {
         #region Properties & Fields
@@ -9,18 +13,33 @@ namespace ScreenCapture
         private readonly CaptureZone _captureZone;
 
         private int? _top;
+        /// <summary>
+        /// Gets the size of the detected black bar at the top of the image.
+        /// </summary>
         public int Top => _top ??= CalculateTop();
 
         private int? _bottom;
+        /// <summary>
+        /// Gets the size of the detected black bar at the bottom of the image.
+        /// </summary>
         public int Bottom => _bottom ??= CalculateBottom();
 
         private int? _left;
+        /// <summary>
+        /// Gets the size of the detected black bar at the left of the image.
+        /// </summary>
         public int Left => _left ??= CalculateLeft();
 
         private int? _right;
+        /// <summary>
+        /// Gets the size of the detected black bar at the right of the image.
+        /// </summary>
         public int Right => _right ??= CalculateRight();
 
         private int _theshold = 0;
+        /// <summary>
+        /// Gets or sets the threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.) (default 0)
+        /// </summary>
         public int Threshold
         {
             get => _theshold;
@@ -35,7 +54,7 @@ namespace ScreenCapture
 
         #region Constructors
 
-        public BlackBarDetection(CaptureZone captureZone)
+        internal BlackBarDetection(CaptureZone captureZone)
         {
             this._captureZone = captureZone;
         }
@@ -44,6 +63,9 @@ namespace ScreenCapture
 
         #region Methods
 
+        /// <summary>
+        /// Invalidates the cached values and recalculates <see cref="Top"/>, <see cref="Bottom"/>, <see cref="Left"/> and <see cref="Right"/>.
+        /// </summary>
         public void InvalidateCache()
         {
             _top = null;

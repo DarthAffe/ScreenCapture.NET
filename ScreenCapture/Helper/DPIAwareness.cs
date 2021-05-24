@@ -1,8 +1,12 @@
 ﻿// ReSharper disable InconsistentNaming
+// ReSharper disable MemberCanBePrivate.Global
 using System.Runtime.InteropServices;
 
 namespace ScreenCapture
 {
+    /// <summary>
+    /// Helper-class for DPI-related WIN-API calls.
+    /// </summary>
     public static class DPIAwareness
     {
         [DllImport("user32.dll", SetLastError = true)]
@@ -29,9 +33,9 @@ namespace ScreenCapture
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = 34
         }
 
-        public static void Initalize()
-        {
-            SetProcessDpiAwarenessContext((int)DPI_AWARENESS_CONTEXT.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        }
+        /// <summary>
+        /// Sets the DPI-Awareness-Context to V2. This is needed to prevent issues when using desktop duplication.
+        /// </summary>
+        public static void Initalize() => SetProcessDpiAwarenessContext((int)DPI_AWARENESS_CONTEXT.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
 }
