@@ -20,7 +20,7 @@
     <PackageCopyright>Copyright © Darth Affe 2021</PackageCopyright>
     <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/DarthAffe/ScreenCapture.NET</PackageProjectUrl>
-    <PackageLicenseUrl>LGPL-2.1-only</PackageLicenseUrl>
+    <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
     <RepositoryType>Github</RepositoryType>
     <RepositoryUrl>https://github.com/DarthAffe/ScreenCapture.NET</RepositoryUrl>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -35,6 +35,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSource>True</IncludeSource>
     <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
