@@ -1,8 +1,9 @@
 ﻿// ReSharper disable InconsistentNaming
 // ReSharper disable MemberCanBePrivate.Global
+
 using System.Runtime.InteropServices;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// Helper-class for DPI-related WIN-API calls.

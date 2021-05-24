@@ -1,7 +1,8 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
+
 using System;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// Represents the configuration for the detection and removal of black bars around the screen image.

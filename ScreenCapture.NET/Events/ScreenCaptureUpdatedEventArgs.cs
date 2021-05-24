@@ -1,7 +1,8 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
+
 using System;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <inheritdoc />
     /// <summary>

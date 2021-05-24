@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using Vortice.DXGI;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// 

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// 

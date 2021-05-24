@@ -1,6 +1,6 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// Represents a graphics-card.

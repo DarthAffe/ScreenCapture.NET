@@ -12,7 +12,7 @@ using MapFlags = Vortice.Direct3D11.MapFlags;
 using ResultCode = Vortice.DXGI.ResultCode;
 using Usage = Vortice.Direct3D11.Usage;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// Represents a ScreenCapture using DirectX 11 desktop duplicaton.

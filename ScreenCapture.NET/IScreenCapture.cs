@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ScreenCapture
+namespace ScreenCapture.NET
 {
     /// <summary>
     /// Represents the duplication of a single display.
