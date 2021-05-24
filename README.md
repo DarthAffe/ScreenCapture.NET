@@ -1,5 +1,7 @@
-# ScreenCapture
+# ScreenCapture.NET
 Vortice based Desktop Duplication
+
+NuGet: https://www.nuget.org/packages/ScreenCapture.NET
 
 ## Usage
 ```csharp
