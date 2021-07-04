@@ -78,11 +78,10 @@ namespace ScreenCapture.NET
         private int CalculateTop()
         {
             int threshold = Threshold;
-            int stride = _captureZone.BufferWidth * 4;
-            int bytesPerRow = _captureZone.Width * 4;
+            int stride = _captureZone.Stride;
             for (int row = 0; row < _captureZone.Height; row++)
             {
-                Span<byte> data = new(_captureZone.Buffer, row * stride, bytesPerRow);
+                Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
                 for (int i = 0; i < data.Length; i += 4)
                     if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
                         return row;
@@ -94,11 +93,10 @@ namespace ScreenCapture.NET
         private int CalculateBottom()
         {
             int threshold = Threshold;
-            int stride = _captureZone.BufferWidth * 4;
-            int bytesPerRow = _captureZone.Width * 4;
+            int stride = _captureZone.Stride;
             for (int row = _captureZone.Height; row >= 0; row--)
             {
-                Span<byte> data = new(_captureZone.Buffer, row * stride, bytesPerRow);
+                Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
                 for (int i = 0; i < data.Length; i += 4)
                     if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
                         return _captureZone.Height - row;
@@ -110,7 +108,7 @@ namespace ScreenCapture.NET
         private int CalculateLeft()
         {
             int threshold = Threshold;
-            int stride = _captureZone.BufferWidth * 4;
+            int stride = _captureZone.Stride;
             byte[] buffer = _captureZone.Buffer;
             for (int column = 0; column < _captureZone.Width; column++)
                 for (int row = 0; row < _captureZone.Height; row++)
@@ -125,7 +123,7 @@ namespace ScreenCapture.NET
         private int CalculateRight()
         {
             int threshold = Threshold;
-            int stride = _captureZone.BufferWidth * 4;
+            int stride = _captureZone.Stride;
             byte[] buffer = _captureZone.Buffer;
             for (int column = _captureZone.Width; column >= 0; column--)
                 for (int row = 0; row < _captureZone.Height; row++)

@@ -10,7 +10,6 @@ using Vortice.DXGI;
 using Vortice.Mathematics;
 using MapFlags = Vortice.Direct3D11.MapFlags;
 using ResultCode = Vortice.DXGI.ResultCode;
-using Usage = Vortice.Direct3D11.Usage;
 
 namespace ScreenCapture.NET
 {
@@ -30,6 +29,8 @@ namespace ScreenCapture.NET
             FeatureLevel.Level_10_1,
             FeatureLevel.Level_10_0
         };
+
+        private const int BPP = 4;
 
         #endregion
 
@@ -179,7 +180,13 @@ namespace ScreenCapture.NET
                     MappedSubresource mapSource = _context.Map(stagingTexture, 0, MapMode.Read, MapFlags.None);
                     IntPtr sourcePtr = mapSource.DataPointer;
                     lock (captureZone.Buffer)
-                        Marshal.Copy(sourcePtr, captureZone.Buffer, 0, captureZone.Buffer.Length);
+                    {
+                        for (int y = 0; y < captureZone.Height; y++)
+                        {
+                            Marshal.Copy(sourcePtr, captureZone.Buffer, y * captureZone.Stride, captureZone.Stride);
+                            sourcePtr += mapSource.RowPitch;
+                        }
+                    }
 
                     _context.Unmap(stagingTexture, 0);
                     captureZone.SetUpdated();
@@ -199,9 +206,6 @@ namespace ScreenCapture.NET
             if ((x + width) > Display.Width) throw new ArgumentException("x + width > Display width");
             if ((y + height) > Display.Height) throw new ArgumentException("y + height > Display height");
 
-            int textureWidth = (int)Math.Ceiling(width / 32.0) * 32;
-            int textureHeight = (int)Math.Ceiling(height / 32.0) * 32;
-
             int unscaledWidth = width;
             int unscaledHeight = height;
             if (downscaleLevel > 0)
@@ -214,12 +218,9 @@ namespace ScreenCapture.NET
             if (width < 1) width = 1;
             if (height < 1) height = 1;
 
-            int bufferWidth = (int)Math.Ceiling(width / 32.0) * 32;
-            int bufferHeight = (int)Math.Ceiling(height / 32.0) * 32;
+            byte[] buffer = new byte[width * height * 4];
 
-            byte[] buffer = new byte[bufferWidth * bufferHeight * 4];
-
-            CaptureZone captureZone = new(_indexCounter++, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight, textureWidth, textureHeight, bufferWidth, bufferHeight, buffer);
+            CaptureZone captureZone = new(_indexCounter++, x, y, width, height, BPP, downscaleLevel, unscaledWidth, unscaledHeight, buffer);
             lock (_captureZones)
                 InitializeCaptureZone(captureZone);
 
@@ -252,13 +253,13 @@ namespace ScreenCapture.NET
                 CpuAccessFlags = CpuAccessFlags.Read,
                 BindFlags = BindFlags.None,
                 Format = Format.B8G8R8A8_UNorm,
-                Width = captureZone.BufferWidth,
-                Height = captureZone.BufferHeight,
+                Width = captureZone.Width,
+                Height = captureZone.Height,
                 OptionFlags = ResourceOptionFlags.None,
                 MipLevels = 1,
                 ArraySize = 1,
                 SampleDescription = { Count = 1, Quality = 0 },
-                Usage = Usage.Staging
+                Usage = ResourceUsage.Staging
             };
             ID3D11Texture2D stagingTexture = _device!.CreateTexture2D(stagingTextureDesc);
 
@@ -271,13 +272,13 @@ namespace ScreenCapture.NET
                     CpuAccessFlags = CpuAccessFlags.None,
                     BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                     Format = Format.B8G8R8A8_UNorm,
-                    Width = captureZone.CaptureWidth,
-                    Height = captureZone.CaptureHeight,
+                    Width = captureZone.UnscaledWidth,
+                    Height = captureZone.UnscaledHeight,
                     OptionFlags = ResourceOptionFlags.GenerateMips,
                     MipLevels = captureZone.DownscaleLevel + 1,
                     ArraySize = 1,
                     SampleDescription = { Count = 1, Quality = 0 },
-                    Usage = Usage.Default
+                    Usage = ResourceUsage.Default
                 };
                 scalingTexture = _device!.CreateTexture2D(scalingTextureDesc);
                 scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
@@ -302,7 +303,7 @@ namespace ScreenCapture.NET
                     _context = _device.ImmediateContext;
 
                     _output = adapter.GetOutput(Display.Index);
-                    using IDXGIOutput5 output1 = _output.QueryInterface<IDXGIOutput5>();
+                    using IDXGIOutput5 output = _output.QueryInterface<IDXGIOutput5>();
 
                     Texture2DDescription captureTextureDesc = new()
                     {
@@ -315,7 +316,7 @@ namespace ScreenCapture.NET
                         MipLevels = 1,
                         ArraySize = 1,
                         SampleDescription = { Count = 1, Quality = 0 },
-                        Usage = Usage.Default
+                        Usage = ResourceUsage.Default
                     };
                     _captureTexture = _device.CreateTexture2D(captureTextureDesc);
 
@@ -324,8 +325,8 @@ namespace ScreenCapture.NET
                         foreach (CaptureZone captureZone in captureZones)
                             InitializeCaptureZone(captureZone);
                     }
-
-                    _duplicatedOutput = output1.DuplicateOutput1(_device, Format.B8G8R8A8_UNorm); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
+                    
+                    _duplicatedOutput = output.DuplicateOutput1(_device, Format.B8G8R8A8_UNorm); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
                 }
                 catch { Dispose(false); }
             }

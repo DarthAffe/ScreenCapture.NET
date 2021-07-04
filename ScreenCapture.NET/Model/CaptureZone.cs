@@ -52,26 +52,14 @@ namespace ScreenCapture.NET
         public int UnscaledHeight { get; }
 
         /// <summary>
-        /// Gets the actually captured width of the region (this can be greated than <see cref="Width"/> due to size-constraints on the GPU).
+        /// Gets the amount of bytes per pixel in the image (most likely 3 [RGB] or 4 [ARGB]).
         /// </summary>
-        public int CaptureWidth { get; }
+        public int BytesPerPixel { get; }
 
         /// <summary>
-        /// Gets the actually captured height of the region (this can be greated than <see cref="Height"/> due to size-constraints on the GPU).
+        /// Gets the size in bytes of a row in the region (<see cref="Width"/> * <see cref="BytesPerPixel"/>).
         /// </summary>
-        public int CaptureHeight { get; }
-
-        /// <summary>
-        /// Gets the width of the buffer the capture is saved to.
-        /// Equals <see cref="CaptureWidth"/> most of the time but can be bigger.
-        /// </summary>
-        public int BufferWidth { get; }
-
-        /// <summary>
-        /// Gets the height of the buffer the capture is saved to.
-        /// Equals <see cref="CaptureHeight"/> most of the time but can be bigger.
-        /// </summary>
-        public int BufferHeight { get; }
+        public int Stride => Width * BytesPerPixel;
 
         /// <summary>
         /// Gets the buffer containing the image data. Format depends on the specific capture but is most likely BGRA32.
@@ -117,25 +105,18 @@ namespace ScreenCapture.NET
         /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory.</param>
         /// <param name="unscaledWidth">The original width of the region.</param>
         /// <param name="unscaledHeight">The original height of the region</param>
-        /// <param name="captureWidth">The actually captured width of the region.</param>
-        /// <param name="captureHeight">The actually captured height of the region.</param>
-        /// <param name="bufferWidth">The width of the buffer the capture is saved to.</param>
-        /// <param name="bufferHeight">The height of the buffer the capture is saved to.</param>
         /// <param name="buffer">The buffer containing the image data.</param>
-        public CaptureZone(int id, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight, int captureWidth, int captureHeight, int bufferWidth, int bufferHeight, byte[] buffer)
+        internal CaptureZone(int id, int x, int y, int width, int height, int bytesPerPixel, int downscaleLevel, int unscaledWidth, int unscaledHeight, byte[] buffer)
         {
             this.Id = id;
             this.X = x;
             this.Y = y;
             this.Width = width;
             this.Height = height;
+            this.BytesPerPixel = bytesPerPixel;
             this.UnscaledWidth = unscaledWidth;
             this.UnscaledHeight = unscaledHeight;
             this.DownscaleLevel = downscaleLevel;
-            this.CaptureWidth = captureWidth;
-            this.CaptureHeight = captureHeight;
-            this.BufferWidth = bufferWidth;
-            this.BufferHeight = bufferHeight;
             this.Buffer = buffer;
 
             BlackBars = new BlackBarDetection(this);
