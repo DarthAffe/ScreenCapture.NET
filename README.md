@@ -5,7 +5,7 @@ NuGet: https://www.nuget.org/packages/ScreenCapture.NET
 
 ## Usage
 ```csharp
-// Sets the DPI-awareness of the application - this is required for capturing
+// Sets the DPI-awareness of the application - this is required for capturing.
 DPIAwareness.Initalize();
 
 // Create a screen-capture service
@@ -27,18 +27,16 @@ CaptureZone fullscreen = screenCapture.RegisterCaptureZone(0, 0, screenCapture.D
 CaptureZone topLeft = screenCapture.RegisterCaptureZone(0, 0, 100, 100, downscaleLevel: 1);
 
 // Capture the screen
-// This should be done in a loop on a seperate thread as CaptureScreen blocks if the screen is not updated (still image)
+// This should be done in a loop on a seperate thread as CaptureScreen blocks if the screen is not updated (still image).
 screenCapture.CaptureScreen();
 
 // Do something with the captured image - e.g. access all pixels (same could be done with topLeft)
 // Locking is not neccessary in that case as we're capturing in the same thread,
-// but when using a threaded-approach (which is recommended) it prevents potential tearing of the data in the buffer
+// but when using a threaded-approach (which is recommended) it prevents potential tearing of the data in the buffer.
 lock (fullscreen.Buffer)
 {
-    // Since the size of the capture can be bigger than the size of our captured region due to size constraints on the GPU,
-    // we need to use this for the stride. 
-    // The 4 is the amount of bytes per pixel which is always 4 for the DX11ScreenCapture
-    int stride = fullscreen.CaptureWidth * 4;
+    // Stride is the width in bytes of a row in the buffer (width in pixel * bytes per pixel)
+    int stride = fullscreen.Stride;
 
     Span<byte> data = new(fullscreen.Buffer);
 
@@ -46,10 +44,10 @@ lock (fullscreen.Buffer)
     for (int y = 0; y < fullscreen.Height; y++)
     {
         // Select the actual data of the row
-        Span<byte> row = data.Slice(y * stride, fullscreen.Width * 4);
+        Span<byte> row = data.Slice(y * stride, stride);
 
         // Iterate all pixels
-        for (int x = 0; x < fullscreen.Width; x += 4)
+        for (int x = 0; x < row.Length; x += fullscreen.BytesPerPixel)
         {
             // Data is in BGRA format for the DX11ScreenCapture
             byte b = row[x];
