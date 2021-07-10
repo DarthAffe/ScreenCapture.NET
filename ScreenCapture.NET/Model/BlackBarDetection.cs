@@ -94,7 +94,7 @@ namespace ScreenCapture.NET
         {
             int threshold = Threshold;
             int stride = _captureZone.Stride;
-            for (int row = _captureZone.Height; row >= 0; row--)
+            for (int row = _captureZone.Height - 1; row >= 0; row--)
             {
                 Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
                 for (int i = 0; i < data.Length; i += 4)
@@ -125,7 +125,7 @@ namespace ScreenCapture.NET
             int threshold = Threshold;
             int stride = _captureZone.Stride;
             byte[] buffer = _captureZone.Buffer;
-            for (int column = _captureZone.Width; column >= 0; column--)
+            for (int column = _captureZone.Width - 1; column >= 0; column--)
                 for (int row = 0; row < _captureZone.Height; row++)
                 {
                     int offset = (stride * row) + (column * 4);
