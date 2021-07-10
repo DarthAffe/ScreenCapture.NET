@@ -99,7 +99,7 @@ namespace ScreenCapture.NET
                 Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
                 for (int i = 0; i < data.Length; i += 4)
                     if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
-                        return _captureZone.Height - row;
+                        return (_captureZone.Height - 1) - row;
             }
 
             return 0;
@@ -114,7 +114,8 @@ namespace ScreenCapture.NET
                 for (int row = 0; row < _captureZone.Height; row++)
                 {
                     int offset = (stride * row) + (column * 4);
-                    if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold)) return column;
+                    if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold))
+                        return column;
                 }
 
             return 0;
@@ -129,7 +130,8 @@ namespace ScreenCapture.NET
                 for (int row = 0; row < _captureZone.Height; row++)
                 {
                     int offset = (stride * row) + (column * 4);
-                    if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold)) return _captureZone.Width - column;
+                    if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold))
+                        return (_captureZone.Width - 1) - column;
                 }
 
             return 0;
