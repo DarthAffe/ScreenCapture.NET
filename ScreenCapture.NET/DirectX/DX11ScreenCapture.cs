@@ -38,6 +38,7 @@ namespace ScreenCapture.NET
 
         private readonly object _captureLock = new();
 
+        private readonly bool _useNewDuplicationAdapter;
         private int _indexCounter = 0;
 
         /// <inheritdoc />
@@ -74,12 +75,17 @@ namespace ScreenCapture.NET
         /// <summary>
         /// Initializes a new instance of the <see cref="DX11ScreenCapture"/> class.
         /// </summary>
+        /// <remarks>
+        /// Note that setting useNewDuplicationAdapter to true requires to call <c>DPIAwareness.Initalize();</c> and prevents the capture from running in a WPF-thread.
+        /// </remarks>
         /// <param name="factory">The <see cref="IDXGIFactory1"/> used to create underlying objects.</param>
         /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-        public DX11ScreenCapture(IDXGIFactory1 factory, Display display)
+        /// <param name="useNewDuplicationAdapter">Indicates if the DuplicateOutput1 interface should be used instead of the older DuplicateOutput. Currently there's no real use in setting this to true.</param>
+        public DX11ScreenCapture(IDXGIFactory1 factory, Display display, bool useNewDuplicationAdapter = false)
         {
             this._factory = factory;
             this.Display = display;
+            this._useNewDuplicationAdapter = useNewDuplicationAdapter;
 
             Restart();
         }
@@ -325,8 +331,11 @@ namespace ScreenCapture.NET
                         foreach (CaptureZone captureZone in captureZones)
                             InitializeCaptureZone(captureZone);
                     }
-                    
-                    _duplicatedOutput = output.DuplicateOutput1(_device, Format.B8G8R8A8_UNorm); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
+
+                    if (_useNewDuplicationAdapter)
+                        _duplicatedOutput = output.DuplicateOutput1(_device, Format.B8G8R8A8_UNorm); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
+                    else
+                        _duplicatedOutput = output.DuplicateOutput(_device);
                 }
                 catch { Dispose(false); }
             }
