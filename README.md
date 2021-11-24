@@ -5,9 +5,6 @@ NuGet: https://www.nuget.org/packages/ScreenCapture.NET
 
 ## Usage
 ```csharp
-// Sets the DPI-awareness of the application - this is required for capturing.
-DPIAwareness.Initalize();
-
 // Create a screen-capture service
 IScreenCaptureService screenCaptureService = new DX11ScreenCaptureService();
 
