@@ -60,7 +60,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Vortice.Direct3D11" Version="1.9.87" />
+    <PackageReference Include="Vortice.Direct3D11" Version="1.9.143" />
   </ItemGroup>
 
 </Project>
