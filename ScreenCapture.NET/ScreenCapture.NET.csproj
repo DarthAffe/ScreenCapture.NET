@@ -25,11 +25,16 @@
     <RepositoryUrl>https://github.com/DarthAffe/ScreenCapture.NET</RepositoryUrl>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
-    <PackageReleaseNotes>Initial release</PackageReleaseNotes>
+    <PackageReleaseNotes>
+      - Fixed problems with capturing inside WPF-threads.
+      - Removed the need to call 'DPIAwareness.Initalize()' in default configuration
+      - Added .NET 6 support
+      - Updated Vortice to 1.9.143
+    </PackageReleaseNotes>
 
-    <Version>1.0.2</Version>
-    <AssemblyVersion>1.0.2</AssemblyVersion>
-    <FileVersion>1.0.2</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0</AssemblyVersion>
+    <FileVersion>1.1.0</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
