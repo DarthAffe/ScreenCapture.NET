@@ -203,14 +203,7 @@ namespace ScreenCapture.NET
         /// <inheritdoc />
         public CaptureZone RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
         {
-            if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
-
-            if (x < 0) throw new ArgumentException("x < 0");
-            if (y < 0) throw new ArgumentException("y < 0");
-            if (width <= 0) throw new ArgumentException("with <= 0");
-            if (height <= 0) throw new ArgumentException("height <= 0");
-            if ((x + width) > Display.Width) throw new ArgumentException("x + width > Display width");
-            if ((y + height) > Display.Height) throw new ArgumentException("y + height > Display height");
+            CaptureZoneValidityCheck(x, y, width, height);
 
             int unscaledWidth = width;
             int unscaledHeight = height;
@@ -250,6 +243,33 @@ namespace ScreenCapture.NET
 
                 return false;
             }
+        }
+
+        /// <inheritdoc />
+        public void RepositionCaptureZone(CaptureZone captureZone, int x, int y)
+        {
+            CaptureZoneValidityCheck(x, y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+
+            lock (_captureZones)
+            {
+                if (!_captureZones.ContainsKey(captureZone))
+                    throw new ArgumentException("Non registered CaptureZone", nameof(captureZone));
+            }
+
+            captureZone.X = x;
+            captureZone.Y = y;
+        }
+
+        private void CaptureZoneValidityCheck(int x, int y, int width, int height)
+        {
+            if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
+
+            if (x < 0) throw new ArgumentException("x < 0");
+            if (y < 0) throw new ArgumentException("y < 0");
+            if (width <= 0) throw new ArgumentException("with <= 0");
+            if (height <= 0) throw new ArgumentException("height <= 0");
+            if ((x + width) > Display.Width) throw new ArgumentException("x + width > Display width");
+            if ((y + height) > Display.Height) throw new ArgumentException("y + height > Display height");
         }
 
         private void InitializeCaptureZone(in CaptureZone captureZone)

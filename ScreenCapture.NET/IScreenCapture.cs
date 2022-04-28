@@ -37,9 +37,18 @@ namespace ScreenCapture.NET
         /// <summary>
         /// Removes the given <see cref="CaptureScreen"/> from the <see cref="IScreenCapture"/>.
         /// </summary>
-        /// <param name="captureZone">The previosly registered <see cref="CaptureScreen"/>.</param>
+        /// <param name="captureZone">The previously registered <see cref="CaptureScreen"/>.</param>
         /// <returns><c>true</c> if the <see cref="CaptureScreen"/> was successfully removed; otherwise, <c>false</c>.</returns>
         bool UnregisterCaptureZone(CaptureZone captureZone);
+
+        /// <summary>
+        /// Updates the position of the given <see cref="CaptureScreen"/>.
+        /// </summary>
+        /// <param name="captureZone">The previously registered <see cref="CaptureScreen"/>.</param>
+        /// <param name="x">The new x-location of the region on the screen.</param>
+        /// <param name="y">The new y-location of the region on the screen</param>
+        /// <returns><c>true</c> if the <see cref="CaptureScreen"/> was successfully repositioned; otherwise, <c>false</c>.</returns>
+        void RepositionCaptureZone(CaptureZone captureZone, int x, int y);
 
         /// <summary>
         /// Restarts the <see cref="IScreenCapture"/>.

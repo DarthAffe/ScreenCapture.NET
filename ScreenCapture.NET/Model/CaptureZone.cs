@@ -19,12 +19,12 @@ namespace ScreenCapture.NET
         /// <summary>
         /// Gets the x-location of the region on the screen.
         /// </summary>
-        public int X { get; }
+        public int X { get; internal set; }
 
         /// <summary>
         /// Gets the y-location of the region on the screen.
         /// </summary>
-        public int Y { get; }
+        public int Y { get; internal set; }
 
         /// <summary>
         /// Gets the width of the region on the screen.
