@@ -27,29 +27,29 @@ namespace ScreenCapture.NET
         public int Y { get; internal set; }
 
         /// <summary>
-        /// Gets the width of the region on the screen.
+        /// Gets the width of the captured region.
         /// </summary>
-        public int Width { get; }
+        public int Width { get; internal set; }
 
         /// <summary>
-        /// Gets the height of the region on the screen.
+        /// Gets the height of the captured region.
         /// </summary>
-        public int Height { get; }
+        public int Height { get; internal set; }
 
         /// <summary>
         /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
         /// </summary>
-        public int DownscaleLevel { get; }
+        public int DownscaleLevel { get; internal set; }
 
         /// <summary>
         /// Gets the original width of the region (this equals <see cref="Width"/> if <see cref="DownscaleLevel"/> is 0).
         /// </summary>
-        public int UnscaledWidth { get; }
+        public int UnscaledWidth { get; internal set; }
 
         /// <summary>
         /// Gets the original height of the region (this equals <see cref="Height"/> if <see cref="DownscaleLevel"/> is 0).
         /// </summary>
-        public int UnscaledHeight { get; }
+        public int UnscaledHeight { get; internal set; }
 
         /// <summary>
         /// Gets the amount of bytes per pixel in the image (most likely 3 [RGB] or 4 [ARGB]).
@@ -64,7 +64,7 @@ namespace ScreenCapture.NET
         /// <summary>
         /// Gets the buffer containing the image data. Format depends on the specific capture but is most likely BGRA32.
         /// </summary>
-        public byte[] Buffer { get; }
+        public byte[] Buffer { get; internal set; }
 
         /// <summary>
         /// Gets the config for black-bar detection.

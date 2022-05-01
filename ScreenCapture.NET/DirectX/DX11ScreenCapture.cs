@@ -171,17 +171,17 @@ namespace ScreenCapture.NET
                     if (scalingTexture != null)
                     {
                         _context.CopySubresourceRegion(scalingTexture, 0, 0, 0, 0, _captureTexture, 0,
-                                                        new Box(captureZone.X, captureZone.Y, 0,
-                                                                captureZone.X + captureZone.UnscaledWidth,
-                                                                captureZone.Y + captureZone.UnscaledHeight, 1));
+                                                       new Box(captureZone.X, captureZone.Y, 0,
+                                                               captureZone.X + captureZone.UnscaledWidth,
+                                                               captureZone.Y + captureZone.UnscaledHeight, 1));
                         _context.GenerateMips(scalingTextureView);
                         _context.CopySubresourceRegion(stagingTexture, 0, 0, 0, 0, scalingTexture, captureZone.DownscaleLevel);
                     }
                     else
                         _context.CopySubresourceRegion(stagingTexture, 0, 0, 0, 0, _captureTexture, 0,
-                                                        new Box(captureZone.X, captureZone.Y, 0,
-                                                                captureZone.X + captureZone.UnscaledWidth,
-                                                                captureZone.Y + captureZone.UnscaledHeight, 1));
+                                                       new Box(captureZone.X, captureZone.Y, 0,
+                                                               captureZone.X + captureZone.UnscaledWidth,
+                                                               captureZone.Y + captureZone.UnscaledHeight, 1));
 
                     MappedSubresource mapSource = _context.Map(stagingTexture, 0, MapMode.Read, MapFlags.None);
                     IntPtr sourcePtr = mapSource.DataPointer;
@@ -203,21 +203,13 @@ namespace ScreenCapture.NET
         /// <inheritdoc />
         public CaptureZone RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
         {
-            CaptureZoneValidityCheck(x, y, width, height);
+            ValidateCaptureZoneAndThrow(x, y, width, height);
 
             int unscaledWidth = width;
             int unscaledHeight = height;
-            if (downscaleLevel > 0)
-                for (int i = 0; i < downscaleLevel; i++)
-                {
-                    width /= 2;
-                    height /= 2;
-                }
+            (width, height) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
 
-            if (width < 1) width = 1;
-            if (height < 1) height = 1;
-
-            byte[] buffer = new byte[width * height * 4];
+            byte[] buffer = new byte[width * height * BPP];
 
             CaptureZone captureZone = new(_indexCounter++, x, y, width, height, BPP, downscaleLevel, unscaledWidth, unscaledHeight, buffer);
             lock (_captureZones)
@@ -246,21 +238,59 @@ namespace ScreenCapture.NET
         }
 
         /// <inheritdoc />
-        public void RepositionCaptureZone(CaptureZone captureZone, int x, int y)
+        public void UpdateCaptureZone(CaptureZone captureZone, int? x = null, int? y = null, int? width = null, int? height = null, int? downscaleLevel = null)
         {
-            CaptureZoneValidityCheck(x, y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
-
             lock (_captureZones)
-            {
                 if (!_captureZones.ContainsKey(captureZone))
-                    throw new ArgumentException("Non registered CaptureZone", nameof(captureZone));
-            }
+                    throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));
 
-            captureZone.X = x;
-            captureZone.Y = y;
+            int newX = x ?? captureZone.X;
+            int newY = y ?? captureZone.Y;
+            int newUnscaledWidth = width ?? captureZone.UnscaledWidth;
+            int newUnscaledHeight = height ?? captureZone.UnscaledHeight;
+            int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
+
+            ValidateCaptureZoneAndThrow(newX, newY, newUnscaledWidth, newUnscaledHeight);
+
+            captureZone.X = newX;
+            captureZone.Y = newY;
+
+            //TODO DarthAffe 01.05.2022: For now just reinitialize the zone in that case, but this could be optimized to only recreate the textures needed.
+            if ((width != null) || (height != null) || (downscaleLevel != null))
+            {
+                (int newWidth, int newHeight) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
+                lock (_captureZones)
+                {
+                    UnregisterCaptureZone(captureZone);
+
+                    captureZone.UnscaledWidth = newUnscaledWidth;
+                    captureZone.UnscaledHeight = newUnscaledHeight;
+                    captureZone.Width = newWidth;
+                    captureZone.Height = newHeight;
+                    captureZone.DownscaleLevel = newDownscaleLevel;
+                    captureZone.Buffer = new byte[newWidth * newHeight * BPP];
+
+                    InitializeCaptureZone(captureZone);
+                }
+            }
         }
 
-        private void CaptureZoneValidityCheck(int x, int y, int width, int height)
+        private (int width, int height) CalculateScaledSize(int width, int height, int downscaleLevel)
+        {
+            if (downscaleLevel > 0)
+                for (int i = 0; i < downscaleLevel; i++)
+                {
+                    width /= 2;
+                    height /= 2;
+                }
+
+            if (width < 1) width = 1;
+            if (height < 1) height = 1;
+
+            return (width, height);
+        }
+
+        private void ValidateCaptureZoneAndThrow(int x, int y, int width, int height)
         {
             if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
 
