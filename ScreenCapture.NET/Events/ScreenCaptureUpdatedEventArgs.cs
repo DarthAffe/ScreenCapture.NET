@@ -2,34 +2,33 @@
 
 using System;
 
-namespace ScreenCapture.NET
+namespace ScreenCapture.NET;
+
+/// <inheritdoc />
+/// <summary>
+/// Represents the information supplied with an <see cref="E:ScreenCapture.IDX11ScreenCapture.Updated" />-event.
+/// </summary>
+public class ScreenCaptureUpdatedEventArgs : EventArgs
 {
-    /// <inheritdoc />
+    #region Properties & Fields
+
     /// <summary>
-    /// Represents the information supplied with an <see cref="E:ScreenCapture.IDX11ScreenCapture.Updated" />-event.
+    /// <c>true</c> if the update was successful; otherwise, <c>false</c>.
     /// </summary>
-    public class ScreenCaptureUpdatedEventArgs : EventArgs
+    public bool IsSuccessful { get; set; }
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScreenCaptureUpdatedEventArgs"/> class.
+    /// </summary>
+    /// <param name="isSuccessful">Indicates if the last update was successful.</param>
+    public ScreenCaptureUpdatedEventArgs(bool isSuccessful)
     {
-        #region Properties & Fields
-
-        /// <summary>
-        /// <c>true</c> if the update was successful; otherwise, <c>false</c>.
-        /// </summary>
-        public bool IsSuccessful { get; set; }
-
-        #endregion
-
-        #region Constructors
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ScreenCaptureUpdatedEventArgs"/> class.
-        /// </summary>
-        /// <param name="isSuccessful">Indicates if the last update was successful.</param>
-        public ScreenCaptureUpdatedEventArgs(bool isSuccessful)
-        {
-            this.IsSuccessful = isSuccessful;
-        }
-
-        #endregion
+        this.IsSuccessful = isSuccessful;
     }
+
+    #endregion
 }
