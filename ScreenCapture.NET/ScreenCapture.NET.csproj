@@ -16,8 +16,8 @@
     <RootNamespace>ScreenCapture.NET</RootNamespace>
     <Description>Vortice based Screen-Capturing</Description>
     <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
-    <Copyright>Copyright © Darth Affe 2021</Copyright>
-    <PackageCopyright>Copyright © Darth Affe 2021</PackageCopyright>
+    <Copyright>Copyright © Darth Affe 2022</Copyright>
+    <PackageCopyright>Copyright © Darth Affe 2022</PackageCopyright>
     <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/DarthAffe/ScreenCapture.NET</PackageProjectUrl>
     <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
@@ -26,15 +26,13 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-      - Fixed problems with capturing inside WPF-threads.
-      - Removed the need to call 'DPIAwareness.Initalize()' in default configuration
-      - Added .NET 6 support
-      - Updated Vortice to 1.9.143
+      - Added IScreenCapture.UpdateCaptureZone to modify existing CaptureZones without having to remove and add them again. 
+      (This has performance benefits when only X and/or Y is changed, changes to width, height and downscale are internally still reinitializing the zone.)
     </PackageReleaseNotes>
 
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0</AssemblyVersion>
-    <FileVersion>1.1.0</FileVersion>
+    <Version>1.2.0</Version>
+    <AssemblyVersion>1.2.0</AssemblyVersion>
+    <FileVersion>1.2.0</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
