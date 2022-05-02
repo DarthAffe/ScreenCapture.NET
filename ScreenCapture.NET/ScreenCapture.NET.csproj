@@ -26,8 +26,9 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-      - Added IScreenCapture.UpdateCaptureZone to modify existing CaptureZones without having to remove and add them again. 
+      - Added IScreenCapture.UpdateCaptureZone to modify existing CaptureZones without having to remove and add them again.
       (This has performance benefits when only X and/or Y is changed, changes to width, height and downscale are internally still reinitializing the zone.)
+      - Fixed ambiguous equals in Display
     </PackageReleaseNotes>
 
     <Version>1.2.0</Version>

@@ -1,5 +1,7 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
 
+using System;
+
 namespace ScreenCapture.NET;
 
 /// <summary>
@@ -58,20 +60,20 @@ public readonly struct Display
     #endregion
 
     #region Methods
-        
+
     /// <summary>
     /// Determines whether this <see cref="Display"/> equals the given one.
     /// </summary>
     /// <param name="other">The <see cref="Display"/> to compare.</param>
     /// <returns><c>true</c> if the specified object is equal to the current object; otherwise, <c>false</c>.</returns>
-    public bool Equals(Display other) => Index == other.Index;
+    public bool Equals(Display other) => (Index == other.Index) && GraphicsCard.Equals(other.GraphicsCard);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => obj is Display other && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => Index;
-
+    public override int GetHashCode() => HashCode.Combine(Index, GraphicsCard);
+    
     /// <summary>
     /// Determines whether two <see cref="Display"/> are equal.
     /// </summary>
