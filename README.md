@@ -17,7 +17,7 @@ IEnumerable<Display> displays = screenCaptureService.GetDisplays(graphicsCards.F
 // Create a screen-capture for all screens you want to capture
 IScreenCapture screenCapture = screenCaptureService.GetScreenCapture(displays.First());
 
-// Register the regions you want to capture om the screen
+// Register the regions you want to capture on the screen
 // Capture the whole screen
 CaptureZone fullscreen = screenCapture.RegisterCaptureZone(0, 0, screenCapture.Display.Width, screenCapture.Display.Height);
 // Capture a 100x100 region at the top left and scale it down to 50x50
@@ -54,4 +54,13 @@ lock (fullscreen.Buffer)
         }
     }
 }
+
+// Move the top left zone more towards the center
+// Using the Update-method allows to move the zone without having to allocate 
+// new buffers and textures which yields a good performance gain if done at high framerates.
+screenCapture.UpdateCaptureZone(topLeft, x: 100, y: 200);
+
+// Note that resizing the zone is also possible but currently reinitializes the zone
+// -> no performance gain compared to removing and readding the zone.
+screenCapture.UpdateCaptureZone(topLeft, width: 20, height: 20);
 ```
