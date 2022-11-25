@@ -102,6 +102,7 @@ public sealed class CaptureZone
     /// <param name="y">The y-location of the region on the screen.</param>
     /// <param name="width">The width of the region on the screen.</param>
     /// <param name="height">The height of the region on the screen.</param>
+    /// <param name="bytesPerPixel">The number of bytes per pixel.</param>
     /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory.</param>
     /// <param name="unscaledWidth">The original width of the region.</param>
     /// <param name="unscaledHeight">The original height of the region</param>
