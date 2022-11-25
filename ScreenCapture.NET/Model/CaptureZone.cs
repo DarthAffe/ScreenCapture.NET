@@ -141,7 +141,7 @@ public sealed class CaptureZone
         IsUpdateRequested = false;
         BlackBars.InvalidateCache();
 
-        Updated?.Invoke(this, new EventArgs());
+        Updated?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
