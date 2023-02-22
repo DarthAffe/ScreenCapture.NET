@@ -305,18 +305,18 @@ public sealed class DX11ScreenCapture : IScreenCapture
     private void InitializeCaptureZone(in CaptureZone captureZone)
     {
         Texture2DDescription stagingTextureDesc = new()
-                                                  {
-                                                      CpuAccessFlags = CpuAccessFlags.Read,
-                                                      BindFlags = BindFlags.None,
-                                                      Format = Format.B8G8R8A8_UNorm,
-                                                      Width = captureZone.Width,
-                                                      Height = captureZone.Height,
-                                                      OptionFlags = ResourceOptionFlags.None,
-                                                      MipLevels = 1,
-                                                      ArraySize = 1,
-                                                      SampleDescription = { Count = 1, Quality = 0 },
-                                                      Usage = ResourceUsage.Staging
-                                                  };
+        {
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+            Format = Format.B8G8R8A8_UNorm,
+            Width = captureZone.Width,
+            Height = captureZone.Height,
+            MiscFlags = ResourceOptionFlags.None,
+            MipLevels = 1,
+            ArraySize = 1,
+            SampleDescription = { Count = 1, Quality = 0 },
+            Usage = ResourceUsage.Staging
+        };
         ID3D11Texture2D stagingTexture = _device!.CreateTexture2D(stagingTextureDesc);
 
         ID3D11Texture2D? scalingTexture = null;
@@ -324,18 +324,18 @@ public sealed class DX11ScreenCapture : IScreenCapture
         if (captureZone.DownscaleLevel > 0)
         {
             Texture2DDescription scalingTextureDesc = new()
-                                                      {
-                                                          CpuAccessFlags = CpuAccessFlags.None,
-                                                          BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                                                          Format = Format.B8G8R8A8_UNorm,
-                                                          Width = captureZone.UnscaledWidth,
-                                                          Height = captureZone.UnscaledHeight,
-                                                          OptionFlags = ResourceOptionFlags.GenerateMips,
-                                                          MipLevels = captureZone.DownscaleLevel + 1,
-                                                          ArraySize = 1,
-                                                          SampleDescription = { Count = 1, Quality = 0 },
-                                                          Usage = ResourceUsage.Default
-                                                      };
+            {
+                CPUAccessFlags = CpuAccessFlags.None,
+                BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+                Format = Format.B8G8R8A8_UNorm,
+                Width = captureZone.UnscaledWidth,
+                Height = captureZone.UnscaledHeight,
+                MiscFlags = ResourceOptionFlags.GenerateMips,
+                MipLevels = captureZone.DownscaleLevel + 1,
+                ArraySize = 1,
+                SampleDescription = { Count = 1, Quality = 0 },
+                Usage = ResourceUsage.Default
+            };
             scalingTexture = _device!.CreateTexture2D(scalingTextureDesc);
             scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
         }
@@ -362,18 +362,18 @@ public sealed class DX11ScreenCapture : IScreenCapture
                 using IDXGIOutput5 output = _output.QueryInterface<IDXGIOutput5>();
 
                 Texture2DDescription captureTextureDesc = new()
-                                                          {
-                                                              CpuAccessFlags = CpuAccessFlags.None,
-                                                              BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                                                              Format = Format.B8G8R8A8_UNorm,
-                                                              Width = Display.Width,
-                                                              Height = Display.Height,
-                                                              OptionFlags = ResourceOptionFlags.None,
-                                                              MipLevels = 1,
-                                                              ArraySize = 1,
-                                                              SampleDescription = { Count = 1, Quality = 0 },
-                                                              Usage = ResourceUsage.Default
-                                                          };
+                {
+                    CPUAccessFlags = CpuAccessFlags.None,
+                    BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+                    Format = Format.B8G8R8A8_UNorm,
+                    Width = Display.Width,
+                    Height = Display.Height,
+                    MiscFlags = ResourceOptionFlags.None,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    SampleDescription = { Count = 1, Quality = 0 },
+                    Usage = ResourceUsage.Default
+                };
                 _captureTexture = _device.CreateTexture2D(captureTextureDesc);
 
                 lock (_captureZones)
@@ -383,7 +383,7 @@ public sealed class DX11ScreenCapture : IScreenCapture
                 }
 
                 if (_useNewDuplicationAdapter)
-                    _duplicatedOutput = output.DuplicateOutput1(_device, Format.B8G8R8A8_UNorm); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
+                    _duplicatedOutput = output.DuplicateOutput1(_device, new[] { Format.B8G8R8A8_UNorm }); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
                 else
                     _duplicatedOutput = output.DuplicateOutput(_device);
             }
