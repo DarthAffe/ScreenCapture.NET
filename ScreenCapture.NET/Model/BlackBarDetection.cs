@@ -81,7 +81,7 @@ public sealed class BlackBarDetection
         int stride = _captureZone.Stride;
         for (int row = 0; row < _captureZone.Height; row++)
         {
-            Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
+            Span<byte> data = new(_captureZone.PixelBuffer.Raw, row * stride, stride);
             for (int i = 0; i < data.Length; i += 4)
                 if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
                     return row;
@@ -96,7 +96,7 @@ public sealed class BlackBarDetection
         int stride = _captureZone.Stride;
         for (int row = _captureZone.Height - 1; row >= 0; row--)
         {
-            Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
+            Span<byte> data = new(_captureZone.PixelBuffer.Raw, row * stride, stride);
             for (int i = 0; i < data.Length; i += 4)
                 if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
                     return (_captureZone.Height - 1) - row;
@@ -109,7 +109,7 @@ public sealed class BlackBarDetection
     {
         int threshold = Threshold;
         int stride = _captureZone.Stride;
-        byte[] buffer = _captureZone.Buffer;
+        byte[] buffer = _captureZone.PixelBuffer.Raw;
         for (int column = 0; column < _captureZone.Width; column++)
             for (int row = 0; row < _captureZone.Height; row++)
             {
@@ -125,7 +125,7 @@ public sealed class BlackBarDetection
     {
         int threshold = Threshold;
         int stride = _captureZone.Stride;
-        byte[] buffer = _captureZone.Buffer;
+        byte[] buffer = _captureZone.PixelBuffer.Raw;
         for (int column = _captureZone.Width - 1; column >= 0; column--)
             for (int row = 0; row < _captureZone.Height; row++)
             {

@@ -19,37 +19,58 @@ public sealed class CaptureZone
     /// <summary>
     /// Gets the x-location of the region on the screen.
     /// </summary>
-    public int X { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int X { get; set; }
 
     /// <summary>
     /// Gets the y-location of the region on the screen.
     /// </summary>
-    public int Y { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int Y { get; set; }
 
     /// <summary>
     /// Gets the width of the captured region.
     /// </summary>
-    public int Width { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int Width { get; set; }
 
     /// <summary>
     /// Gets the height of the captured region.
     /// </summary>
-    public int Height { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int Height { get; set; }
 
     /// <summary>
     /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
     /// </summary>
-    public int DownscaleLevel { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int DownscaleLevel { get; set; }
 
     /// <summary>
     /// Gets the original width of the region (this equals <see cref="Width"/> if <see cref="DownscaleLevel"/> is 0).
     /// </summary>
-    public int UnscaledWidth { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int UnscaledWidth { get; set; }
 
     /// <summary>
     /// Gets the original height of the region (this equals <see cref="Height"/> if <see cref="DownscaleLevel"/> is 0).
     /// </summary>
-    public int UnscaledHeight { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public int UnscaledHeight { get; set; }
 
     /// <summary>
     /// Gets the amount of bytes per pixel in the image (most likely 3 [RGB] or 4 [ARGB]).
@@ -64,7 +85,10 @@ public sealed class CaptureZone
     /// <summary>
     /// Gets the buffer containing the image data. Format depends on the specific capture but is most likely BGRA32.
     /// </summary>
-    public byte[] Buffer { get; internal set; }
+    /// <remarks>
+    /// Should only be set inside of ScreenCaptures!
+    /// </remarks>
+    public PixelBuffer PixelBuffer { get; set; }
 
     /// <summary>
     /// Gets the config for black-bar detection.
@@ -107,7 +131,7 @@ public sealed class CaptureZone
     /// <param name="unscaledWidth">The original width of the region.</param>
     /// <param name="unscaledHeight">The original height of the region</param>
     /// <param name="buffer">The buffer containing the image data.</param>
-    internal CaptureZone(int id, int x, int y, int width, int height, int bytesPerPixel, int downscaleLevel, int unscaledWidth, int unscaledHeight, byte[] buffer)
+    public CaptureZone(int id, int x, int y, int width, int height, int bytesPerPixel, int downscaleLevel, int unscaledWidth, int unscaledHeight, PixelBuffer buffer)
     {
         this.Id = id;
         this.X = x;
@@ -118,7 +142,7 @@ public sealed class CaptureZone
         this.UnscaledWidth = unscaledWidth;
         this.UnscaledHeight = unscaledHeight;
         this.DownscaleLevel = downscaleLevel;
-        this.Buffer = buffer;
+        this.PixelBuffer = buffer;
 
         BlackBars = new BlackBarDetection(this);
     }
