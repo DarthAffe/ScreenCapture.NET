@@ -111,7 +111,7 @@ public sealed class DX11ScreenCapture : IScreenCapture
                 IDXGIResource? screenResource = null;
                 try
                 {
-                    _duplicatedOutput.AcquireNextFrame(Timeout, out OutduplFrameInfo duplicateFrameInformation, out screenResource);
+                    _duplicatedOutput.AcquireNextFrame(Timeout, out OutduplFrameInfo duplicateFrameInformation, out screenResource).CheckError();
                     if ((screenResource == null) || (duplicateFrameInformation.LastPresentTime == 0)) return false;
 
                     using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
