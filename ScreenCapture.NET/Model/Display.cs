@@ -32,6 +32,11 @@ public readonly struct Display
     public int Height { get; }
 
     /// <summary>
+    /// Gets the rotation of the <see cref="Display"/>.
+    /// </summary>
+    public Rotation Rotation { get; }
+
+    /// <summary>
     /// Gets the <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.
     /// </summary>
     public GraphicsCard GraphicsCard { get; }
@@ -47,13 +52,15 @@ public readonly struct Display
     /// <param name="deviceName">The name of the <see cref="Display"/>.</param>
     /// <param name="width">The with of the <see cref="Display"/>.</param>
     /// <param name="height">The height of the <see cref="Display"/>.</param>
+    /// <param name="rotation">The rotation of the <see cref="Display"/>.</param>
     /// <param name="graphicsCard">The <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.</param>
-    public Display(int index, string deviceName, int width, int height, GraphicsCard graphicsCard)
+    public Display(int index, string deviceName, int width, int height, Rotation rotation, GraphicsCard graphicsCard)
     {
         this.Index = index;
         this.DeviceName = deviceName;
         this.Width = width;
         this.Height = height;
+        this.Rotation = rotation;
         this.GraphicsCard = graphicsCard;
     }
 
@@ -73,7 +80,7 @@ public readonly struct Display
 
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(Index, GraphicsCard);
-    
+
     /// <summary>
     /// Determines whether two <see cref="Display"/> are equal.
     /// </summary>

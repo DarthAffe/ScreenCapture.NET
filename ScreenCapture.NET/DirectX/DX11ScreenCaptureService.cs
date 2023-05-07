@@ -53,11 +53,19 @@ public class DX11ScreenCaptureService : IScreenCaptureService
         {
             int width = output.Description.DesktopCoordinates.Right - output.Description.DesktopCoordinates.Left;
             int height = output.Description.DesktopCoordinates.Bottom - output.Description.DesktopCoordinates.Top;
-            yield return new Display(i, output.Description.DeviceName, width, height, graphicsCard);
+            yield return new Display(i, output.Description.DeviceName, width, height, GetRotation(output.Description.Rotation), graphicsCard);
             output.Dispose();
             i++;
         }
     }
+
+    private Rotation GetRotation(ModeRotation rotation) => rotation switch
+    {
+        ModeRotation.Rotate90 => Rotation.Rotation90,
+        ModeRotation.Rotate180 => Rotation.Rotation180,
+        ModeRotation.Rotate270 => Rotation.Rotation270,
+        _ => Rotation.None
+    };
 
     /// <inheritdoc />
     public IScreenCapture GetScreenCapture(Display display)

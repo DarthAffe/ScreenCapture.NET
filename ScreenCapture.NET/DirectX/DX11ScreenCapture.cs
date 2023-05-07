@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using SharpGen.Runtime;
 using Vortice.Direct3D;
@@ -184,13 +184,26 @@ public sealed class DX11ScreenCapture : IScreenCapture
                                                            captureZone.Y + captureZone.UnscaledHeight, 1));
 
                 MappedSubresource mapSource = _context.Map(stagingTexture, 0, MapMode.Read, MapFlags.None);
-                IntPtr sourcePtr = mapSource.DataPointer;
                 lock (captureZone.Buffer)
                 {
-                    for (int y = 0; y < captureZone.Height; y++)
+                    Span<byte> source = mapSource.AsSpan(captureZone.Stride * captureZone.Height);
+                    switch (Display.Rotation)
                     {
-                        Marshal.Copy(sourcePtr, captureZone.Buffer, y * captureZone.Stride, captureZone.Stride);
-                        sourcePtr += mapSource.RowPitch;
+                        case Rotation.Rotation90:
+                            CopyRotate90(source, captureZone);
+                            break;
+
+                        case Rotation.Rotation180:
+                            CopyRotate180(source, captureZone);
+                            break;
+
+                        case Rotation.Rotation270:
+                            CopyRotate270(source, captureZone);
+                            break;
+
+                        default:
+                            CopyRotate0(source, captureZone);
+                            break;
                     }
                 }
 
@@ -200,10 +213,73 @@ public sealed class DX11ScreenCapture : IScreenCapture
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CopyRotate0(in Span<byte> source, in CaptureZone captureZone) => source.CopyTo(captureZone.Buffer.AsSpan());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CopyRotate90(in Span<byte> source, in CaptureZone captureZone)
+    {
+        int width = captureZone.Width;
+        int height = captureZone.Height;
+        Span<byte> destination = captureZone.Buffer.AsSpan();
+
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                int offset = ((y * width) + x) * BPP;
+                int destinationOffset = ((x * height) + ((height - 1) - y)) * BPP;
+                destination[destinationOffset] = source[offset];
+                destination[destinationOffset + 1] = source[offset + 1];
+                destination[destinationOffset + 2] = source[offset + 2];
+                destination[destinationOffset + 3] = source[offset + 3];
+            }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CopyRotate180(in Span<byte> source, in CaptureZone captureZone)
+    {
+        int width = captureZone.Width;
+        int height = captureZone.Height;
+        Span<byte> destination = captureZone.Buffer.AsSpan();
+
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                int offset = ((y * width) + x) * BPP;
+                int destinationOffset = destination.Length - offset;
+                destination[destinationOffset - 4] = source[offset];
+                destination[destinationOffset - 3] = source[offset + 1];
+                destination[destinationOffset - 2] = source[offset + 2];
+                destination[destinationOffset - 1] = source[offset + 3];
+            }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CopyRotate270(in Span<byte> source, in CaptureZone captureZone)
+    {
+        int width = captureZone.Width;
+        int height = captureZone.Height;
+        Span<byte> destination = captureZone.Buffer.AsSpan();
+
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                int offset = ((y * width) + x) * BPP;
+                int destinationOffset = ((((width - 1) - x) * height) + y) * BPP;
+                destination[destinationOffset] = source[offset];
+                destination[destinationOffset + 1] = source[offset + 1];
+                destination[destinationOffset + 2] = source[offset + 2];
+                destination[destinationOffset + 3] = source[offset + 3];
+            }
+    }
+
     /// <inheritdoc />
     public CaptureZone RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
     {
         ValidateCaptureZoneAndThrow(x, y, width, height);
+
+        if (Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
+            (x, y, width, height) = (y, x, height, width);
 
         int unscaledWidth = width;
         int unscaledHeight = height;
@@ -251,6 +327,9 @@ public sealed class DX11ScreenCapture : IScreenCapture
         int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
 
         ValidateCaptureZoneAndThrow(newX, newY, newUnscaledWidth, newUnscaledHeight);
+
+        if (Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
+            (newX, newY, newUnscaledWidth, newUnscaledHeight) = (newY, newX, newUnscaledHeight, newUnscaledWidth);
 
         captureZone.X = newX;
         captureZone.Y = newY;
@@ -361,13 +440,18 @@ public sealed class DX11ScreenCapture : IScreenCapture
                 _output = adapter.GetOutput(Display.Index) ?? throw new ApplicationException("Couldn't get DirectX-Output.");
                 using IDXGIOutput5 output = _output.QueryInterface<IDXGIOutput5>();
 
+                int width = Display.Width;
+                int height = Display.Height;
+                if (Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
+                    (width, height) = (height, width);
+
                 Texture2DDescription captureTextureDesc = new()
                 {
                     CPUAccessFlags = CpuAccessFlags.None,
                     BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                     Format = Format.B8G8R8A8_UNorm,
-                    Width = Display.Width,
-                    Height = Display.Height,
+                    Width = width,
+                    Height = height,
                     MiscFlags = ResourceOptionFlags.None,
                     MipLevels = 1,
                     ArraySize = 1,
