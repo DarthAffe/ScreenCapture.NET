@@ -31,6 +31,9 @@ public readonly struct Display
     /// </summary>
     public int Height { get; }
 
+    /// <summary>
+    /// Gets the rotation of the <see cref="Display"/>.
+    /// </summary>
     public Rotation Rotation { get; }
 
     /// <summary>
@@ -49,6 +52,7 @@ public readonly struct Display
     /// <param name="deviceName">The name of the <see cref="Display"/>.</param>
     /// <param name="width">The with of the <see cref="Display"/>.</param>
     /// <param name="height">The height of the <see cref="Display"/>.</param>
+    /// <param name="rotation">The rotation of the <see cref="Display"/>.</param>
     /// <param name="graphicsCard">The <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.</param>
     public Display(int index, string deviceName, int width, int height, Rotation rotation, GraphicsCard graphicsCard)
     {

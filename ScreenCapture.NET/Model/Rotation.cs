@@ -1,5 +1,8 @@
 ﻿namespace ScreenCapture.NET;
 
+/// <summary>
+/// Represents a display-rotation.
+/// </summary>
 public enum Rotation
 {
     None = 0,
