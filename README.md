@@ -1,7 +1,8 @@
 # ScreenCapture.NET
-Vortice based Desktop Duplication
-
-NuGet: https://www.nuget.org/packages/ScreenCapture.NET
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/DarthAffe/ScreenCapture.NET?style=for-the-badge)](https://github.com/DarthAffe/ScreenCapture.NET/releases)
+[![Nuget](https://img.shields.io/nuget/v/ScreenCapture.NET?style=for-the-badge)](https://www.nuget.org/packages/ScreenCapture.NET)
+[![GitHub](https://img.shields.io/github/license/DarthAffe/ScreenCapture.NET?style=for-the-badge)](https://github.com/DarthAffe/ScreenCapture.NET/blob/master/LICENSE)
+[![GitHub Repo stars](https://img.shields.io/github/stars/DarthAffe/ScreenCapture.NET?style=for-the-badge)](https://github.com/DarthAffe/ScreenCapture.NET/stargazers)
 
 ## Usage
 ```csharp
