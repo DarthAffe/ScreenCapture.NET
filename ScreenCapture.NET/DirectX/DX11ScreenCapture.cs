@@ -186,23 +186,23 @@ public sealed class DX11ScreenCapture : IScreenCapture
                 MappedSubresource mapSource = _context.Map(stagingTexture, 0, MapMode.Read, MapFlags.None);
                 lock (captureZone.Buffer)
                 {
-                    Span<byte> source = mapSource.AsSpan(captureZone.Stride * captureZone.Height);
+                    Span<byte> source = mapSource.AsSpan(mapSource.RowPitch * captureZone.Height);
                     switch (Display.Rotation)
                     {
                         case Rotation.Rotation90:
-                            CopyRotate90(source, captureZone);
+                            CopyRotate90(source, mapSource.RowPitch, captureZone);
                             break;
 
                         case Rotation.Rotation180:
-                            CopyRotate180(source, captureZone);
+                            CopyRotate180(source, mapSource.RowPitch, captureZone);
                             break;
 
                         case Rotation.Rotation270:
-                            CopyRotate270(source, captureZone);
+                            CopyRotate270(source, mapSource.RowPitch, captureZone);
                             break;
 
                         default:
-                            CopyRotate0(source, captureZone);
+                            CopyRotate0(source, mapSource.RowPitch, captureZone);
                             break;
                     }
                 }
@@ -214,62 +214,79 @@ public sealed class DX11ScreenCapture : IScreenCapture
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate0(in Span<byte> source, in CaptureZone captureZone) => source.CopyTo(captureZone.Buffer.AsSpan());
+    private static void CopyRotate0(in Span<byte> source, int sourceStride, in CaptureZone captureZone)
+    {
+        int height = captureZone.Height;
+        int stride = captureZone.Stride;
+        Span<byte> target = captureZone.Buffer.AsSpan();
+
+        for (int y = 0; y < height; y++)
+        {
+            int sourceOffset = y * sourceStride;
+            int targetOffset = y * stride;
+
+            source.Slice(sourceOffset, stride).CopyTo(target.Slice(targetOffset, stride));
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate90(in Span<byte> source, in CaptureZone captureZone)
+    private static void CopyRotate90(in Span<byte> source, int sourceStride, in CaptureZone captureZone)
     {
         int width = captureZone.Width;
         int height = captureZone.Height;
-        Span<byte> destination = captureZone.Buffer.AsSpan();
+        Span<byte> target = captureZone.Buffer.AsSpan();
 
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
             {
-                int offset = ((y * width) + x) * BPP;
-                int destinationOffset = ((x * height) + ((height - 1) - y)) * BPP;
-                destination[destinationOffset] = source[offset];
-                destination[destinationOffset + 1] = source[offset + 1];
-                destination[destinationOffset + 2] = source[offset + 2];
-                destination[destinationOffset + 3] = source[offset + 3];
+                int sourceOffset = ((y * sourceStride) + (x * BPP));
+                int targetOffset = ((x * height) + ((height - 1) - y)) * BPP;
+
+                target[targetOffset] = source[sourceOffset];
+                target[targetOffset + 1] = source[sourceOffset + 1];
+                target[targetOffset + 2] = source[sourceOffset + 2];
+                target[targetOffset + 3] = source[sourceOffset + 3];
             }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate180(in Span<byte> source, in CaptureZone captureZone)
+    private static void CopyRotate180(in Span<byte> source, int sourceStride, in CaptureZone captureZone)
     {
         int width = captureZone.Width;
         int height = captureZone.Height;
-        Span<byte> destination = captureZone.Buffer.AsSpan();
+        int stride = captureZone.Stride;
+        Span<byte> target = captureZone.Buffer.AsSpan();
 
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
             {
-                int offset = ((y * width) + x) * BPP;
-                int destinationOffset = destination.Length - offset;
-                destination[destinationOffset - 4] = source[offset];
-                destination[destinationOffset - 3] = source[offset + 1];
-                destination[destinationOffset - 2] = source[offset + 2];
-                destination[destinationOffset - 1] = source[offset + 3];
+                int sourceOffset = ((y * sourceStride) + (x * BPP));
+                int targetOffset = target.Length - ((y * stride) + (x * BPP)) - 1;
+
+                target[targetOffset - 3] = source[sourceOffset];
+                target[targetOffset - 2] = source[sourceOffset + 1];
+                target[targetOffset - 1] = source[sourceOffset + 2];
+                target[targetOffset] = source[sourceOffset + 3];
             }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate270(in Span<byte> source, in CaptureZone captureZone)
+    private static void CopyRotate270(in Span<byte> source, int sourceStride, in CaptureZone captureZone)
     {
         int width = captureZone.Width;
         int height = captureZone.Height;
-        Span<byte> destination = captureZone.Buffer.AsSpan();
+        Span<byte> target = captureZone.Buffer.AsSpan();
 
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
             {
-                int offset = ((y * width) + x) * BPP;
-                int destinationOffset = ((((width - 1) - x) * height) + y) * BPP;
-                destination[destinationOffset] = source[offset];
-                destination[destinationOffset + 1] = source[offset + 1];
-                destination[destinationOffset + 2] = source[offset + 2];
-                destination[destinationOffset + 3] = source[offset + 3];
+                int sourceOffset = ((y * sourceStride) + (x * BPP));
+                int targetOffset = ((((width - 1) - x) * height) + y) * BPP;
+
+                target[targetOffset] = source[sourceOffset];
+                target[targetOffset + 1] = source[sourceOffset + 1];
+                target[targetOffset + 2] = source[sourceOffset + 2];
+                target[targetOffset + 3] = source[sourceOffset + 3];
             }
     }
 
