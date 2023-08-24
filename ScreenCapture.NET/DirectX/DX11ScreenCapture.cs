@@ -300,7 +300,7 @@ public sealed class DX11ScreenCapture : IScreenCapture
 
         int unscaledWidth = width;
         int unscaledHeight = height;
-        (width, height) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
+        (width, height, downscaleLevel) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
 
         byte[] buffer = new byte[width * height * BPP];
 
@@ -354,7 +354,7 @@ public sealed class DX11ScreenCapture : IScreenCapture
         //TODO DarthAffe 01.05.2022: For now just reinitialize the zone in that case, but this could be optimized to only recreate the textures needed.
         if ((width != null) || (height != null) || (downscaleLevel != null))
         {
-            (int newWidth, int newHeight) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
+            (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
             lock (_captureZones)
             {
                 UnregisterCaptureZone(captureZone);
@@ -371,11 +371,17 @@ public sealed class DX11ScreenCapture : IScreenCapture
         }
     }
 
-    private (int width, int height) CalculateScaledSize(int width, int height, int downscaleLevel)
+    private (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
     {
         if (downscaleLevel > 0)
             for (int i = 0; i < downscaleLevel; i++)
             {
+                if ((width <= 1) && (height <= 1))
+                {
+                    downscaleLevel = i;
+                    break;
+                }
+
                 width /= 2;
                 height /= 2;
             }
@@ -383,7 +389,7 @@ public sealed class DX11ScreenCapture : IScreenCapture
         if (width < 1) width = 1;
         if (height < 1) height = 1;
 
-        return (width, height);
+        return (width, height, downscaleLevel);
     }
 
     private void ValidateCaptureZoneAndThrow(int x, int y, int width, int height)
