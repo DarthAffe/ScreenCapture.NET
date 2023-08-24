@@ -26,12 +26,13 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-      - Fixed striding issue on downscaled captures introduced with 1.3.0
+      The downscale-level is now automatically limited if it would scale the image below a size of 1x1 px.
+      This is change that can potentially break existing behavior but should only affect cases that are expected to crash with earlier versions.
     </PackageReleaseNotes>
 
-    <Version>1.3.1</Version>
-    <AssemblyVersion>1.3.1</AssemblyVersion>
-    <FileVersion>1.3.1</FileVersion>
+    <Version>1.3.2</Version>
+    <AssemblyVersion>1.3.2</AssemblyVersion>
+    <FileVersion>1.3.2</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
