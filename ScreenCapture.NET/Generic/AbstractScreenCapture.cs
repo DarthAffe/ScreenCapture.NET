@@ -56,7 +56,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             try
             {
-                PerformCaptureZoneUpdate(captureZone);
+                PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
                 captureZone.SetUpdated();
             }
             catch { /* */ }
@@ -69,7 +69,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     protected abstract bool PerformScreenCapture();
 
-    protected abstract void PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone);
+    protected abstract void PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, in Span<byte> buffer);
 
     protected virtual void OnUpdated(bool result)
     {
@@ -93,11 +93,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             int unscaledHeight = height;
             (width, height, downscaleLevel) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
 
-#if NET7_0_OR_GREATER
-            CaptureZone<TColor> captureZone = new(_indexCounter++, Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight, new ScreenImage<TColor>(width, height, TColor.ColorFormat));
-#else
-            CaptureZone<TColor> captureZone = new(_indexCounter++, Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight, new ScreenImage<TColor>(width, height, IColor.GetColorFormat<TColor>()));
-#endif
+            CaptureZone<TColor> captureZone = new(_indexCounter++, Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight);
             CaptureZones.Add(captureZone);
 
             return captureZone;
@@ -168,13 +164,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             if ((width != null) || (height != null) || (downscaleLevel != null))
             {
                 (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
-
-                captureZone.UnscaledWidth = newUnscaledWidth;
-                captureZone.UnscaledHeight = newUnscaledHeight;
-                captureZone.Width = newWidth;
-                captureZone.Height = newHeight;
-                captureZone.DownscaleLevel = newDownscaleLevel;
-                captureZone.Image.Resize(newWidth, newHeight);
+                captureZone.Resize(newWidth, newHeight, newDownscaleLevel, newUnscaledWidth, newUnscaledHeight);
             }
         }
     }

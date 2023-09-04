@@ -38,7 +38,8 @@ public interface ICaptureZone
     /// </summary>
     int UnscaledHeight { get; }
 
-    IScreenImage Image { get; }
+    ReadOnlySpan<byte> RawBuffer { get; }
+
     /// <summary>
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>

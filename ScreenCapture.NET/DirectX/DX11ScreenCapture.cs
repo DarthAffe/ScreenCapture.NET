@@ -133,7 +133,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         return result;
     }
 
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone)
+    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
         if (_context == null) return;
 
@@ -157,25 +157,26 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                                                        textures.Y + textures.UnscaledHeight, 1));
 
             MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
-            using IDisposable @lock = captureZone.Image.Lock();
+
+            using IDisposable @lock = captureZone.Lock();
             {
-                Span<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.Height);
+                ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.Height);
                 switch (Display.Rotation)
                 {
                     case Rotation.Rotation90:
-                        CopyRotate90(source, mapSource.RowPitch, captureZone);
+                        CopyRotate90(source, mapSource.RowPitch, captureZone, buffer);
                         break;
 
                     case Rotation.Rotation180:
-                        CopyRotate180(source, mapSource.RowPitch, captureZone);
+                        CopyRotate180(source, mapSource.RowPitch, captureZone, buffer);
                         break;
 
                     case Rotation.Rotation270:
-                        CopyRotate270(source, mapSource.RowPitch, captureZone);
+                        CopyRotate270(source, mapSource.RowPitch, captureZone, buffer);
                         break;
 
                     default:
-                        CopyRotate0(source, mapSource.RowPitch, captureZone);
+                        CopyRotate0(source, mapSource.RowPitch, captureZone, buffer);
                         break;
                 }
             }
@@ -185,11 +186,11 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate0(in Span<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone)
+    private static void CopyRotate0(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
-        int height = captureZone.Image.Height;
-        int stride = captureZone.Image.Stride;
-        Span<byte> target = captureZone.Image.Raw;
+        int height = captureZone.Height;
+        int stride = captureZone.Stride;
+        Span<byte> target = buffer;
 
         for (int y = 0; y < height; y++)
         {
@@ -201,51 +202,49 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate90(in Span<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone)
+    private static void CopyRotate90(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
-        int width = captureZone.Image.Width;
-        int height = captureZone.Image.Height;
-        int usedBytesPerLine = height * captureZone.Image.ColorFormat.BytesPerPixel;
-        Span<ColorBGRA> target = captureZone.Image.Pixels;
+        int width = captureZone.Width;
+        int height = captureZone.Height;
+        int usedBytesPerLine = height * captureZone.ColorFormat.BytesPerPixel;
+        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         for (int x = 0; x < width; x++)
         {
-            Span<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(x * sourceStride, usedBytesPerLine));
+            ReadOnlySpan<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(x * sourceStride, usedBytesPerLine));
             for (int y = 0; y < src.Length; y++)
                 target[(y * width) + (width - x - 1)] = src[y];
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate180(in Span<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone)
+    private static void CopyRotate180(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
-        int width = captureZone.Image.Width;
-        int height = captureZone.Image.Height;
-        int bpp = captureZone.Image.ColorFormat.BytesPerPixel;
+        int width = captureZone.Width;
+        int height = captureZone.Height;
+        int bpp = captureZone.ColorFormat.BytesPerPixel;
         int usedBytesPerLine = width * bpp;
-        Span<ColorBGRA> target = captureZone.Image.Pixels;
+        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         for (int y = 0; y < height; y++)
         {
-            Span<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(y * sourceStride, usedBytesPerLine));
+            ReadOnlySpan<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(y * sourceStride, usedBytesPerLine));
             for (int x = 0; x < src.Length; x++)
-            {
                 target[((height - y - 1) * width) + (width - x - 1)] = src[x];
-            }
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate270(in Span<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone)
+    private static void CopyRotate270(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
-        int width = captureZone.Image.Width;
-        int height = captureZone.Image.Height;
-        int usedBytesPerLine = height * captureZone.Image.ColorFormat.BytesPerPixel;
-        Span<ColorBGRA> target = captureZone.Image.Pixels;
+        int width = captureZone.Width;
+        int height = captureZone.Height;
+        int usedBytesPerLine = height * captureZone.ColorFormat.BytesPerPixel;
+        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         for (int x = 0; x < width; x++)
         {
-            Span<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(x * sourceStride, usedBytesPerLine));
+            ReadOnlySpan<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(x * sourceStride, usedBytesPerLine));
             for (int y = 0; y < src.Length; y++)
                 target[((height - y - 1) * width) + x] = src[y];
         }

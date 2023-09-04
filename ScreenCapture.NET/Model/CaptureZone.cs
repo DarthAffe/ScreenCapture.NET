@@ -1,6 +1,9 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
 
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ScreenCapture.NET;
 
@@ -12,12 +15,28 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 {
     #region Properties & Fields
 
+    private readonly object _lock = new();
+
     /// <summary>
     /// Gets the unique id of this <see cref="CaptureZone{T}"/>.
     /// </summary>
     public int Id { get; }
 
     public Display Display { get; }
+
+#if NET7_0_OR_GREATER
+    public ColorFormat ColorFormat 
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => TColor.ColorFormat;
+    }
+#else
+    public ColorFormat ColorFormat
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => IColor.GetColorFormat<TColor>();
+    }
+#endif
 
     /// <summary>
     /// Gets the x-location of the region on the screen.
@@ -32,30 +51,53 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <summary>
     /// Gets the width of the captured region.
     /// </summary>
-    public int Width { get; internal set; }
+    public int Width { get; private set; }
 
     /// <summary>
     /// Gets the height of the captured region.
     /// </summary>
-    public int Height { get; internal set; }
+    public int Height { get; private set; }
+
+    public int Stride
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Width * ColorFormat.BytesPerPixel;
+    }
 
     /// <summary>
     /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
     /// </summary>
-    public int DownscaleLevel { get; internal set; }
+    public int DownscaleLevel { get; private set; }
 
     /// <summary>
     /// Gets the original width of the region (this equals <see cref="Width"/> if <see cref="DownscaleLevel"/> is 0).
     /// </summary>
-    public int UnscaledWidth { get; internal set; }
+    public int UnscaledWidth { get; private set; }
 
     /// <summary>
     /// Gets the original height of the region (this equals <see cref="Height"/> if <see cref="DownscaleLevel"/> is 0).
     /// </summary>
-    public int UnscaledHeight { get; internal set; }
+    public int UnscaledHeight { get; private set; }
 
-    IScreenImage ICaptureZone.Image => Image;
-    public ScreenImage<TColor> Image { get; }
+    internal byte[] InternalBuffer { get; set; }
+
+    public ReadOnlySpan<byte> RawBuffer
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => InternalBuffer;
+    }
+
+    public ReadOnlySpan<TColor> Pixels
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => MemoryMarshal.Cast<byte, TColor>(RawBuffer);
+    }
+
+    public Image<TColor> Image
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => new(Pixels, 0, 0, Width, Height, Width);
+    }
 
     /// <summary>
     /// Gets or sets if the <see cref="CaptureZone{T}"/> should be automatically updated on every captured frame.
@@ -66,7 +108,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// Gets if an update for the <see cref="CaptureZone{T}"/> is requested on the next captured frame.
     /// </summary>
     public bool IsUpdateRequested { get; private set; }
-    
+
     #endregion
 
     #region Events
@@ -93,7 +135,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <param name="unscaledWidth">The original width of the region.</param>
     /// <param name="unscaledHeight">The original height of the region</param>
     /// <param name="buffer">The buffer containing the image data.</param>
-    internal CaptureZone(int id, Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight, ScreenImage<TColor> image)
+    internal CaptureZone(int id, Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
     {
         this.Id = id;
         this.Display = display;
@@ -101,15 +143,22 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         this.Y = y;
         this.Width = width;
         this.Height = height;
+        this.DownscaleLevel = downscaleLevel;
         this.UnscaledWidth = unscaledWidth;
         this.UnscaledHeight = unscaledHeight;
-        this.DownscaleLevel = downscaleLevel;
-        this.Image = image;
+
+        InternalBuffer = new byte[Stride * Height];
     }
 
     #endregion
 
     #region Methods
+
+    public IDisposable Lock()
+    {
+        Monitor.Enter(_lock);
+        return new UnlockDisposable(_lock);
+    }
 
     /// <summary>
     /// Requests to update this <see cref="CaptureZone{T}"/> when the next frame is captured.
@@ -127,6 +176,19 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         Updated?.Invoke(this, EventArgs.Empty);
     }
 
+    internal void Resize(int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
+    {
+        Width = width;
+        Height = height;
+        DownscaleLevel = downscaleLevel;
+        UnscaledWidth = unscaledWidth;
+        UnscaledHeight = unscaledHeight;
+
+        int newBufferSize = Stride * Height;
+        if (newBufferSize != InternalBuffer.Length)
+            InternalBuffer = new byte[newBufferSize];
+    }
+
     /// <summary>
     /// Determines whether this <see cref="CaptureZone{T}"/> equals the given one.
     /// </summary>
@@ -141,4 +203,32 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     public override int GetHashCode() => Id;
 
     #endregion
+
+    private class UnlockDisposable : IDisposable
+    {
+        #region Properties & Fields
+
+        private bool _disposed = false;
+        private readonly object _lock;
+
+        #endregion
+
+        #region Constructors
+
+        public UnlockDisposable(object @lock) => this._lock = @lock;
+
+        #endregion
+
+        #region Methods
+
+        public void Dispose()
+        {
+            if (_disposed) throw new ObjectDisposedException("The lock is already released");
+
+            Monitor.Exit(_lock);
+            _disposed = true;
+        }
+
+        #endregion
+    }
 }
