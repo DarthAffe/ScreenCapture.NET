@@ -59,7 +59,7 @@ public class DX11ScreenCaptureService : IScreenCaptureService
         }
     }
 
-    private Rotation GetRotation(ModeRotation rotation) => rotation switch
+    private static Rotation GetRotation(ModeRotation rotation) => rotation switch
     {
         ModeRotation.Rotate90 => Rotation.Rotation90,
         ModeRotation.Rotate180 => Rotation.Rotation180,
@@ -68,7 +68,8 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     };
 
     /// <inheritdoc />
-    public IScreenCapture GetScreenCapture(Display display)
+    IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
+    public DX11ScreenCapture GetScreenCapture(Display display)
     {
         if (!_screenCaptures.TryGetValue(display, out DX11ScreenCapture? screenCapture))
             _screenCaptures.Add(display, screenCapture = new DX11ScreenCapture(_factory, display));

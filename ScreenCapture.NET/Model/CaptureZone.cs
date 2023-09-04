@@ -7,14 +7,17 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a duplicated region on the screen.
 /// </summary>
-public sealed class CaptureZone
+public sealed class CaptureZone<TColor> : ICaptureZone
+    where TColor : struct, IColor
 {
     #region Properties & Fields
 
     /// <summary>
-    /// Gets the unique id of this <see cref="CaptureZone"/>.
+    /// Gets the unique id of this <see cref="CaptureZone{T}"/>.
     /// </summary>
     public int Id { get; }
+
+    public Display Display { get; }
 
     /// <summary>
     /// Gets the x-location of the region on the screen.
@@ -51,42 +54,25 @@ public sealed class CaptureZone
     /// </summary>
     public int UnscaledHeight { get; internal set; }
 
-    /// <summary>
-    /// Gets the amount of bytes per pixel in the image (most likely 3 [RGB] or 4 [ARGB]).
-    /// </summary>
-    public int BytesPerPixel { get; }
+    IScreenImage ICaptureZone.Image => Image;
+    public ScreenImage<TColor> Image { get; }
 
     /// <summary>
-    /// Gets the size in bytes of a row in the region (<see cref="Width"/> * <see cref="BytesPerPixel"/>).
-    /// </summary>
-    public int Stride => Width * BytesPerPixel;
-
-    /// <summary>
-    /// Gets the buffer containing the image data. Format depends on the specific capture but is most likely BGRA32.
-    /// </summary>
-    public byte[] Buffer { get; internal set; }
-
-    /// <summary>
-    /// Gets the config for black-bar detection.
-    /// </summary>
-    public BlackBarDetection BlackBars { get; }
-
-    /// <summary>
-    /// Gets or sets if the <see cref="CaptureZone"/> should be automatically updated on every captured frame.
+    /// Gets or sets if the <see cref="CaptureZone{T}"/> should be automatically updated on every captured frame.
     /// </summary>
     public bool AutoUpdate { get; set; } = true;
 
     /// <summary>
-    /// Gets if an update for the <see cref="CaptureZone"/> is requested on the next captured frame.
+    /// Gets if an update for the <see cref="CaptureZone{T}"/> is requested on the next captured frame.
     /// </summary>
     public bool IsUpdateRequested { get; private set; }
-
+    
     #endregion
 
     #region Events
 
     /// <summary>
-    /// Occurs when the <see cref="CaptureZone"/> is updated.
+    /// Occurs when the <see cref="CaptureZone{T}"/> is updated.
     /// </summary>
     public event EventHandler? Updated;
 
@@ -95,9 +81,9 @@ public sealed class CaptureZone
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="CaptureZone"/> class.
+    /// Initializes a new instance of the <see cref="CaptureZone{T}"/> class.
     /// </summary>
-    /// <param name="id">The unique id of this <see cref="CaptureZone"/>.</param>
+    /// <param name="id">The unique id of this <see cref="CaptureZone{T}"/>.</param>
     /// <param name="x">The x-location of the region on the screen.</param>
     /// <param name="y">The y-location of the region on the screen.</param>
     /// <param name="width">The width of the region on the screen.</param>
@@ -107,20 +93,18 @@ public sealed class CaptureZone
     /// <param name="unscaledWidth">The original width of the region.</param>
     /// <param name="unscaledHeight">The original height of the region</param>
     /// <param name="buffer">The buffer containing the image data.</param>
-    internal CaptureZone(int id, int x, int y, int width, int height, int bytesPerPixel, int downscaleLevel, int unscaledWidth, int unscaledHeight, byte[] buffer)
+    internal CaptureZone(int id, Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight, ScreenImage<TColor> image)
     {
         this.Id = id;
+        this.Display = display;
         this.X = x;
         this.Y = y;
         this.Width = width;
         this.Height = height;
-        this.BytesPerPixel = bytesPerPixel;
         this.UnscaledWidth = unscaledWidth;
         this.UnscaledHeight = unscaledHeight;
         this.DownscaleLevel = downscaleLevel;
-        this.Buffer = buffer;
-
-        BlackBars = new BlackBarDetection(this);
+        this.Image = image;
     }
 
     #endregion
@@ -128,32 +112,30 @@ public sealed class CaptureZone
     #region Methods
 
     /// <summary>
-    /// Requests to update this <see cref="CaptureZone"/> when the next frame is captured.
+    /// Requests to update this <see cref="CaptureZone{T}"/> when the next frame is captured.
     /// Only necessary if <see cref="AutoUpdate"/> is set to <c>false</c>.
     /// </summary>
     public void RequestUpdate() => IsUpdateRequested = true;
 
     /// <summary>
-    /// Marks the <see cref="CaptureZone"/> as updated.
-    /// WARNING: This should not be called outside of an <see cref="IScreenCapture"/>!
+    /// Marks the <see cref="CaptureZone{T}"/> as updated.
     /// </summary>
-    public void SetUpdated()
+    internal void SetUpdated()
     {
         IsUpdateRequested = false;
-        BlackBars.InvalidateCache();
 
         Updated?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
-    /// Determines whether this <see cref="CaptureZone"/> equals the given one.
+    /// Determines whether this <see cref="CaptureZone{T}"/> equals the given one.
     /// </summary>
-    /// <param name="other">The <see cref="CaptureZone"/> to compare.</param>
+    /// <param name="other">The <see cref="CaptureZone{T}"/> to compare.</param>
     /// <returns><c>true</c> if the specified object is equal to the current object; otherwise, <c>false</c>.</returns>
-    public bool Equals(CaptureZone other) => Id == other.Id;
+    public bool Equals(CaptureZone<TColor> other) => Id == other.Id;
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is CaptureZone other && Equals(other);
+    public override bool Equals(object? obj) => obj is CaptureZone<TColor> other && Equals(other);
 
     /// <inheritdoc />
     public override int GetHashCode() => Id;

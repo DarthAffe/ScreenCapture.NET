@@ -11,7 +11,7 @@ public sealed class BlackBarDetection
 {
     #region Properties & Fields
 
-    private readonly CaptureZone _captureZone;
+    private readonly ICaptureZone _captureZone;
 
     private int? _top;
     /// <summary>
@@ -55,7 +55,7 @@ public sealed class BlackBarDetection
 
     #region Constructors
 
-    internal BlackBarDetection(CaptureZone captureZone)
+    internal BlackBarDetection(ICaptureZone captureZone)
     {
         this._captureZone = captureZone;
     }
@@ -77,62 +77,62 @@ public sealed class BlackBarDetection
 
     private int CalculateTop()
     {
-        int threshold = Threshold;
-        int stride = _captureZone.Stride;
-        for (int row = 0; row < _captureZone.Height; row++)
-        {
-            Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
-            for (int i = 0; i < data.Length; i += 4)
-                if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
-                    return row;
-        }
+        //int threshold = Threshold;
+        //int stride = _captureZone.Stride;
+        //for (int row = 0; row < _captureZone.Height; row++)
+        //{
+        //    Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
+        //    for (int i = 0; i < data.Length; i += 4)
+        //        if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
+        //            return row;
+        //}
 
         return 0;
     }
 
     private int CalculateBottom()
     {
-        int threshold = Threshold;
-        int stride = _captureZone.Stride;
-        for (int row = _captureZone.Height - 1; row >= 0; row--)
-        {
-            Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
-            for (int i = 0; i < data.Length; i += 4)
-                if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
-                    return (_captureZone.Height - 1) - row;
-        }
+        //int threshold = Threshold;
+        //int stride = _captureZone.Stride;
+        //for (int row = _captureZone.Height - 1; row >= 0; row--)
+        //{
+        //    Span<byte> data = new(_captureZone.Buffer, row * stride, stride);
+        //    for (int i = 0; i < data.Length; i += 4)
+        //        if ((data[i] > threshold) || (data[i + 1] > threshold) || (data[i + 2] > threshold))
+        //            return (_captureZone.Height - 1) - row;
+        //}
 
         return 0;
     }
 
     private int CalculateLeft()
     {
-        int threshold = Threshold;
-        int stride = _captureZone.Stride;
-        byte[] buffer = _captureZone.Buffer;
-        for (int column = 0; column < _captureZone.Width; column++)
-            for (int row = 0; row < _captureZone.Height; row++)
-            {
-                int offset = (stride * row) + (column * 4);
-                if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold))
-                    return column;
-            }
+        //int threshold = Threshold;
+        //int stride = _captureZone.Stride;
+        //byte[] buffer = _captureZone.Buffer;
+        //for (int column = 0; column < _captureZone.Width; column++)
+        //    for (int row = 0; row < _captureZone.Height; row++)
+        //    {
+        //        int offset = (stride * row) + (column * 4);
+        //        if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold))
+        //            return column;
+        //    }
 
         return 0;
     }
 
     private int CalculateRight()
     {
-        int threshold = Threshold;
-        int stride = _captureZone.Stride;
-        byte[] buffer = _captureZone.Buffer;
-        for (int column = _captureZone.Width - 1; column >= 0; column--)
-            for (int row = 0; row < _captureZone.Height; row++)
-            {
-                int offset = (stride * row) + (column * 4);
-                if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold))
-                    return (_captureZone.Width - 1) - column;
-            }
+        //int threshold = Threshold;
+        //int stride = _captureZone.Stride;
+        //byte[] buffer = _captureZone.Buffer;
+        //for (int column = _captureZone.Width - 1; column >= 0; column--)
+        //    for (int row = 0; row < _captureZone.Height; row++)
+        //    {
+        //        int offset = (stride * row) + (column * 4);
+        //        if ((buffer[offset] > threshold) || (buffer[offset + 1] > threshold) || (buffer[offset + 2] > threshold))
+        //            return (_captureZone.Width - 1) - column;
+        //    }
 
         return 0;
     }
