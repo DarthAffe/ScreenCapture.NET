@@ -94,7 +94,49 @@ public readonly ref struct Image<TColor>
         return array;
     }
 
+    /// <inheritdoc cref="System.Collections.IEnumerable.GetEnumerator"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Enumerator GetEnumerator() => new(_pixels);
+
     #endregion
+
+    public ref struct Enumerator
+    {
+        #region Properties & Fields
+
+        private readonly ReadOnlySpan<TColor> _pixels;
+        private int _position;
+
+        /// <inheritdoc cref="System.Collections.Generic.IEnumerator{T}.Current"/>
+        public TColor Current
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _pixels[_position];
+        }
+
+        #endregion
+
+        #region Constructors
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Enumerator(ReadOnlySpan<TColor> pixels)
+        {
+            this._pixels = pixels;
+
+            _position = -1;
+        }
+
+        #endregion
+
+        #region Methods
+
+        /// <inheritdoc cref="System.Collections.IEnumerator.MoveNext"/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool MoveNext() => ++_position < _pixels.Length;
+
+        #endregion
+    }
 
     #region Indexer-Structs
 
