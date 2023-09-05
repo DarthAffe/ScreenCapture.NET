@@ -9,9 +9,7 @@ public readonly struct ColorBGRA : IColor
 {
     #region Properties & Fields
 
-#if NET7_0_OR_GREATER
     public static ColorFormat ColorFormat => ColorFormat.BGRA;
-#endif
 
     private readonly byte _b;
     private readonly byte _g;

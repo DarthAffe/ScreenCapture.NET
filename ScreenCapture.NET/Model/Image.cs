@@ -44,8 +44,16 @@ public readonly ref struct Image<TColor>
         }
     }
 
-    public ImageRows Rows => new(_pixels, _x, _y, Width, Height, _stride);
-    public ImageColumns Columns => new(_pixels, _x, _y, Width, Height, _stride);
+    public ImageRows Rows
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => new(_pixels, _x, _y, Width, Height, _stride);
+    }
+    public ImageColumns Columns
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => new(_pixels, _x, _y, Width, Height, _stride);
+    }
 
     #endregion
 
