@@ -10,7 +10,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     #region Properties & Fields
 
     private bool _isDisposed;
-    private int _indexCounter = 0;
 
     protected HashSet<CaptureZone<TColor>> CaptureZones { get; } = new();
 
@@ -93,7 +92,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             int unscaledHeight = height;
             (width, height, downscaleLevel) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
 
-            CaptureZone<TColor> captureZone = new(_indexCounter++, Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight);
+            CaptureZone<TColor> captureZone = new(Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight);
             CaptureZones.Add(captureZone);
 
             return captureZone;

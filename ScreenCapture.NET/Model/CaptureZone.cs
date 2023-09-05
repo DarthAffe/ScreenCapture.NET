@@ -17,13 +17,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     private readonly object _lock = new();
 
-    /// <summary>
-    /// Gets the unique id of this <see cref="CaptureZone{T}"/>.
-    /// </summary>
-    public int Id { get; }
-
     public Display Display { get; }
-    
+
     public ColorFormat ColorFormat
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -133,9 +128,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <param name="unscaledWidth">The original width of the region.</param>
     /// <param name="unscaledHeight">The original height of the region</param>
     /// <param name="buffer">The buffer containing the image data.</param>
-    internal CaptureZone(int id, Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
+    internal CaptureZone(Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
     {
-        this.Id = id;
         this.Display = display;
         this.X = x;
         this.Y = y;
@@ -194,19 +188,6 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         if (newBufferSize != InternalBuffer.Length)
             InternalBuffer = new byte[newBufferSize];
     }
-
-    /// <summary>
-    /// Determines whether this <see cref="CaptureZone{T}"/> equals the given one.
-    /// </summary>
-    /// <param name="other">The <see cref="CaptureZone{T}"/> to compare.</param>
-    /// <returns><c>true</c> if the specified object is equal to the current object; otherwise, <c>false</c>.</returns>
-    public bool Equals(CaptureZone<TColor> other) => Id == other.Id;
-
-    /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is CaptureZone<TColor> other && Equals(other);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => Id;
 
     #endregion
 

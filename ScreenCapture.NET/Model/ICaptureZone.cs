@@ -4,11 +4,6 @@ namespace ScreenCapture.NET;
 
 public interface ICaptureZone
 {
-    /// <summary>
-    /// Gets the unique id of this <see cref="ICaptureZone"/>.
-    /// </summary>
-    int Id { get; }
-
     Display Display { get; }
     /// <summary>
     /// Gets the x-location of the region on the screen.
