@@ -96,11 +96,11 @@ public readonly ref struct Image<TColor>
 
     /// <inheritdoc cref="System.Collections.IEnumerable.GetEnumerator"/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Enumerator GetEnumerator() => new(_pixels);
+    public ImageEnumerator GetEnumerator() => new(_pixels);
 
     #endregion
 
-    public ref struct Enumerator
+    public ref struct ImageEnumerator
     {
         #region Properties & Fields
 
@@ -120,7 +120,7 @@ public readonly ref struct Image<TColor>
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Enumerator(ReadOnlySpan<TColor> pixels)
+        internal ImageEnumerator(ReadOnlySpan<TColor> pixels)
         {
             this._pixels = pixels;
 
@@ -189,11 +189,11 @@ public readonly ref struct Image<TColor>
 
         /// <inheritdoc cref="System.Collections.IEnumerable.GetEnumerator"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Enumerator GetEnumerator() => new(this);
+        public ImageRowsEnumerator GetEnumerator() => new(this);
 
         #endregion
 
-        public ref struct Enumerator
+        public ref struct ImageRowsEnumerator
         {
             #region Properties & Fields
 
@@ -213,7 +213,7 @@ public readonly ref struct Image<TColor>
 
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal Enumerator(ImageRows rows)
+            internal ImageRowsEnumerator(ImageRows rows)
             {
                 this._rows = rows;
 
@@ -281,11 +281,11 @@ public readonly ref struct Image<TColor>
 
         /// <inheritdoc cref="System.Collections.IEnumerable.GetEnumerator"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Enumerator GetEnumerator() => new(this);
+        public ImageColumnsEnumerator GetEnumerator() => new(this);
 
         #endregion
 
-        public ref struct Enumerator
+        public ref struct ImageColumnsEnumerator
         {
             #region Properties & Fields
 
@@ -304,7 +304,7 @@ public readonly ref struct Image<TColor>
             #region Constructors
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal Enumerator(ImageColumns columns)
+            internal ImageColumnsEnumerator(ImageColumns columns)
             {
                 this._columns = columns;
                 this._position = -1;
