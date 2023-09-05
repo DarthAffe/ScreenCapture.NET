@@ -23,20 +23,12 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     public int Id { get; }
 
     public Display Display { get; }
-
-#if NET7_0_OR_GREATER
-    public ColorFormat ColorFormat 
+    
+    public ColorFormat ColorFormat
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TColor.ColorFormat;
     }
-#else
-    public ColorFormat ColorFormat
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => IColor.GetColorFormat<TColor>();
-    }
-#endif
 
     /// <summary>
     /// Gets the x-location of the region on the screen.
@@ -93,10 +85,16 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         get => MemoryMarshal.Cast<byte, TColor>(RawBuffer);
     }
 
-    public Image<TColor> Image
+    public RefImage<TColor> Image
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => new(Pixels, 0, 0, Width, Height, Width);
+    }
+
+    IImage ICaptureZone.Image
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => new Image<TColor>(InternalBuffer, 0, 0, Width, Height, Width);
     }
 
     /// <summary>
@@ -153,6 +151,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     #endregion
 
     #region Methods
+
+    public RefImage<T> GetRefImage<T>()
+        where T : struct, IColor
+    {
+        if (typeof(T) != typeof(TColor)) throw new ArgumentException("The requested Color-Format does not match the data.", nameof(T));
+
+        return new RefImage<T>(MemoryMarshal.Cast<byte, T>(RawBuffer), 0, 0, Width, Height, Width);
+    }
 
     public IDisposable Lock()
     {
@@ -216,6 +222,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         #region Constructors
 
         public UnlockDisposable(object @lock) => this._lock = @lock;
+        ~UnlockDisposable() => Dispose();
 
         #endregion
 
@@ -227,6 +234,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
             Monitor.Exit(_lock);
             _disposed = true;
+
+            GC.SuppressFinalize(this);
         }
 
         #endregion

@@ -8,6 +8,7 @@ public interface ICaptureZone
     /// Gets the unique id of this <see cref="ICaptureZone"/>.
     /// </summary>
     int Id { get; }
+
     Display Display { get; }
     /// <summary>
     /// Gets the x-location of the region on the screen.
@@ -40,6 +41,8 @@ public interface ICaptureZone
 
     ReadOnlySpan<byte> RawBuffer { get; }
 
+    IImage Image { get; }
+
     /// <summary>
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>
@@ -58,4 +61,7 @@ public interface ICaptureZone
     /// Only necessary if <see cref="AutoUpdate"/> is set to <c>false</c>.
     /// </summary>
     void RequestUpdate();
+
+    RefImage<TColor> GetRefImage<TColor>()
+        where TColor : struct, IColor;
 }
