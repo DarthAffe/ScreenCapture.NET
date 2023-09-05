@@ -38,7 +38,7 @@ public readonly ref struct Image<TColor>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if ((x < 0) || (y < 0) || ((x + width) > Width) || ((y + height) > Height)) throw new IndexOutOfRangeException();
+            if ((x < 0) || (y < 0) || (width <= 0) || (height <= 0) || ((x + width) > Width) || ((y + height) > Height)) throw new IndexOutOfRangeException();
 
             return new Image<TColor>(_pixels, _x + x, _y + y, width, height, _stride);
         }
@@ -85,6 +85,13 @@ public readonly ref struct Image<TColor>
             row.CopyTo(target);
             target = target[Width..];
         }
+    }
+
+    public TColor[] ToArray()
+    {
+        TColor[] array = new TColor[Width * Height];
+        CopyTo(array);
+        return array;
     }
 
     #endregion
