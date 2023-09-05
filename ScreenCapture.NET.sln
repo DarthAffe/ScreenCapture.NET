@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31025.194
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenCapture.NET", "ScreenCapture.NET\ScreenCapture.NET.csproj", "{90596344-E012-4534-A933-3BD1B55469DC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET", "ScreenCapture.NET\ScreenCapture.NET.csproj", "{90596344-E012-4534-A933-3BD1B55469DC}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.DX11", "..\..\..\..\DarthAffe\Source\Repos\ScreenCapture.NET\ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj", "{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{90596344-E012-4534-A933-3BD1B55469DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{90596344-E012-4534-A933-3BD1B55469DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{90596344-E012-4534-A933-3BD1B55469DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

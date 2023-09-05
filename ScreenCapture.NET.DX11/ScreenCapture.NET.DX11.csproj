@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net7.0-windows;net6.0-windows</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -9,13 +9,13 @@
     <Company>Wyrez</Company>
     <Language>en-US</Language>
     <NeutralLanguage>en-US</NeutralLanguage>
-    <Title>ScreenCapture.NET</Title>
-    <AssemblyName>ScreenCapture.NET</AssemblyName>
-    <AssemblyTitle>ScreenCapture.NET</AssemblyTitle>
-    <PackageId>ScreenCapture.NET</PackageId>
+    <Title>ScreenCapture.NET.DX11</Title>
+    <AssemblyName>ScreenCapture.NET.DX11</AssemblyName>
+    <AssemblyTitle>ScreenCapture.NET.DX11</AssemblyTitle>
+    <PackageId>ScreenCapture.NET.DX11</PackageId>
     <RootNamespace>ScreenCapture.NET</RootNamespace>
-    <Description>Core functionality for Screen-Capturing</Description>
-    <Summary>Base package for ScreenCapture.NET projects</Summary>
+    <Description>Vortice based Screen-Capturing</Description>
+    <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
     <Copyright>Copyright © Darth Affe 2023</Copyright>
     <PackageCopyright>Copyright © Darth Affe 2023</PackageCopyright>
     <PackageIcon>icon.png</PackageIcon>
@@ -60,6 +60,14 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="2.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Darth Affe\Source\Repos\ScreenCapture.NET\ScreenCapture.NET\ScreenCapture.NET.csproj" />
   </ItemGroup>
 
 </Project>
