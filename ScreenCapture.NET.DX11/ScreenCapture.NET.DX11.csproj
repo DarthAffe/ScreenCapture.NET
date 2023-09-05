@@ -67,7 +67,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\..\Darth Affe\Source\Repos\ScreenCapture.NET\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+    <ProjectReference Include="..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
   </ItemGroup>
 
 </Project>

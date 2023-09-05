@@ -5,7 +5,7 @@ VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET", "ScreenCapture.NET\ScreenCapture.NET.csproj", "{90596344-E012-4534-A933-3BD1B55469DC}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.DX11", "..\..\..\..\DarthAffe\Source\Repos\ScreenCapture.NET\ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj", "{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.DX11", "ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj", "{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
