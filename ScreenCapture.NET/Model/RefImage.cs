@@ -38,7 +38,7 @@ public readonly ref struct RefImage<TColor>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if ((x < 0) || (y < 0) || (width <= 0) || (height <= 0) || ((x + width) >= Width) || ((y + height) >= Height)) throw new IndexOutOfRangeException();
+            if ((x < 0) || (y < 0) || (width <= 0) || (height <= 0) || ((x + width) > Width) || ((y + height) > Height)) throw new IndexOutOfRangeException();
 
             return new RefImage<TColor>(_pixels, _x + x, _y + y, width, height, _stride);
         }
@@ -151,6 +151,8 @@ public readonly ref struct RefImage<TColor>
         private readonly int _height;
         private readonly int _stride;
 
+        public int Count => _height;
+
         #endregion
 
         #region Indexer
@@ -242,6 +244,8 @@ public readonly ref struct RefImage<TColor>
         private readonly int _width;
         private readonly int _height;
         private readonly int _stride;
+
+        public int Count => _width;
 
         #endregion
 

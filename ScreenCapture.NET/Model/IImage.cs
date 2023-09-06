@@ -15,21 +15,25 @@ public interface IImage : IEnumerable<IColor>
 
     public interface IImageRows : IEnumerable<IImageRow>
     {
+        int Count { get; }
         IImageRow this[int column] { get; }
     }
 
     public interface IImageColumns : IEnumerable<IImageColumn>
     {
+        int Count { get; }
         IImageColumn this[int column] { get; }
     }
 
     public interface IImageRow : IEnumerable<IColor>
     {
+        int Length { get; }
         IColor this[int x] { get; }
     }
 
     public interface IImageColumn : IEnumerable<IColor>
     {
+        int Length { get; }
         IColor this[int y] { get; }
     }
 }

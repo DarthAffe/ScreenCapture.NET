@@ -40,7 +40,7 @@ public sealed class Image<TColor> : IImage
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if ((x < 0) || (y < 0) || (width <= 0) || (height <= 0) || ((x + width) >= Width) || ((y + height) >= Height)) throw new IndexOutOfRangeException();
+            if ((x < 0) || (y < 0) || (width <= 0) || (height <= 0) || ((x + width) > Width) || ((y + height) > Height)) throw new IndexOutOfRangeException();
 
             return new Image<TColor>(_buffer, _x + x, _y + y, width, height, _stride);
         }
@@ -100,6 +100,8 @@ public sealed class Image<TColor> : IImage
         private readonly int _height;
         private readonly int _stride;
 
+        public int Count => _height;
+
         #endregion
 
         #region Indexer
@@ -150,6 +152,8 @@ public sealed class Image<TColor> : IImage
         private readonly byte[] _buffer;
         private readonly int _start;
         private readonly int _length;
+
+        public int Length => _length;
 
         #endregion
 
@@ -203,6 +207,8 @@ public sealed class Image<TColor> : IImage
         private readonly int _height;
         private readonly int _stride;
 
+        public int Count => _width;
+
         #endregion
 
         #region Indexer
@@ -254,6 +260,8 @@ public sealed class Image<TColor> : IImage
         private readonly int _start;
         private readonly int _length;
         private readonly int _step;
+
+        public int Length => _length;
 
         #endregion
 
