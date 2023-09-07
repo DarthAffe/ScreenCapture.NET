@@ -94,7 +94,7 @@ public class DX11ScreenCaptureService : IScreenCaptureService
             screenCapture.Dispose();
         _screenCaptures.Clear();
 
-        _factory.Dispose();
+        try { _factory.Dispose(); } catch { /**/ }
 
         GC.SuppressFinalize(this);
 
