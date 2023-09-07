@@ -1,0 +1,75 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net7.0-windows;net6.0-windows</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <Authors>Darth Affe</Authors>
+    <Company>Wyrez</Company>
+    <Language>en-US</Language>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Title>ScreenCapture.NET.DX9</Title>
+    <AssemblyName>ScreenCapture.NET.DX9</AssemblyName>
+    <AssemblyTitle>ScreenCapture.NET.DX9</AssemblyTitle>
+    <PackageId>ScreenCapture.NET.DX9</PackageId>
+    <RootNamespace>ScreenCapture.NET</RootNamespace>
+    <Description>Vortice based Screen-Capturing</Description>
+    <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
+    <Copyright>Copyright © Darth Affe 2023</Copyright>
+    <PackageCopyright>Copyright © Darth Affe 2023</PackageCopyright>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/DarthAffe/ScreenCapture.NET</PackageProjectUrl>
+    <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
+    <RepositoryType>Github</RepositoryType>
+    <RepositoryUrl>https://github.com/DarthAffe/ScreenCapture.NET</RepositoryUrl>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+    <PackageReleaseNotes>
+    </PackageReleaseNotes>
+
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0</AssemblyVersion>
+    <FileVersion>2.0.0</FileVersion>
+
+    <OutputPath>..\bin\</OutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSource>True</IncludeSource>
+    <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <DefineConstants>$(DefineConstants);TRACE;DEBUG</DefineConstants>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>portable</DebugType>
+    <Optimize>true</Optimize>
+    <NoWarn>$(NoWarn);CS1591;CS1572;CS1573</NoWarn>
+    <DefineConstants>$(DefineConstants);RELEASE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Resources\icon.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D9" Version="3.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Downscale\" />
+  </ItemGroup>
+
+</Project>
