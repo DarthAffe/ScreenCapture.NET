@@ -5,9 +5,11 @@ public readonly struct ColorFormat
     #region Instances
 
     public static readonly ColorFormat BGRA = new(1, 4);
-    public static readonly ColorFormat ARGB = new(2, 4);
-    public static readonly ColorFormat RGB = new(3, 3);
-    public static readonly ColorFormat BGR = new(4, 3);
+    public static readonly ColorFormat ABGR = new(2, 4);
+    public static readonly ColorFormat RGBA = new(3, 4);
+    public static readonly ColorFormat ARGB = new(4, 4);
+    public static readonly ColorFormat BGR = new(5, 3);
+    public static readonly ColorFormat RGB = new(6, 3);
 
     #endregion
 

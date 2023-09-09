@@ -51,15 +51,16 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             result = false;
         }
 
-        foreach (CaptureZone<TColor> captureZone in CaptureZones.Where(x => x.AutoUpdate || x.IsUpdateRequested))
-        {
-            try
+        lock (CaptureZones)
+            foreach (CaptureZone<TColor> captureZone in CaptureZones.Where(x => x.AutoUpdate || x.IsUpdateRequested))
             {
-                PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
-                captureZone.SetUpdated();
+                try
+                {
+                    PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
+                    captureZone.SetUpdated();
+                }
+                catch { /* */ }
             }
-            catch { /* */ }
-        }
 
         OnUpdated(result);
 

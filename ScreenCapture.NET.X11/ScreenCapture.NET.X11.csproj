@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net7.0-windows;net6.0-windows</TargetFrameworks>
+    <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -9,10 +10,10 @@
     <Company>Wyrez</Company>
     <Language>en-US</Language>
     <NeutralLanguage>en-US</NeutralLanguage>
-    <Title>ScreenCapture.NET.DX9</Title>
-    <AssemblyName>ScreenCapture.NET.DX9</AssemblyName>
-    <AssemblyTitle>ScreenCapture.NET.DX9</AssemblyTitle>
-    <PackageId>ScreenCapture.NET.DX9</PackageId>
+    <Title>ScreenCapture.NET.X11</Title>
+    <AssemblyName>ScreenCapture.NET.X11</AssemblyName>
+    <AssemblyTitle>ScreenCapture.NET.X11</AssemblyTitle>
+    <PackageId>ScreenCapture.NET.X11</PackageId>
     <RootNamespace>ScreenCapture.NET</RootNamespace>
     <Description>Vortice based Screen-Capturing</Description>
     <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
@@ -58,10 +59,6 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Vortice.Direct3D9" Version="3.2.0" />
   </ItemGroup>
 
   <ItemGroup>
