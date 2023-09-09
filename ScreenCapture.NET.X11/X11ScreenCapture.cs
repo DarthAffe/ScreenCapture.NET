@@ -7,7 +7,7 @@ using ScreenCapture.NET.Downscale;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents a ScreenCapture using DirectX 11 desktop duplicaton.
+/// Represents a ScreenCapture using libX11.
 /// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
 /// </summary>
 // ReSharper disable once InconsistentNaming
