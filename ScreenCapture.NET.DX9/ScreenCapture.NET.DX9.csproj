@@ -14,8 +14,8 @@
     <AssemblyTitle>ScreenCapture.NET.DX9</AssemblyTitle>
     <PackageId>ScreenCapture.NET.DX9</PackageId>
     <RootNamespace>ScreenCapture.NET</RootNamespace>
-    <Description>Vortice based Screen-Capturing</Description>
-    <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
+    <Description>DirectX 9 based Screen-Capturing</Description>
+    <Summary>DirectX 9 based Screen-Capturing. Use DX11 if possible!</Summary>
     <Copyright>Copyright © Darth Affe 2023</Copyright>
     <PackageCopyright>Copyright © Darth Affe 2023</PackageCopyright>
     <PackageIcon>icon.png</PackageIcon>
