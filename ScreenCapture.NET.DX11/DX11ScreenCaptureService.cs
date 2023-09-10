@@ -12,8 +12,9 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     #region Properties & Fields
 
     private readonly IDXGIFactory1 _factory;
-
     private readonly Dictionary<Display, DX11ScreenCapture> _screenCaptures = new();
+
+    private bool _isDisposed;
 
     #endregion
 
@@ -27,6 +28,8 @@ public class DX11ScreenCaptureService : IScreenCaptureService
         DXGI.CreateDXGIFactory1(out _factory!).CheckError();
     }
 
+    ~DX11ScreenCaptureService() => Dispose();
+
     #endregion
 
     #region Methods
@@ -34,6 +37,8 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
+        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+
         int i = 0;
         while (_factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success)
         {
@@ -46,6 +51,8 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
+        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+
         using IDXGIAdapter1? adapter = _factory.GetAdapter1(graphicsCard.Index);
 
         int i = 0;
@@ -59,7 +66,7 @@ public class DX11ScreenCaptureService : IScreenCaptureService
         }
     }
 
-    private Rotation GetRotation(ModeRotation rotation) => rotation switch
+    private static Rotation GetRotation(ModeRotation rotation) => rotation switch
     {
         ModeRotation.Rotate90 => Rotation.Rotation90,
         ModeRotation.Rotate180 => Rotation.Rotation180,
@@ -68,8 +75,11 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     };
 
     /// <inheritdoc />
-    public IScreenCapture GetScreenCapture(Display display)
+    IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
+    public DX11ScreenCapture GetScreenCapture(Display display)
     {
+        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+
         if (!_screenCaptures.TryGetValue(display, out DX11ScreenCapture? screenCapture))
             _screenCaptures.Add(display, screenCapture = new DX11ScreenCapture(_factory, display));
         return screenCapture;
@@ -78,13 +88,17 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public void Dispose()
     {
+        if (_isDisposed) return;
+
         foreach (DX11ScreenCapture screenCapture in _screenCaptures.Values)
             screenCapture.Dispose();
         _screenCaptures.Clear();
 
-        _factory.Dispose();
+        try { _factory.Dispose(); } catch { /**/ }
 
         GC.SuppressFinalize(this);
+
+        _isDisposed = true;
     }
 
     #endregion

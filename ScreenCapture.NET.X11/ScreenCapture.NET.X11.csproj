@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -9,13 +10,13 @@
     <Company>Wyrez</Company>
     <Language>en-US</Language>
     <NeutralLanguage>en-US</NeutralLanguage>
-    <Title>ScreenCapture.NET</Title>
-    <AssemblyName>ScreenCapture.NET</AssemblyName>
-    <AssemblyTitle>ScreenCapture.NET</AssemblyTitle>
-    <PackageId>ScreenCapture.NET</PackageId>
+    <Title>ScreenCapture.NET.X11</Title>
+    <AssemblyName>ScreenCapture.NET.X11</AssemblyName>
+    <AssemblyTitle>ScreenCapture.NET.X11</AssemblyTitle>
+    <PackageId>ScreenCapture.NET.X11</PackageId>
     <RootNamespace>ScreenCapture.NET</RootNamespace>
-    <Description>Core functionality for Screen-Capturing</Description>
-    <Summary>Base package for ScreenCapture.NET projects</Summary>
+    <Description>Vortice based Screen-Capturing</Description>
+    <Summary>Vortice based Screen-Capturing using Desktop Duplication</Summary>
     <Copyright>Copyright © Darth Affe 2023</Copyright>
     <PackageCopyright>Copyright © Darth Affe 2023</PackageCopyright>
     <PackageIcon>icon.png</PackageIcon>
@@ -26,13 +27,11 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-      The downscale-level is now automatically limited if it would scale the image below a size of 1x1 px.
-      This is change that can potentially break existing behavior but should only affect cases that are expected to crash with earlier versions.
     </PackageReleaseNotes>
 
-    <Version>1.3.2</Version>
-    <AssemblyVersion>1.3.2</AssemblyVersion>
-    <FileVersion>1.3.2</FileVersion>
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0</AssemblyVersion>
+    <FileVersion>2.0.0</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -60,6 +59,10 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
   </ItemGroup>
 
 </Project>

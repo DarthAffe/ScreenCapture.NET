@@ -1,9 +1,19 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31025.194
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenCapture.NET", "ScreenCapture.NET\ScreenCapture.NET.csproj", "{90596344-E012-4534-A933-3BD1B55469DC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET", "ScreenCapture.NET\ScreenCapture.NET.csproj", "{90596344-E012-4534-A933-3BD1B55469DC}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.DX11", "ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj", "{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{CF7A1475-3A44-4870-A80F-5988DA25418B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.Tests", "Tests\ScreenCapture.NET.Tests\ScreenCapture.NET.Tests.csproj", "{AA1829BB-EFA7-4BB8-8041-76374659A42B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.DX9", "ScreenCapture.NET.DX9\ScreenCapture.NET.DX9.csproj", "{27EB5B17-2F83-43BA-A21F-06D93948B8BF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.X11", "ScreenCapture.NET.X11\ScreenCapture.NET.X11.csproj", "{F81562C8-2035-4FB9-9547-C51F9D343BDF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,9 +25,28 @@ Global
 		{90596344-E012-4534-A933-3BD1B55469DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{90596344-E012-4534-A933-3BD1B55469DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{90596344-E012-4534-A933-3BD1B55469DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58A09AD8-D66F-492E-8BC7-62BDB85E57EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA1829BB-EFA7-4BB8-8041-76374659A42B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA1829BB-EFA7-4BB8-8041-76374659A42B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA1829BB-EFA7-4BB8-8041-76374659A42B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA1829BB-EFA7-4BB8-8041-76374659A42B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{27EB5B17-2F83-43BA-A21F-06D93948B8BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{27EB5B17-2F83-43BA-A21F-06D93948B8BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{27EB5B17-2F83-43BA-A21F-06D93948B8BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{27EB5B17-2F83-43BA-A21F-06D93948B8BF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F81562C8-2035-4FB9-9547-C51F9D343BDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F81562C8-2035-4FB9-9547-C51F9D343BDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F81562C8-2035-4FB9-9547-C51F9D343BDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F81562C8-2035-4FB9-9547-C51F9D343BDF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{AA1829BB-EFA7-4BB8-8041-76374659A42B} = {CF7A1475-3A44-4870-A80F-5988DA25418B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B5111031-6E65-4331-9E6E-A07165289860}
