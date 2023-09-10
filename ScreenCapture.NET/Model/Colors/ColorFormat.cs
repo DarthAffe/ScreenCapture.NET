@@ -1,5 +1,8 @@
 ﻿namespace ScreenCapture.NET;
 
+/// <summary>
+/// Represents a color format.
+/// </summary>
 public readonly struct ColorFormat
 {
     #region Instances
@@ -15,7 +18,14 @@ public readonly struct ColorFormat
 
     #region Properties & Fields
 
+    /// <summary>
+    /// Gets the Id of the color-format.
+    /// </summary>
     public readonly int Id;
+
+    /// <summary>
+    /// Gets the Bytes per pixel for this color-format.
+    /// </summary>
     public readonly int BytesPerPixel;
 
     #endregion

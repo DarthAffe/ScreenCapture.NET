@@ -68,7 +68,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <param name="factory">The <see cref="IDXGIFactory1"/> used to create underlying objects.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
     /// <param name="useNewDuplicationAdapter">Indicates if the DuplicateOutput1 interface should be used instead of the older DuplicateOutput. Currently there's no real use in setting this to true.</param>
-    public DX11ScreenCapture(IDXGIFactory1 factory, Display display, bool useNewDuplicationAdapter = false)
+    internal DX11ScreenCapture(IDXGIFactory1 factory, Display display, bool useNewDuplicationAdapter = false)
         : base(display)
     {
         this._factory = factory;
@@ -81,6 +81,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Methods
 
+    /// <inheritdoc />
     protected override bool PerformScreenCapture()
     {
         bool result = false;
@@ -133,6 +134,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         return result;
     }
 
+    /// <inheritdoc />
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
         if (_context == null) return;
@@ -299,6 +301,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
+    /// <inheritdoc />
     protected override void ValidateCaptureZoneAndThrow(int x, int y, int width, int height, int downscaleLevel)
     {
         if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
@@ -429,10 +432,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        DisposeDX();
+
+        lock (_captureLock)
+            DisposeDX();
     }
 
     private void DisposeDX()

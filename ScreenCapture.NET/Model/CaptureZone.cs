@@ -17,98 +17,89 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     private readonly object _lock = new();
 
+    /// <inheritdoc />
     public Display Display { get; }
 
+    /// <inheritdoc />
     public ColorFormat ColorFormat
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TColor.ColorFormat;
     }
 
-    /// <summary>
-    /// Gets the x-location of the region on the screen.
-    /// </summary>
+    /// <inheritdoc />
     public int X { get; internal set; }
 
-    /// <summary>
-    /// Gets the y-location of the region on the screen.
-    /// </summary>
+    /// <inheritdoc />
     public int Y { get; internal set; }
 
-    /// <summary>
-    /// Gets the width of the captured region.
-    /// </summary>
+    /// <inheritdoc />
     public int Width { get; private set; }
 
-    /// <summary>
-    /// Gets the height of the captured region.
-    /// </summary>
+    /// <inheritdoc />
     public int Height { get; private set; }
 
+    /// <inheritdoc />
     public int Stride
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => Width * ColorFormat.BytesPerPixel;
     }
 
-    /// <summary>
-    /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
-    /// </summary>
+    /// <inheritdoc />
     public int DownscaleLevel { get; private set; }
 
-    /// <summary>
-    /// Gets the original width of the region (this equals <see cref="Width"/> if <see cref="DownscaleLevel"/> is 0).
-    /// </summary>
+    /// <inheritdoc />
     public int UnscaledWidth { get; private set; }
 
-    /// <summary>
-    /// Gets the original height of the region (this equals <see cref="Height"/> if <see cref="DownscaleLevel"/> is 0).
-    /// </summary>
+    /// <inheritdoc />
     public int UnscaledHeight { get; private set; }
 
     internal byte[] InternalBuffer { get; set; }
 
+    /// <inheritdoc />
     public ReadOnlySpan<byte> RawBuffer
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => InternalBuffer;
     }
 
+    /// <summary>
+    /// Gets the pixel-data of this zone.
+    /// </summary>
     public ReadOnlySpan<TColor> Pixels
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => MemoryMarshal.Cast<byte, TColor>(RawBuffer);
     }
 
+    /// <summary>
+    /// Gets a <see cref="RefImage{TColor}"/>. Basically the same as <see cref="Image"/> but with better performance.
+    /// </summary>
     public RefImage<TColor> Image
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => new(Pixels, 0, 0, Width, Height, Width);
     }
 
+    /// <inheritdoc />
     IImage ICaptureZone.Image
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => new Image<TColor>(InternalBuffer, 0, 0, Width, Height, Width);
     }
 
-    /// <summary>
-    /// Gets or sets if the <see cref="CaptureZone{T}"/> should be automatically updated on every captured frame.
-    /// </summary>
+    /// <inheritdoc />
     public bool AutoUpdate { get; set; } = true;
 
-    /// <summary>
-    /// Gets if an update for the <see cref="CaptureZone{T}"/> is requested on the next captured frame.
-    /// </summary>
+    /// <inheritdoc />
     public bool IsUpdateRequested { get; private set; }
 
     #endregion
 
     #region Events
 
-    /// <summary>
-    /// Occurs when the <see cref="CaptureZone{T}"/> is updated.
-    /// </summary>
+    /// <inheritdoc />
     public event EventHandler? Updated;
 
     #endregion
@@ -146,6 +137,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     #region Methods
 
+    /// <inheritdoc />
     public RefImage<T> GetRefImage<T>()
         where T : struct, IColor
     {
@@ -154,16 +146,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         return new RefImage<T>(MemoryMarshal.Cast<byte, T>(RawBuffer), 0, 0, Width, Height, Width);
     }
 
+    /// <inheritdoc />
     public IDisposable Lock()
     {
         Monitor.Enter(_lock);
         return new UnlockDisposable(_lock);
     }
 
-    /// <summary>
-    /// Requests to update this <see cref="CaptureZone{T}"/> when the next frame is captured.
-    /// Only necessary if <see cref="AutoUpdate"/> is set to <c>false</c>.
-    /// </summary>
+    /// <inheritdoc />
     public void RequestUpdate() => IsUpdateRequested = true;
 
     /// <summary>
@@ -209,6 +199,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
         #region Methods
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_disposed) throw new ObjectDisposedException("The lock is already released");

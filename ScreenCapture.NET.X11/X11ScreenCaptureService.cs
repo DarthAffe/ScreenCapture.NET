@@ -75,6 +75,8 @@ public class X11ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
+
+    /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     public X11ScreenCapture GetScreenCapture(Display display)
     {
         if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);

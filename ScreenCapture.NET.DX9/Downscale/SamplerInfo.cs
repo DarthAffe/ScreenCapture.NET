@@ -43,8 +43,12 @@ internal readonly ref struct SamplerInfo<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="SamplerInfo{T}" /> class.
     /// </summary>
+    /// <param name="x">The X-location of the region the data comes from.</param>
+    /// <param name="y">The Y-location of the region the data comes from.</param>
     /// <param name="width">The width of the region the data comes from.</param>
     /// <param name="height">The height of region the data comes from.</param>
+    /// <param name="stride">The number of pixels in a row of data.</param>
+    /// <param name="dataPerPixel">The number of {T} representing a single pixel.</param>
     /// <param name="data">The data to sample.</param>
     public SamplerInfo(int x, int y, int width, int height, int stride, int dataPerPixel, in ReadOnlySpan<T> data)
     {

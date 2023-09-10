@@ -7,7 +7,7 @@ namespace ScreenCapture.NET;
 
 /// <summary>
 /// Represents a ScreenCapture using libX11.
-/// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
+/// https://x.org/releases/current/doc/libX11/libX11/libX11.html#XGetImage
 /// </summary>
 // ReSharper disable once InconsistentNaming
 public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
@@ -31,7 +31,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// Initializes a new instance of the <see cref="X11ScreenCapture"/> class.
     /// </summary>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    public X11ScreenCapture(Display display)
+    internal X11ScreenCapture(Display display)
         : base(display)
     {
         Restart();
@@ -41,6 +41,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Methods
 
+    /// <inheritdoc />
     protected override bool PerformScreenCapture()
     {
         lock (_captureLock)
@@ -57,6 +58,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
+    /// <inheritdoc />
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
         using IDisposable @lock = captureZone.Lock();
@@ -158,6 +160,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);

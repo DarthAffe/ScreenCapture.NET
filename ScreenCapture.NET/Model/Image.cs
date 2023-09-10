@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace ScreenCapture.NET;
 
+/// <inheritdoc />
 public sealed class Image<TColor> : IImage
     where TColor : struct, IColor
 {
@@ -17,13 +18,17 @@ public sealed class Image<TColor> : IImage
     private readonly int _y;
     private readonly int _stride;
 
+    /// <inheritdoc />
     public int Width { get; }
+
+    /// <inheritdoc />
     public int Height { get; }
 
     #endregion
 
     #region Indexer
 
+    /// <inheritdoc />
     public IColor this[int x, int y]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -35,6 +40,7 @@ public sealed class Image<TColor> : IImage
         }
     }
 
+    /// <inheritdoc />
     public IImage this[int x, int y, int width, int height]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -46,12 +52,14 @@ public sealed class Image<TColor> : IImage
         }
     }
 
+    /// <inheritdoc />
     public IImage.IImageRows Rows
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => new ImageRows(_buffer, _x, _y, Width, Height, _stride);
     }
 
+    /// <inheritdoc />
     public IImage.IImageColumns Columns
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -76,6 +84,7 @@ public sealed class Image<TColor> : IImage
 
     #region Methods
 
+    /// <inheritdoc />
     public IEnumerator<IColor> GetEnumerator()
     {
         for (int y = 0; y < Height; y++)
@@ -83,12 +92,14 @@ public sealed class Image<TColor> : IImage
                 yield return this[x, y];
     }
 
+    /// <inheritdoc />
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     #endregion
 
     #region Indexer-Classes
 
+    /// <inheritdoc />
     private sealed class ImageRows : IImage.IImageRows
     {
         #region Properties & Fields
@@ -100,12 +111,14 @@ public sealed class Image<TColor> : IImage
         private readonly int _height;
         private readonly int _stride;
 
+        /// <inheritdoc />
         public int Count => _height;
 
         #endregion
 
         #region Indexer
 
+        /// <inheritdoc />
         public IImage.IImageRow this[int row]
         {
             get
@@ -134,17 +147,20 @@ public sealed class Image<TColor> : IImage
 
         #region Methods
 
+        /// <inheritdoc />
         public IEnumerator<IImage.IImageRow> GetEnumerator()
         {
             for (int y = 0; y < _height; y++)
                 yield return this[y];
         }
 
+        /// <inheritdoc />
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         #endregion
     }
 
+    /// <inheritdoc />
     private sealed class ImageRow : IImage.IImageRow
     {
         #region Properties & Fields
@@ -153,12 +169,14 @@ public sealed class Image<TColor> : IImage
         private readonly int _start;
         private readonly int _length;
 
+        /// <inheritdoc />
         public int Length => _length;
 
         #endregion
 
         #region Indexer
 
+        /// <inheritdoc />
         public IColor this[int x]
         {
             get
@@ -185,17 +203,20 @@ public sealed class Image<TColor> : IImage
 
         #region Methods
 
+        /// <inheritdoc />
         public IEnumerator<IColor> GetEnumerator()
         {
             for (int x = 0; x < _length; x++)
                 yield return this[x];
         }
 
+        /// <inheritdoc />
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         #endregion
     }
 
+    /// <inheritdoc />
     private sealed class ImageColumns : IImage.IImageColumns
     {
         #region Properties & Fields
@@ -207,12 +228,14 @@ public sealed class Image<TColor> : IImage
         private readonly int _height;
         private readonly int _stride;
 
+        /// <inheritdoc />
         public int Count => _width;
 
         #endregion
 
         #region Indexer
 
+        /// <inheritdoc />
         public IImage.IImageColumn this[int column]
         {
             get
@@ -241,17 +264,20 @@ public sealed class Image<TColor> : IImage
 
         #region Methods
 
+        /// <inheritdoc />
         public IEnumerator<IImage.IImageColumn> GetEnumerator()
         {
             for (int y = 0; y < _height; y++)
                 yield return this[y];
         }
 
+        /// <inheritdoc />
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         #endregion
     }
 
+    /// <inheritdoc />
     private sealed class ImageColumn : IImage.IImageColumn
     {
         #region Properties & Fields
@@ -261,12 +287,14 @@ public sealed class Image<TColor> : IImage
         private readonly int _length;
         private readonly int _step;
 
+        /// <inheritdoc />
         public int Length => _length;
 
         #endregion
 
         #region Indexer
 
+        /// <inheritdoc />
         public IColor this[int y]
         {
             get
@@ -294,12 +322,14 @@ public sealed class Image<TColor> : IImage
 
         #region Methods
 
+        /// <inheritdoc />
         public IEnumerator<IColor> GetEnumerator()
         {
             for (int y = 0; y < _length; y++)
                 yield return this[y];
         }
 
+        /// <inheritdoc />
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         #endregion

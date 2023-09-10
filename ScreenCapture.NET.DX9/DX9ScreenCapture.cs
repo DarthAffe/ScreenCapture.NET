@@ -9,8 +9,8 @@ using Vortice.Direct3D9;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents a ScreenCapture using DirectX 11 desktop duplicaton.
-/// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
+/// Represents a ScreenCapture using DirectX 9.
+/// https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-getfrontbufferdata
 /// </summary>
 // ReSharper disable once InconsistentNaming
 public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
@@ -32,8 +32,9 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <summary>
     /// Initializes a new instance of the <see cref="DX9ScreenCapture"/> class.
     /// </summary>
+    /// <param name="direct3D9">The D3D9 instance used.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    public DX9ScreenCapture(IDirect3D9 direct3D9, Display display)
+    internal DX9ScreenCapture(IDirect3D9 direct3D9, Display display)
         : base(display)
     {
         this._direct3D9 = direct3D9;
@@ -45,6 +46,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Methods
 
+    /// <inheritdoc />
     protected override bool PerformScreenCapture()
     {
         bool result = false;
@@ -89,6 +91,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         return result;
     }
 
+    /// <inheritdoc />
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
     {
         if (_buffer == null) return;
@@ -195,10 +198,13 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        DisposeDX();
+
+        lock (_captureLock)
+            DisposeDX();
     }
 
     private void DisposeDX()
