@@ -240,7 +240,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         _isDisposed = true;
     }
 
-    /// <inheritdoc cref="Dispose" />
+    /// <inheritdoc cref="IDisposable.Dispose" />
     protected virtual void Dispose(bool disposing) { }
 
     #endregion
