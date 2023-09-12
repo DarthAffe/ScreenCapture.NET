@@ -161,5 +161,19 @@ public class ImageTest
         }
     }
 
+    [TestMethod]
+    public void TestAsRefImage()
+    {
+        IImage image = _captureZone!.Image;
+        image = image[163, 280, 720, 13];
+        image = image[15, 2, 47, 8];
+
+        RefImage<ColorARGB> refImage = image.AsRefImage<ColorARGB>();
+
+        for (int y = 0; y < image.Height; y++)
+            for (int x = 0; x < image.Width; x++)
+                Assert.AreEqual(image[x, y], refImage[x, y]);
+    }
+
     #endregion
 }

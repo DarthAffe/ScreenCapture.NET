@@ -19,10 +19,16 @@ public sealed class Image<TColor> : IImage
     private readonly int _stride;
 
     /// <inheritdoc />
+    public ColorFormat ColorFormat => TColor.ColorFormat;
+
+    /// <inheritdoc />
     public int Width { get; }
 
     /// <inheritdoc />
     public int Height { get; }
+
+    /// <inheritdoc />
+    public int SizeInBytes => Width * Height * TColor.ColorFormat.BytesPerPixel;
 
     #endregion
 
@@ -83,6 +89,39 @@ public sealed class Image<TColor> : IImage
     #endregion
 
     #region Methods
+
+    /// <inheritdoc />
+    public void CopyTo(in Span<byte> destination)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (destination.Length < SizeInBytes) throw new ArgumentException("The destination is too small to fit this image.", nameof(destination));
+
+        int targetStride = Width * TColor.ColorFormat.BytesPerPixel;
+        IImage.IImageRows rows = Rows;
+        Span<byte> target = destination;
+        foreach (IImage.IImageRow row in rows)
+        {
+            row.CopyTo(target);
+            target = target[targetStride..];
+        }
+    }
+
+    /// <inheritdoc />
+    public byte[] ToArray()
+    {
+        byte[] array = new byte[SizeInBytes];
+        CopyTo(array);
+        return array;
+    }
+
+    /// <inheritdoc />
+    public RefImage<T> AsRefImage<T>()
+        where T : struct, IColor
+    {
+        if (typeof(T) != typeof(TColor)) throw new ArgumentException("The requested color format does not fit this image.", nameof(T));
+
+        return new RefImage<T>(MemoryMarshal.Cast<byte, T>(_buffer), _x, _y, Width, Height, _stride);
+    }
 
     /// <inheritdoc />
     public IEnumerator<IColor> GetEnumerator()
@@ -172,6 +211,9 @@ public sealed class Image<TColor> : IImage
         /// <inheritdoc />
         public int Length => _length;
 
+        /// <inheritdoc />
+        public int SizeInBytes => Length * TColor.ColorFormat.BytesPerPixel;
+
         #endregion
 
         #region Indexer
@@ -202,6 +244,23 @@ public sealed class Image<TColor> : IImage
         #endregion
 
         #region Methods
+
+        /// <inheritdoc />
+        public void CopyTo(in Span<byte> destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (destination.Length < SizeInBytes) throw new ArgumentException("The destination is too small to fit this image.", nameof(destination));
+
+            _buffer.AsSpan(_start, SizeInBytes).CopyTo(destination);
+        }
+
+        /// <inheritdoc />
+        public byte[] ToArray()
+        {
+            byte[] array = new byte[SizeInBytes];
+            CopyTo(array);
+            return array;
+        }
 
         /// <inheritdoc />
         public IEnumerator<IColor> GetEnumerator()
@@ -290,6 +349,9 @@ public sealed class Image<TColor> : IImage
         /// <inheritdoc />
         public int Length => _length;
 
+        /// <inheritdoc />
+        public int SizeInBytes => Length * TColor.ColorFormat.BytesPerPixel;
+
         #endregion
 
         #region Indexer
@@ -301,8 +363,8 @@ public sealed class Image<TColor> : IImage
             {
                 if ((y < 0) || (y >= _length)) throw new IndexOutOfRangeException();
 
-                ReadOnlySpan<TColor> row = MemoryMarshal.Cast<byte, TColor>(_buffer)[_start..];
-                return row[y * _step];
+                ReadOnlySpan<TColor> data = MemoryMarshal.Cast<byte, TColor>(_buffer)[_start..];
+                return data[y * _step];
             }
         }
 
@@ -321,6 +383,31 @@ public sealed class Image<TColor> : IImage
         #endregion
 
         #region Methods
+
+        /// <inheritdoc />
+        public void CopyTo(in Span<byte> destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (destination.Length < SizeInBytes) throw new ArgumentException("The destination is too small to fit this image.", nameof(destination));
+
+            if (_step == 1)
+                _buffer.AsSpan(_start, SizeInBytes).CopyTo(destination);
+            else
+            {
+                ReadOnlySpan<TColor> data = MemoryMarshal.Cast<byte, TColor>(_buffer)[_start..];
+                Span<TColor> target = MemoryMarshal.Cast<byte, TColor>(destination);
+                for (int i = 0; i < Length; i++)
+                    target[i] = data[i * _step];
+            }
+        }
+
+        /// <inheritdoc />
+        public byte[] ToArray()
+        {
+            byte[] array = new byte[SizeInBytes];
+            CopyTo(array);
+            return array;
+        }
 
         /// <inheritdoc />
         public IEnumerator<IColor> GetEnumerator()
