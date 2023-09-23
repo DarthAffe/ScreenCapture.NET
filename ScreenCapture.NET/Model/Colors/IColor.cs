@@ -27,8 +27,12 @@ public interface IColor
     /// </summary>
     byte A { get; }
 
+#if NET7_0_OR_GREATER
     /// <summary>
     /// Gets the color-format of this color.
     /// </summary>
     public static virtual ColorFormat ColorFormat => throw new NotSupportedException();
+#else
+    public ColorFormat Net6ColorFormat { get; }
+#endif
 }

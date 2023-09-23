@@ -18,8 +18,21 @@ public sealed class Image<TColor> : IImage
     private readonly int _y;
     private readonly int _stride;
 
+#if NET7_0_OR_GREATER
     /// <inheritdoc />
-    public ColorFormat ColorFormat => TColor.ColorFormat;
+    public ColorFormat ColorFormat
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => TColor.ColorFormat;
+    }
+#else
+    /// <inheritdoc />
+    public ColorFormat ColorFormat
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => default(TColor).Net6ColorFormat;
+    }
+#endif
 
     /// <inheritdoc />
     public int Width { get; }
@@ -28,7 +41,7 @@ public sealed class Image<TColor> : IImage
     public int Height { get; }
 
     /// <inheritdoc />
-    public int SizeInBytes => Width * Height * TColor.ColorFormat.BytesPerPixel;
+    public int SizeInBytes => Width * Height * ColorFormat.BytesPerPixel;
 
     #endregion
 
@@ -96,7 +109,7 @@ public sealed class Image<TColor> : IImage
         if (destination == null) throw new ArgumentNullException(nameof(destination));
         if (destination.Length < SizeInBytes) throw new ArgumentException("The destination is too small to fit this image.", nameof(destination));
 
-        int targetStride = Width * TColor.ColorFormat.BytesPerPixel;
+        int targetStride = Width * ColorFormat.BytesPerPixel;
         IImage.IImageRows rows = Rows;
         Span<byte> target = destination;
         foreach (IImage.IImageRow row in rows)
@@ -211,8 +224,13 @@ public sealed class Image<TColor> : IImage
         /// <inheritdoc />
         public int Length => _length;
 
+#if NET7_0_OR_GREATER
         /// <inheritdoc />
         public int SizeInBytes => Length * TColor.ColorFormat.BytesPerPixel;
+#else
+        /// <inheritdoc />
+        public int SizeInBytes => Length * default(TColor).Net6ColorFormat.BytesPerPixel;
+#endif
 
         #endregion
 
@@ -349,8 +367,13 @@ public sealed class Image<TColor> : IImage
         /// <inheritdoc />
         public int Length => _length;
 
+#if NET7_0_OR_GREATER
         /// <inheritdoc />
         public int SizeInBytes => Length * TColor.ColorFormat.BytesPerPixel;
+#else
+        /// <inheritdoc />
+        public int SizeInBytes => Length * default(TColor).Net6ColorFormat.BytesPerPixel;
+#endif
 
         #endregion
 

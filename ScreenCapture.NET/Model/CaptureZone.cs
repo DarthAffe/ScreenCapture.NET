@@ -20,12 +20,21 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public Display Display { get; }
 
+#if NET7_0_OR_GREATER
     /// <inheritdoc />
     public ColorFormat ColorFormat
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TColor.ColorFormat;
     }
+#else
+    /// <inheritdoc />
+    public ColorFormat ColorFormat
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => default(TColor).Net6ColorFormat;
+    }
+#endif
 
     /// <inheritdoc />
     public int X { get; internal set; }
@@ -95,7 +104,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public bool IsUpdateRequested { get; private set; }
 
-    #endregion
+#endregion
 
     #region Events
 

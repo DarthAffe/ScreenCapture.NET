@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net7.0-windows;net6.0-windows</TargetFrameworks>
+    <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

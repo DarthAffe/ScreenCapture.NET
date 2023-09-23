@@ -13,9 +13,14 @@ namespace ScreenCapture.NET;
 public readonly struct ColorBGR : IColor
 {
     #region Properties & Fields
-
+    
     /// <inheritdoc />
     public static ColorFormat ColorFormat => ColorFormat.BGR;
+
+#if !NET7_0_OR_GREATER
+    /// <inheritdoc />
+    public ColorFormat Net6ColorFormat => ColorFormat;
+#endif
 
     private readonly byte _b;
     private readonly byte _g;

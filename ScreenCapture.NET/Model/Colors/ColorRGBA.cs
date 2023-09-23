@@ -17,6 +17,11 @@ public readonly struct ColorRGBA : IColor
     /// <inheritdoc />
     public static ColorFormat ColorFormat => ColorFormat.RGBA;
 
+#if !NET7_0_OR_GREATER
+    /// <inheritdoc />
+    public ColorFormat Net6ColorFormat => ColorFormat;
+#endif
+
     private readonly byte _r;
     private readonly byte _g;
     private readonly byte _b;

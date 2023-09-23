@@ -13,9 +13,14 @@ namespace ScreenCapture.NET;
 public readonly struct ColorBGRA : IColor
 {
     #region Properties & Fields
-
+    
     /// <inheritdoc />
     public static ColorFormat ColorFormat => ColorFormat.BGRA;
+
+#if !NET7_0_OR_GREATER
+    /// <inheritdoc />
+    public ColorFormat Net6ColorFormat => ColorFormat;
+#endif
 
     private readonly byte _b;
     private readonly byte _g;
@@ -36,7 +41,7 @@ public readonly struct ColorBGRA : IColor
     public byte A => _a;
     // ReSharper restore ConvertToAutoPropertyWhenPossible
 
-    #endregion
+#endregion
 
     #region Constructors
 
