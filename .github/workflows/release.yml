@@ -9,13 +9,15 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 0
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 7.0.x        
+        dotnet-version: |
+          7.0.x
+          6.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
