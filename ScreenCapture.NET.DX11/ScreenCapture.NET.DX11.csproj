@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net7.0-windows;net6.0-windows</TargetFrameworks>
+    <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -28,9 +29,9 @@
     <PackageReleaseNotes>
     </PackageReleaseNotes>
 
-    <Version>2.0.0</Version>
-    <AssemblyVersion>2.0.0</AssemblyVersion>
-    <FileVersion>2.0.0</FileVersion>
+    <Version>2.0.2</Version>
+    <AssemblyVersion>2.0.2</AssemblyVersion>
+    <FileVersion>2.0.2</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

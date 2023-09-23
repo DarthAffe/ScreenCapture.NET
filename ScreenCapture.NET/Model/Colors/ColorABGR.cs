@@ -17,6 +17,11 @@ public readonly struct ColorABGR : IColor
     /// <inheritdoc />
     public static ColorFormat ColorFormat => ColorFormat.ABGR;
 
+#if !NET7_0_OR_GREATER
+    /// <inheritdoc />
+    public ColorFormat Net6ColorFormat => ColorFormat;
+#endif
+
     private readonly byte _a;
     private readonly byte _b;
     private readonly byte _g;
@@ -39,7 +44,7 @@ public readonly struct ColorABGR : IColor
     #endregion
 
     #region Constructors
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ColorABGR"/> class.
     /// </summary>
