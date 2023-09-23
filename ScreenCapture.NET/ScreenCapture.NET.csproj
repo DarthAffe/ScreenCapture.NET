@@ -26,12 +26,12 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-Reworked most of the data handling and splitted capture-logic into separate packages.
+Fixed issues with .NET 6
     </PackageReleaseNotes>
 
-    <Version>2.0.1</Version>
-    <AssemblyVersion>2.0.1</AssemblyVersion>
-    <FileVersion>2.0.1</FileVersion>
+    <Version>2.0.2</Version>
+    <AssemblyVersion>2.0.2</AssemblyVersion>
+    <FileVersion>2.0.2</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
