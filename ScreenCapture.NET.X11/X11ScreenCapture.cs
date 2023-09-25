@@ -96,18 +96,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         ReadOnlySpan<byte> source = Data;
         Span<byte> target = buffer;
 
-        int blockSize = captureZone.DownscaleLevel switch
-        {
-            1 => 2,
-            2 => 4,
-            3 => 8,
-            4 => 16,
-            5 => 32,
-            6 => 64,
-            7 => 128,
-            8 => 256,
-            _ => (int)Math.Pow(2, captureZone.DownscaleLevel),
-        };
+        int blockSize = 1 << captureZone.DownscaleLevel;
 
         int offsetX = captureZone.X;
         int offsetY = captureZone.Y;
