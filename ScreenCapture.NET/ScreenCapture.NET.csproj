@@ -26,12 +26,13 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-Fixed issues with .NET 6
+      - Added .net8 build-target
+      - Fixed an issue in ImageRow.ToArray (and indirect Image.ToArray) that caused the resulting data to be weirdly interlaced
     </PackageReleaseNotes>
 
-    <Version>2.0.2</Version>
-    <AssemblyVersion>2.0.2</AssemblyVersion>
-    <FileVersion>2.0.2</FileVersion>
+    <Version>2.0.3</Version>
+    <AssemblyVersion>2.0.3</AssemblyVersion>
+    <FileVersion>2.0.3</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
