@@ -269,7 +269,7 @@ public sealed class Image<TColor> : IImage
             if (destination == null) throw new ArgumentNullException(nameof(destination));
             if (destination.Length < SizeInBytes) throw new ArgumentException("The destination is too small to fit this image.", nameof(destination));
 
-            _buffer.AsSpan(_start, SizeInBytes).CopyTo(destination);
+            MemoryMarshal.Cast<byte, TColor>(_buffer).Slice(_start, _length).CopyTo(MemoryMarshal.Cast<byte, TColor>(destination));
         }
 
         /// <inheritdoc />
