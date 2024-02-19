@@ -161,6 +161,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         Monitor.Enter(_lock);
         return new UnlockDisposable(_lock);
     }
+    public void Dispose()
+    {
+        InternalBuffer = null;
+    }
 
     /// <inheritdoc />
     public void RequestUpdate() => IsUpdateRequested = true;

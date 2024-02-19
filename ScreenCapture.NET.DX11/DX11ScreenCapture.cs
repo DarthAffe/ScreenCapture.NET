@@ -273,6 +273,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
             {
                 textures.Dispose();
+                captureZone.Dispose();
                 _textures.Remove(captureZone);
 
                 return true;
