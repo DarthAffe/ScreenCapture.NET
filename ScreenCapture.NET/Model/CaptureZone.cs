@@ -164,6 +164,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     public void Dispose()
     {
         InternalBuffer = null;
+        Updated = null;
     }
 
     /// <inheritdoc />
