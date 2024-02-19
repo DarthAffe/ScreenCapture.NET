@@ -17,8 +17,8 @@
     <RootNamespace>ScreenCapture.NET</RootNamespace>
     <Description>libX11 based Screen-Capturing</Description>
     <Summary>libX11 based Screen-Capturing</Summary>
-    <Copyright>Copyright © Darth Affe 2023</Copyright>
-    <PackageCopyright>Copyright © Darth Affe 2023</PackageCopyright>
+    <Copyright>Copyright © Darth Affe 2024</Copyright>
+    <PackageCopyright>Copyright © Darth Affe 2024</PackageCopyright>
     <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/DarthAffe/ScreenCapture.NET</PackageProjectUrl>
     <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
@@ -27,12 +27,11 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <PackageReleaseNotes>
-      - Added .net8 build-target
     </PackageReleaseNotes>
 
-    <Version>2.0.3</Version>
-    <AssemblyVersion>2.0.3</AssemblyVersion>
-    <FileVersion>2.0.3</FileVersion>
+    <Version>2.0.4</Version>
+    <AssemblyVersion>2.0.4</AssemblyVersion>
+    <FileVersion>2.0.4</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
