@@ -18,7 +18,7 @@ public interface IScreenCapture : IDisposable
     event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;
 
     /// <summary>
-    /// Attemts to capture the current frame showed on the <see cref="Display"/>.
+    /// Attempts to capture the current frame showed on the <see cref="Display"/>.
     /// </summary>
     /// <returns><c>true</c> if the current frame was captures successfully; otherwise, <c>false</c>.</returns>
     bool CaptureScreen();

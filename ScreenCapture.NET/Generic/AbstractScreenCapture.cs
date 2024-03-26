@@ -13,7 +13,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     private bool _isDisposed;
 
     /// <summary>
-    /// Gets a list of <see cref="CaptureZone{TColol}"/> registered on this ScreenCature.
+    /// Gets a list of <see cref="CaptureZone{TColol}"/> registered on this ScreenCapture.
     /// </summary>
     protected HashSet<CaptureZone<TColor>> CaptureZones { get; } = new();
 
