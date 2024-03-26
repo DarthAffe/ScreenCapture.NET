@@ -26,14 +26,14 @@ IEnumerable<Display> displays = screenCaptureService.GetDisplays(graphicsCards.F
 // Create a screen-capture for all screens you want to capture
 IScreenCapture screenCapture = screenCaptureService.GetScreenCapture(displays.First());
 
-// Register the regions you want to capture om the screen
+// Register the regions you want to capture on the screen
 // Capture the whole screen
 ICaptureZone fullscreen = screenCapture.RegisterCaptureZone(0, 0, screenCapture.Display.Width, screenCapture.Display.Height);
 // Capture a 100x100 region at the top left and scale it down to 50x50
 ICaptureZone topLeft = screenCapture.RegisterCaptureZone(0, 0, 100, 100, downscaleLevel: 1);
 
 // Capture the screen
-// This should be done in a loop on a seperate thread as CaptureScreen blocks if the screen is not updated (still image).
+// This should be done in a loop on a separate thread as CaptureScreen blocks if the screen is not updated (still image).
 screenCapture.CaptureScreen();
 
 // Do something with the captured image - e.g. access all pixels (same could be done with topLeft)
