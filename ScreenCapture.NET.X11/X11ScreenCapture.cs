@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using ScreenCapture.NET.Downscale;
+using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -59,7 +59,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         using IDisposable @lock = captureZone.Lock();
         {
@@ -71,55 +71,26 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void CopyZone(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    private void CopyZone(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        ReadOnlySpan<ColorBGRA> source = MemoryMarshal.Cast<byte, ColorBGRA>(Data);
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
-
-        int offsetX = captureZone.X;
-        int offsetY = captureZone.Y;
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-        int sourceStride = _image.bytes_per_line / captureZone.ColorFormat.BytesPerPixel;
-
-        for (int y = 0; y < height; y++)
-        {
-            int sourceOffset = ((y + offsetY) * sourceStride) + offsetX;
-            int targetOffset = y * width;
-            source.Slice(sourceOffset, width).CopyTo(target.Slice(targetOffset, width));
-        }
+        RefImage<ColorBGRA>.Wrap(Data, Display.Width, Display.Height, _image.bytes_per_line)[captureZone.X, captureZone.Y, captureZone.Width, captureZone.Height]
+                           .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DownscaleZone(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    private void DownscaleZone(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        ReadOnlySpan<byte> source = Data;
-        Span<byte> target = buffer;
+        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(Data, Display.Width, Display.Height, _image.bytes_per_line)[captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight];
+        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         int blockSize = 1 << captureZone.DownscaleLevel;
 
-        int offsetX = captureZone.X;
-        int offsetY = captureZone.Y;
         int width = captureZone.Width;
         int height = captureZone.Height;
-        int stride = captureZone.Stride;
-        int bpp = captureZone.ColorFormat.BytesPerPixel;
-        int sourceStride = _image.bytes_per_line / bpp;
 
-        Span<byte> scaleBuffer = stackalloc byte[bpp];
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
-            {
-                AverageByteSampler.Sample(new SamplerInfo<byte>((x + offsetX) * blockSize, (y + offsetY) * blockSize, blockSize, blockSize, sourceStride, bpp, source), scaleBuffer);
-
-                int targetOffset = (y * stride) + (x * bpp);
-
-                // DarthAffe 09.09.2023: Unroll as optimization since we know it's always 4 bpp - not ideal but it does quite a lot
-                target[targetOffset] = scaleBuffer[0];
-                target[targetOffset + 1] = scaleBuffer[1];
-                target[targetOffset + 2] = scaleBuffer[2];
-                target[targetOffset + 3] = scaleBuffer[3];
-            }
+                target[(y * width) + x] = source[x * blockSize, y * blockSize, blockSize, blockSize].Average();
     }
 
     /// <inheritdoc />

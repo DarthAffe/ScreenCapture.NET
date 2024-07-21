@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+using HPPH;
 using SharpGen.Runtime;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -135,7 +136,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         if (_context == null) return;
 
@@ -188,7 +189,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate0(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    private static void CopyRotate0(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         int height = captureZone.Height;
         int stride = captureZone.Stride;
@@ -204,7 +205,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate90(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    private static void CopyRotate90(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         int width = captureZone.Width;
         int height = captureZone.Height;
@@ -220,7 +221,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate180(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    private static void CopyRotate180(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         int width = captureZone.Width;
         int height = captureZone.Height;
@@ -237,7 +238,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate270(in ReadOnlySpan<byte> source, int sourceStride, in CaptureZone<ColorBGRA> captureZone, in Span<byte> buffer)
+    private static void CopyRotate270(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         int width = captureZone.Width;
         int height = captureZone.Height;
@@ -309,7 +310,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         base.ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
     }
 
-    private void InitializeCaptureZone(in CaptureZone<ColorBGRA> captureZone)
+    private void InitializeCaptureZone(CaptureZone<ColorBGRA> captureZone)
     {
         int x;
         int y;

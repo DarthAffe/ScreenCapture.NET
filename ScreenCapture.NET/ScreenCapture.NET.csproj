@@ -60,4 +60,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="HPPH" Version="1.0.0" />
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using HPPH;
 
 namespace ScreenCapture.NET.Tests;
 
@@ -17,7 +18,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 
     protected override bool PerformScreenCapture() => true;
 
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, in Span<byte> buffer)
+    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
     {
         Span<ColorARGB> pixels = MemoryMarshal.Cast<byte, ColorARGB>(buffer);
 

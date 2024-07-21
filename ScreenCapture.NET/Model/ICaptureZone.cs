@@ -1,4 +1,5 @@
 ﻿using System;
+using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -15,7 +16,7 @@ public interface ICaptureZone
     /// <summary>
     /// Gets the color-format used in the buffer of this zone.
     /// </summary>
-    ColorFormat ColorFormat { get; }
+    IColorFormat ColorFormat { get; }
 
     /// <summary>
     /// Gets the x-location of the region on the screen.
