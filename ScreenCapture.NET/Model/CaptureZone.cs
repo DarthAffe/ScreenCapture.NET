@@ -204,7 +204,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         /// <inheritdoc />
         public void Dispose()
         {
-            if (_disposed) throw new ObjectDisposedException("The lock is already released");
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             Monitor.Exit(_lock);
             _disposed = true;

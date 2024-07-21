@@ -24,12 +24,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     #region Constants
 
     private static readonly FeatureLevel[] FEATURE_LEVELS =
-    {
+    [
         FeatureLevel.Level_11_1,
         FeatureLevel.Level_11_0,
         FeatureLevel.Level_10_1,
         FeatureLevel.Level_10_0
-    };
+    ];
 
     #endregion
 
@@ -54,7 +54,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private ID3D11DeviceContext? _context;
     private ID3D11Texture2D? _captureTexture;
 
-    private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = new();
+    private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
 
     #endregion
 
