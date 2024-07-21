@@ -77,14 +77,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <summary>
     /// Gets a <see cref="IImage{TColor}"/>.
     /// </summary>
-    public IImage<TColor> Image
-    {
-        get
-        {
-            lock (_lock)
-                return Image<TColor>.Create(RawBuffer, Width, Height, Stride);
-        }
-    }
+    public IImage<TColor> Image => Image<TColor>.Wrap(InternalBuffer, Width, Height, Stride);
 
     /// <inheritdoc />
     IImage ICaptureZone.Image => Image;
