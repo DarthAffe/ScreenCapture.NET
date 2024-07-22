@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -89,7 +90,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// </summary>
     /// <param name="captureZone">The capture zone to update.</param>
     /// <param name="buffer">The buffer containing the current pixel-data of the capture zone.</param>
-    protected abstract void PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, in Span<byte> buffer);
+    protected abstract void PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<byte> buffer);
 
     /// <summary>
     /// Raises the <see cref="Updated"/>-event.

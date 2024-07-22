@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net7.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -28,9 +28,9 @@
     <PackageReleaseNotes>
     </PackageReleaseNotes>
 
-    <Version>2.0.4</Version>
-    <AssemblyVersion>2.0.4</AssemblyVersion>
-    <FileVersion>2.0.4</FileVersion>
+    <Version>3.0.0</Version>
+    <AssemblyVersion>3.0.0</AssemblyVersion>
+    <FileVersion>3.0.0</FileVersion>
 
     <OutputPath>..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -58,6 +58,10 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HPPH" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

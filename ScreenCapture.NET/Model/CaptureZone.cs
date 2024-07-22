@@ -4,6 +4,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -20,21 +21,12 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public Display Display { get; }
 
-#if NET7_0_OR_GREATER
     /// <inheritdoc />
-    public ColorFormat ColorFormat
+    public IColorFormat ColorFormat
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TColor.ColorFormat;
     }
-#else
-    /// <inheritdoc />
-    public ColorFormat ColorFormat
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => default(TColor).Net6ColorFormat;
-    }
-#endif
 
     /// <inheritdoc />
     public int X { get; internal set; }
@@ -83,19 +75,20 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <summary>
-    /// Gets a <see cref="RefImage{TColor}"/>. Basically the same as <see cref="Image"/> but with better performance.
+    /// Gets a <see cref="IImage{TColor}"/>.
     /// </summary>
-    public RefImage<TColor> Image
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => new(Pixels, 0, 0, Width, Height, Width);
-    }
+    public IImage<TColor> Image => Image<TColor>.Wrap(InternalBuffer, Width, Height, Stride);
 
     /// <inheritdoc />
-    IImage ICaptureZone.Image
+    IImage ICaptureZone.Image => Image;
+
+    /// <summary>
+    /// Gets a <see cref="RefImage{TColor}"/>.
+    /// </summary>
+    public RefImage<TColor> RefImage
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => new Image<TColor>(InternalBuffer, 0, 0, Width, Height, Width);
+        get => RefImage<TColor>.Wrap(RawBuffer, Width, Height, Stride);
     }
 
     /// <inheritdoc />
@@ -104,7 +97,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public bool IsUpdateRequested { get; private set; }
 
-#endregion
+    #endregion
 
     #region Events
 
@@ -151,8 +144,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         where T : struct, IColor
     {
         if (typeof(T) != typeof(TColor)) throw new ArgumentException("The requested Color-Format does not match the data.", nameof(T));
-
-        return new RefImage<T>(MemoryMarshal.Cast<byte, T>(RawBuffer), 0, 0, Width, Height, Width);
+        return RefImage<T>.Wrap(RawBuffer, Width, Height, Stride);
     }
 
     /// <inheritdoc />
@@ -201,6 +193,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
         #region Constructors
 
+        // ReSharper disable once ConvertToPrimaryConstructor
         public UnlockDisposable(object @lock) => this._lock = @lock;
         ~UnlockDisposable() => Dispose();
 
@@ -211,7 +204,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         /// <inheritdoc />
         public void Dispose()
         {
-            if (_disposed) throw new ObjectDisposedException("The lock is already released");
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             Monitor.Exit(_lock);
             _disposed = true;
