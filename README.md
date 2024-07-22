@@ -26,14 +26,14 @@ IEnumerable<Display> displays = screenCaptureService.GetDisplays(graphicsCards.F
 // Create a screen-capture for all screens you want to capture
 IScreenCapture screenCapture = screenCaptureService.GetScreenCapture(displays.First());
 
-// Register the regions you want to capture om the screen
+// Register the regions you want to capture on the screen
 // Capture the whole screen
 ICaptureZone fullscreen = screenCapture.RegisterCaptureZone(0, 0, screenCapture.Display.Width, screenCapture.Display.Height);
 // Capture a 100x100 region at the top left and scale it down to 50x50
 ICaptureZone topLeft = screenCapture.RegisterCaptureZone(0, 0, 100, 100, downscaleLevel: 1);
 
 // Capture the screen
-// This should be done in a loop on a seperate thread as CaptureScreen blocks if the screen is not updated (still image).
+// This should be done in a loop on a separate thread as CaptureScreen blocks if the screen is not updated (still image).
 screenCapture.CaptureScreen();
 
 // Do something with the captured image - e.g. access all pixels (same could be done with topLeft)
@@ -57,12 +57,12 @@ using (fullscreen.Lock())
     IColor imageColorExample = image[10, 20];
 
     // Get the first row
-    IImage.IImageRow row = image.Rows[0];
+    IImageRow row = image.Rows[0];
     // Get the 10th pixel of the row
     IColor rowColorExample = row[10];
 
     // Get the first column
-    IImage.IImageColumn column = image.Columns[0];
+    IImageColumn column = image.Columns[0];
     // Get the 10th pixel of the column
     IColor columnColorExample = column[10];
 
@@ -73,7 +73,7 @@ using (fullscreen.Lock())
 }
 ```
 
-IF you know which Capture-provider you're using it performs a bit better to not use the abstraction but a more low-level approach instead.   
+If you know which Capture-provider you're using it performs a bit better to not use the abstraction but a more low-level approach instead.   
 This is the same example as above but without using the interfaces:
 ```csharp
 DX11ScreenCaptureService screenCaptureService = new DX11ScreenCaptureService();
@@ -88,17 +88,20 @@ screenCapture.CaptureScreen();
 
 using (fullscreen.Lock())
 {
-    RefImage<ColorBGRA> image = fullscreen.Image;
+    IImage<ColorBGRA> image = fullscreen.Image;
+
+    // You can also get a ref image which has a slight performance benefit in some cases
+    // RefImage<ColorBGRA> refImage = image.AsRefImage();
 
     foreach (ColorBGRA color in image)
         Console.WriteLine($"A: {color.A}, R: {color.R}, G: {color.G}, B: {color.B}");
 
     ColorBGRA imageColorExample = image[10, 20];
 
-    ReadOnlyRefEnumerable<ColorBGRA> row = image.Rows[0];
+    ImageRow<ColorBGRA> row = image.Rows[0];
     ColorBGRA rowColorExample = row[10];
 
-    ReadOnlyRefEnumerable<ColorBGRA> column = image.Columns[0];
+    ImageColumn<ColorBGRA> column = image.Columns[0];
     ColorBGRA columnColorExample = column[10];
 
     RefImage<ColorBGRA> subImage = image[100, 150, 400, 300];
