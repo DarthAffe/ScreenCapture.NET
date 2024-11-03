@@ -8,7 +8,7 @@
 | Package | Description |
 |---------|-------------|
 | [ScreenCapture.NET](https://www.nuget.org/packages/ScreenCapture.NET)| The core-package required to use ScreenCapture.NET captures or write your own. |
-| [ScreenCapture.NET.DX11](https://www.nuget.org/packages/ScreenCapture.NET.DX11) | DirectX 11 based capturing. Fast and supports the whole set of features. **This should always be used if possible!** |
+| [ScreenCapture.NET.DX11](https://www.nuget.org/packages/ScreenCapture.NET.DX11) | DirectX 11 based capturing. Fast and supports the whole set of features. **This should always be used if possible!** *Note: This might not work on windows hybrid systems (check [the docs](https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/error-when-dda-capable-app-is-against-gpu) and [this issue](https://github.com/DarthAffe/ScreenCapture.NET/issues/39))*|
 | [ScreenCapture.NET.DX9](https://www.nuget.org/packages/ScreenCapture.NET.DX9) | DirectX 9 based  capturing. Slower then DX 11 and does not support rotated screens and GPU-accelerated downscaling. Only useful if the DX11 package can't be used for some reason. |
 | [ScreenCapture.NET.X11](https://www.nuget.org/packages/ScreenCapture.NET.X11) | libX11 based capturing for the X-Window-System. Currently the only way to use ScreenCapture.NET on linux. Quite slow and can easily break depending on the X-Server config. Works on my machine, but it's not really a high proprity to support at the moment. Does not support rotated screens and GPU-accelerated downscaling. |
 
