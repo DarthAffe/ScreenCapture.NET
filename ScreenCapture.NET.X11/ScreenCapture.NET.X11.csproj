@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -53,6 +53,10 @@
     <NoWarn>$(NoWarn);CS1591;CS1572;CS1573</NoWarn>
     <DefineConstants>$(DefineConstants);RELEASE</DefineConstants>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <Using Include="ScreenCapture.NET.Compatibility.Net8" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="Resources\icon.png">

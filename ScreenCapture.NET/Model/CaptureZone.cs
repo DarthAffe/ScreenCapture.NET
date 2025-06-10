@@ -16,7 +16,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 {
     #region Properties & Fields
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <inheritdoc />
     public Display Display { get; }
@@ -150,7 +150,11 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public IDisposable Lock()
     {
+#if NET8_0
         Monitor.Enter(_lock);
+#else
+        _lock.Enter();
+#endif
         return new UnlockDisposable(_lock);
     }
 
@@ -187,14 +191,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         #region Properties & Fields
 
         private bool _disposed = false;
-        private readonly object _lock;
+        private readonly Lock _lock;
 
         #endregion
 
         #region Constructors
 
         // ReSharper disable once ConvertToPrimaryConstructor
-        public UnlockDisposable(object @lock) => this._lock = @lock;
+        public UnlockDisposable(Lock @lock) => this._lock = @lock;
         ~UnlockDisposable() => Dispose();
 
         #endregion
@@ -206,7 +210,12 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
+#if NET8_0
             Monitor.Exit(_lock);
+#else
+            _lock.Exit();
+#endif
+
             _disposed = true;
 
             GC.SuppressFinalize(this);

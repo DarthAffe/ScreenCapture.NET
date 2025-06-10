@@ -35,7 +35,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
+    private readonly Lock _captureLock = new();
+    private readonly Lock _texturesLock = new();
 
     private readonly bool _useNewDuplicationAdapter;
 
@@ -140,7 +141,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         if (_context == null) return;
 
-        lock (_textures)
+        lock (_texturesLock)
         {
             if (!_textures.TryGetValue(captureZone, out ZoneTextures? textures)) return;
 
@@ -258,7 +259,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         CaptureZone<ColorBGRA> captureZone = base.RegisterCaptureZone(x, y, width, height, downscaleLevel);
 
-        lock (_textures)
+        lock (_texturesLock)
             InitializeCaptureZone(captureZone);
 
         return captureZone;
@@ -269,7 +270,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         if (!base.UnregisterCaptureZone(captureZone)) return false;
 
-        lock (_textures)
+        lock (_texturesLock)
         {
             if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
             {
@@ -291,7 +292,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         //TODO DarthAffe 01.05.2022: For now just reinitialize the zone in that case, but this could be optimized to only recreate the textures needed.
         if ((width != null) || (height != null) || (downscaleLevel != null))
         {
-            lock (_textures)
+            lock (_texturesLock)
             {
                 if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
                 {
@@ -383,7 +384,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         base.Restart();
 
         lock (_captureLock)
-            lock (_textures)
+            lock (_texturesLock)
             {
                 try
                 {

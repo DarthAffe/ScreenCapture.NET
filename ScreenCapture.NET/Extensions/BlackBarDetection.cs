@@ -119,7 +119,6 @@ public static class BlackBarDetection
 
     #endregion
 
-
     #region Image
 
     /// <summary>

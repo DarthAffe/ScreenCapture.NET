@@ -17,7 +17,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
+    private readonly Lock _captureLock = new();
 
     private readonly IDirect3D9 _direct3D9;
     private IDirect3DDevice9? _device;

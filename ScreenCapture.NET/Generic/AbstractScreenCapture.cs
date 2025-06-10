@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET;
@@ -13,10 +14,12 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     private bool _isDisposed;
 
+    protected readonly Lock CaptureZonesLock = new();
+
     /// <summary>
     /// Gets a list of <see cref="CaptureZone{TColol}"/> registered on this ScreenCapture.
     /// </summary>
-    protected HashSet<CaptureZone<TColor>> CaptureZones { get; } = new();
+    protected HashSet<CaptureZone<TColor>> CaptureZones { get; } = [];
 
     /// <inheritdoc />
     public Display Display { get; }
@@ -63,7 +66,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             result = false;
         }
 
-        lock (CaptureZones)
+        lock (CaptureZonesLock)
             foreach (CaptureZone<TColor> captureZone in CaptureZones.Where(x => x.AutoUpdate || x.IsUpdateRequested))
             {
                 try
@@ -113,7 +116,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     {
         if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
 
-        lock (CaptureZones)
+        lock (CaptureZonesLock)
         {
             ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
 
@@ -195,7 +198,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     {
         if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
 
-        lock (CaptureZones)
+        lock (CaptureZonesLock)
         {
             if (!CaptureZones.Contains(captureZone))
                 throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));

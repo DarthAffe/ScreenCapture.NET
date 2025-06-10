@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET;
@@ -14,7 +15,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
+    private readonly Lock _captureLock = new();
 
     private nint _display;
     private nint _drawable;
@@ -62,12 +63,11 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         using IDisposable @lock = captureZone.Lock();
-        {
-            if (captureZone.DownscaleLevel == 0)
-                CopyZone(captureZone, buffer);
-            else
-                DownscaleZone(captureZone, buffer);
-        }
+
+        if (captureZone.DownscaleLevel == 0)
+            CopyZone(captureZone, buffer);
+        else
+            DownscaleZone(captureZone, buffer);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
