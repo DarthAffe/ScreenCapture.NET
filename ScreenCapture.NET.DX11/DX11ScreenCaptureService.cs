@@ -28,6 +28,9 @@ public class DX11ScreenCaptureService : IScreenCaptureService
         DXGI.CreateDXGIFactory1(out _factory!).CheckError();
     }
 
+    /// <summary>
+    /// Finalizes an instance of the <see cref="DX11ScreenCaptureService"/> class.
+    /// </summary>
     ~DX11ScreenCaptureService() => Dispose();
 
     #endregion
@@ -84,6 +87,8 @@ public class DX11ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
+
+    /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     public DX11ScreenCapture GetScreenCapture(Display display)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);

@@ -25,6 +25,9 @@ public class X11ScreenCaptureService : IScreenCaptureService
     public X11ScreenCaptureService()
     { }
 
+    /// <summary>
+    /// Finalizes an instance of the <see cref="X11ScreenCaptureService"/> class.
+    /// </summary>
     ~X11ScreenCaptureService() => Dispose();
 
     #endregion

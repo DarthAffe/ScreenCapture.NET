@@ -28,6 +28,9 @@ public class DX9ScreenCaptureService : IScreenCaptureService
         _direct3D9 = D3D9.Direct3DCreate9();
     }
 
+    /// <summary>
+    /// Finalizes an instance of the <see cref="DX9ScreenCaptureService"/> class.
+    /// </summary>
     ~DX9ScreenCaptureService() => Dispose();
 
     #endregion
@@ -68,6 +71,8 @@ public class DX9ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
+
+    /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     public DX9ScreenCapture GetScreenCapture(Display display)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);

@@ -14,7 +14,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     private bool _isDisposed;
 
     /// <summary>
-    /// Gets a list of <see cref="CaptureZone{TColol}"/> registered on this ScreenCapture.
+    /// Gets a list of <see cref="CaptureZone{TColor}"/> registered on this ScreenCapture.
     /// </summary>
     protected HashSet<CaptureZone<TColor>> CaptureZones { get; } = new();
 
@@ -41,6 +41,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         this.Display = display;
     }
 
+    /// <summary>
+    /// Finalizes an instance of the <see cref="AbstractScreenCapture{TColor}"/> class.
+    /// </summary>
     ~AbstractScreenCapture() => Dispose(false);
 
     #endregion
@@ -82,7 +85,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <summary>
     /// Performs the actual screen capture.
     /// </summary>
-    /// <returns><c>true</c> if the screen was captured sucessfully; otherwise, <c>false</c>.</returns>
+    /// <returns><c>true</c> if the screen was captured successfully; otherwise, <c>false</c>.</returns>
     protected abstract bool PerformScreenCapture();
 
     /// <summary>

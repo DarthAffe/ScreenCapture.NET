@@ -111,16 +111,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <summary>
     /// Initializes a new instance of the <see cref="CaptureZone{T}"/> class.
     /// </summary>
-    /// <param name="id">The unique id of this <see cref="CaptureZone{T}"/>.</param>
+    /// <param name="display">The <see cref="Display"/> this zone is on.</param>
     /// <param name="x">The x-location of the region on the screen.</param>
     /// <param name="y">The y-location of the region on the screen.</param>
     /// <param name="width">The width of the region on the screen.</param>
     /// <param name="height">The height of the region on the screen.</param>
-    /// <param name="bytesPerPixel">The number of bytes per pixel.</param>
     /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory.</param>
     /// <param name="unscaledWidth">The original width of the region.</param>
-    /// <param name="unscaledHeight">The original height of the region</param>
-    /// <param name="buffer">The buffer containing the image data.</param>
+    /// <param name="unscaledHeight">The original height of the region.</param>
     internal CaptureZone(Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
     {
         this.Display = display;

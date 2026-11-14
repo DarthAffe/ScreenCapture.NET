@@ -22,7 +22,7 @@ public readonly struct Display : IEquatable<Display>
     public string DeviceName { get; }
 
     /// <summary>
-    /// Gets the with of the <see cref="Display"/>.
+    /// Gets the width of the <see cref="Display"/>.
     /// </summary>
     public int Width { get; }
 
@@ -50,7 +50,7 @@ public readonly struct Display : IEquatable<Display>
     /// </summary>
     /// <param name="index">The index of the <see cref="Display"/>.</param>
     /// <param name="deviceName">The name of the <see cref="Display"/>.</param>
-    /// <param name="width">The with of the <see cref="Display"/>.</param>
+    /// <param name="width">The width of the <see cref="Display"/>.</param>
     /// <param name="height">The height of the <see cref="Display"/>.</param>
     /// <param name="rotation">The rotation of the <see cref="Display"/>.</param>
     /// <param name="graphicsCard">The <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.</param>

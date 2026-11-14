@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// 
+/// Represents a service that enumerates graphics cards and displays and creates <see cref="IScreenCapture"/> instances for them.
 /// </summary>
 public interface IScreenCaptureService : IDisposable
 {

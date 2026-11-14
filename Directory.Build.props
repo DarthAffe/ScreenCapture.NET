@@ -59,7 +59,6 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <DebugType>portable</DebugType>
     <Optimize>true</Optimize>
-    <NoWarn>$(NoWarn);CS1591;CS1572;CS1573</NoWarn>
     <DefineConstants>$(DefineConstants);RELEASE</DefineConstants>
   </PropertyGroup>
 
