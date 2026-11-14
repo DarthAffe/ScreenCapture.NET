@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.DX9\ScreenCapture.NET.DX9.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.X11\ScreenCapture.NET.X11.csproj" />
   </ItemGroup>
 
   <ItemGroup>
