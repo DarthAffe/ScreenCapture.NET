@@ -158,6 +158,6 @@ public sealed class CaptureZoneRegistrationTests
         public event EventHandler? Updated { add { } remove { } }
         public IDisposable Lock() => throw new NotSupportedException();
         public void RequestUpdate() { }
-        public RefImage<T> GetRefImage<T>() where T : struct, IColor => throw new NotSupportedException();
+        public RefImage<T> GetRefImage<T>() where T : unmanaged, IColor<T> => throw new NotSupportedException();
     }
 }

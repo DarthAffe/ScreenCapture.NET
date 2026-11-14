@@ -7,7 +7,7 @@ namespace ScreenCapture.NET;
 
 /// <inheritdoc />
 public abstract class AbstractScreenCapture<TColor> : IScreenCapture
-    where TColor : struct, IColor
+    where TColor : unmanaged, IColor<TColor>
 {
     #region Properties & Fields
 

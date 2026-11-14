@@ -29,7 +29,7 @@ public static class BlackBarDetection
         int left = removeLeft ? CalculateLeft(image, threshold) : 0;
         int right = removeRight ? CalculateRight(image, threshold) : image.Width;
 
-        return image[left, top, right - left, bottom - top];
+        return image.Slice(left, top, right - left, bottom - top);
     }
 
     /// <summary>
@@ -42,12 +42,11 @@ public static class BlackBarDetection
     {
         ArgumentNullException.ThrowIfNull(image);
 
-        IImageRows rows = image.Rows;
-        for (int y = 0; y < rows.Count; y++)
+        for (int y = 0; y < image.Height; y++)
         {
-            IImageRow row = rows[y];
-            foreach (IColor color in row)
+            for (int x = 0; x < image.Width; x++)
             {
+                IColor color = image[x, y];
                 if ((color.R > threshold) || (color.G > threshold) || (color.B > threshold))
                     return y;
             }
@@ -66,18 +65,17 @@ public static class BlackBarDetection
     {
         ArgumentNullException.ThrowIfNull(image);
 
-        IImageRows rows = image.Rows;
-        for (int y = rows.Count - 1; y >= 0; y--)
+        for (int y = image.Height - 1; y >= 0; y--)
         {
-            IImageRow row = rows[y];
-            foreach (IColor color in row)
+            for (int x = 0; x < image.Width; x++)
             {
+                IColor color = image[x, y];
                 if ((color.R > threshold) || (color.G > threshold) || (color.B > threshold))
                     return y;
             }
         }
 
-        return rows.Count;
+        return image.Height;
     }
 
     /// <summary>
@@ -90,12 +88,11 @@ public static class BlackBarDetection
     {
         ArgumentNullException.ThrowIfNull(image);
 
-        IImageColumns columns = image.Columns;
-        for (int x = 0; x < columns.Count; x++)
+        for (int x = 0; x < image.Width; x++)
         {
-            IImageColumn column = columns[x];
-            foreach (IColor color in column)
+            for (int y = 0; y < image.Height; y++)
             {
+                IColor color = image[x, y];
                 if ((color.R > threshold) || (color.G > threshold) || (color.B > threshold))
                     return x;
             }
@@ -114,18 +111,17 @@ public static class BlackBarDetection
     {
         ArgumentNullException.ThrowIfNull(image);
 
-        IImageColumns columns = image.Columns;
-        for (int x = columns.Count - 1; x >= 0; x--)
+        for (int x = image.Width - 1; x >= 0; x--)
         {
-            IImageColumn column = columns[x];
-            foreach (IColor color in column)
+            for (int y = 0; y < image.Height; y++)
             {
+                IColor color = image[x, y];
                 if ((color.R > threshold) || (color.G > threshold) || (color.B > threshold))
                     return x;
             }
         }
 
-        return columns.Count;
+        return image.Width;
     }
 
     #endregion
@@ -143,8 +139,8 @@ public static class BlackBarDetection
     /// <param name="removeLeft">A bool indicating if black bars should be removed on the left side of the image.</param>
     /// <param name="removeRight">A bool indicating if black bars should be removed on the right side of the image.</param>
     /// <returns>The image with black bars removed.</returns>
-    public static RefImage<T> RemoveBlackBars<T>(this IImage<T> image, int threshold = 0, bool removeTop = true, bool removeBottom = true, bool removeLeft = true, bool removeRight = true)
-        where T : struct, IColor
+    public static RefImage<T> RemoveBlackBars<T>(this Image<T> image, int threshold = 0, bool removeTop = true, bool removeBottom = true, bool removeLeft = true, bool removeRight = true)
+        where T : unmanaged, IColor<T>
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -162,8 +158,8 @@ public static class BlackBarDetection
     /// <param name="image">The image to check.</param>
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The row number of the first row with at least one non-black pixel.</returns>
-    public static int CalculateTop<T>(IImage<T> image, int threshold)
-        where T : struct, IColor
+    public static int CalculateTop<T>(Image<T> image, int threshold)
+        where T : unmanaged, IColor<T>
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -187,8 +183,8 @@ public static class BlackBarDetection
     /// <param name="image">The image to check.</param>
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The row number of the last row with at least one non-black pixel.</returns>
-    public static int CalculateBottom<T>(IImage<T> image, int threshold)
-        where T : struct, IColor
+    public static int CalculateBottom<T>(Image<T> image, int threshold)
+        where T : unmanaged, IColor<T>
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -212,8 +208,8 @@ public static class BlackBarDetection
     /// <param name="image">The image to check.</param>
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The column number of the first column with at least one non-black pixel.</returns>
-    public static int CalculateLeft<T>(IImage<T> image, int threshold)
-        where T : struct, IColor
+    public static int CalculateLeft<T>(Image<T> image, int threshold)
+        where T : unmanaged, IColor<T>
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -237,8 +233,8 @@ public static class BlackBarDetection
     /// <param name="image">The image to check.</param>
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The column number of the last column with at least one non-black pixel.</returns>
-    public static int CalculateRight<T>(IImage<T> image, int threshold)
-        where T : struct, IColor
+    public static int CalculateRight<T>(Image<T> image, int threshold)
+        where T : unmanaged, IColor<T>
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -271,7 +267,7 @@ public static class BlackBarDetection
     /// <param name="removeRight">A bool indicating if black bars should be removed on the right side of the image.</param>
     /// <returns>The image with black bars removed.</returns>
     public static RefImage<TColor> RemoveBlackBars<TColor>(this RefImage<TColor> image, int threshold = 0, bool removeTop = true, bool removeBottom = true, bool removeLeft = true, bool removeRight = true)
-        where TColor : struct, IColor
+        where TColor : unmanaged, IColor<TColor>
     {
         int top = removeTop ? CalculateTop(image, threshold) : 0;
         int bottom = removeBottom ? CalculateBottom(image, threshold) : image.Height - 1;
@@ -288,7 +284,7 @@ public static class BlackBarDetection
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The row number of the first row with at least one non-black pixel.</returns>
     public static int CalculateTop<TColor>(this RefImage<TColor> image, int threshold)
-        where TColor : struct, IColor
+        where TColor : unmanaged, IColor<TColor>
     {
         ImageRows<TColor> rows = image.Rows;
         for (int y = 0; y < rows.Count; y++)
@@ -311,7 +307,7 @@ public static class BlackBarDetection
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The row number of the last row with at least one non-black pixel.</returns>
     public static int CalculateBottom<TColor>(this RefImage<TColor> image, int threshold)
-        where TColor : struct, IColor
+        where TColor : unmanaged, IColor<TColor>
     {
         ImageRows<TColor> rows = image.Rows;
         for (int y = rows.Count - 1; y >= 0; y--)
@@ -334,7 +330,7 @@ public static class BlackBarDetection
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The column number of the first column with at least one non-black pixel.</returns>
     public static int CalculateLeft<TColor>(this RefImage<TColor> image, int threshold)
-        where TColor : struct, IColor
+        where TColor : unmanaged, IColor<TColor>
     {
         ImageColumns<TColor> columns = image.Columns;
         for (int x = 0; x < columns.Count; x++)
@@ -357,7 +353,7 @@ public static class BlackBarDetection
     /// <param name="threshold">The threshold of "blackness" used to detect black bars. (e. g. Threshold 5 will consider a pixel of color [5,5,5] as black.)</param>
     /// <returns>The column number of the last column with at least one non-black pixel.</returns>
     public static int CalculateRight<TColor>(this RefImage<TColor> image, int threshold)
-        where TColor : struct, IColor
+        where TColor : unmanaged, IColor<TColor>
     {
         ImageColumns<TColor> columns = image.Columns;
         for (int x = columns.Count - 1; x >= 0; x--)

@@ -100,5 +100,5 @@ public interface ICaptureZone
     /// </summary>
     /// <typeparam name="TColor">The color used by the buffer of this zone.</typeparam>
     /// <returns>The <see cref="RefImage{TColor}"/> representing this zone.</returns>
-    RefImage<TColor> GetRefImage<TColor>() where TColor : struct, IColor;
+    RefImage<TColor> GetRefImage<TColor>() where TColor : unmanaged, IColor<TColor>;
 }

@@ -12,7 +12,7 @@ namespace ScreenCapture.NET;
 /// Represents a duplicated region on the screen.
 /// </summary>
 public sealed class CaptureZone<TColor> : ICaptureZone
-    where TColor : struct, IColor
+    where TColor : unmanaged, IColor<TColor>
 {
     #region Properties & Fields
 
@@ -75,9 +75,9 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <summary>
-    /// Gets a <see cref="IImage{TColor}"/>.
+    /// Gets an <see cref="Image{TColor}"/> wrapping the buffer of this zone.
     /// </summary>
-    public IImage<TColor> Image => Image<TColor>.Wrap(InternalBuffer, Width, Height, Stride);
+    public Image<TColor> Image => Image<TColor>.Wrap(InternalBuffer, Width, Height, Stride);
 
     /// <inheritdoc />
     IImage ICaptureZone.Image => Image;
@@ -139,7 +139,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     /// <inheritdoc />
     public RefImage<T> GetRefImage<T>()
-        where T : struct, IColor
+        where T : unmanaged, IColor<T>
     {
         if (typeof(T) != typeof(TColor)) throw new ArgumentException("The requested Color-Format does not match the data.", nameof(T));
         return RefImage<T>.Wrap(RawBuffer, Width, Height, Stride);
