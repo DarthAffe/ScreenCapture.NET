@@ -1,13 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-
     <Title>ScreenCapture.NET.DX9</Title>
     <AssemblyName>ScreenCapture.NET.DX9</AssemblyName>
     <AssemblyTitle>ScreenCapture.NET.DX9</AssemblyTitle>
     <PackageId>ScreenCapture.NET.DX9</PackageId>
     <Description>DirectX 9 based Screen-Capturing</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D9" Version="3.5.0" />

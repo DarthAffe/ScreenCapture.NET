@@ -1,13 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-
     <Title>ScreenCapture.NET.DX11</Title>
     <AssemblyName>ScreenCapture.NET.DX11</AssemblyName>
     <AssemblyTitle>ScreenCapture.NET.DX11</AssemblyTitle>
     <PackageId>ScreenCapture.NET.DX11</PackageId>
     <Description>DirectX 11 based Screen-Capturing using the Desktop Duplication API</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D11" Version="3.5.0" />
