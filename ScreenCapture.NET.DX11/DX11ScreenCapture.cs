@@ -35,7 +35,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
+    private readonly Lock _captureLock = new();
 
     private readonly bool _useNewDuplicationAdapter;
 

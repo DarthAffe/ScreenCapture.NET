@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET;
@@ -14,7 +15,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
+    private readonly Lock _captureLock = new();
 
     private nint _display;
     private nint _drawable;
