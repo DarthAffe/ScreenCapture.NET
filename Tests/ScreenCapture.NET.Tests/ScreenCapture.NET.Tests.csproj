@@ -2,9 +2,6 @@
 
   <PropertyGroup>
     <TargetFrameworks>net11.0</TargetFrameworks>
-    <Nullable>enable</Nullable>
-
-    <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
