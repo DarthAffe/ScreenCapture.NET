@@ -1,0 +1,80 @@
+using HPPH;
+
+namespace ScreenCapture.NET.Tests;
+
+[TestClass]
+public sealed class CaptureZoneSizeTests
+{
+    [TestMethod]
+    [DataRow(100, 100, 0, 100, 100, 0)]
+    [DataRow(100, 100, 1, 50, 50, 1)]
+    [DataRow(100, 100, 2, 25, 25, 2)]
+    [DataRow(101, 51, 1, 50, 25, 1)]
+    [DataRow(1920, 1080, 3, 240, 135, 3)]
+    [DataRow(4, 4, 5, 1, 1, 2)] // stops scaling once both sides reached 1
+    [DataRow(8, 2, 3, 1, 1, 3)] // the short side is clamped to 1 while the long side keeps scaling
+    [DataRow(1, 1, 4, 1, 1, 0)]
+    public void RegisterCalculatesScaledSize(int width, int height, int downscaleLevel, int expectedWidth, int expectedHeight, int expectedDownscaleLevel)
+    {
+        using TestScreenCapture screenCapture = new();
+
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, width, height, downscaleLevel);
+
+        Assert.AreEqual(expectedWidth, zone.Width);
+        Assert.AreEqual(expectedHeight, zone.Height);
+        Assert.AreEqual(expectedDownscaleLevel, zone.DownscaleLevel);
+        Assert.AreEqual(width, zone.UnscaledWidth);
+        Assert.AreEqual(height, zone.UnscaledHeight);
+    }
+
+    [TestMethod]
+    public void BufferMatchesZoneSize()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(10, 20, 101, 51, 1);
+
+        Assert.AreEqual(zone.Width * ColorARGB.ColorFormat.BytesPerPixel, zone.Stride);
+        Assert.AreEqual(zone.Stride * zone.Height, zone.RawBuffer.Length);
+    }
+
+    [TestMethod]
+    public void FullScreenZoneIsValid()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, screenCapture.Display.Width, screenCapture.Display.Height);
+
+        Assert.AreEqual(screenCapture.Display.Width, zone.Width);
+        Assert.AreEqual(screenCapture.Display.Height, zone.Height);
+    }
+
+    [TestMethod]
+    public void ZoneAtBottomRightCornerIsValid()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(screenCapture.Display.Width - 1, screenCapture.Display.Height - 1, 1, 1);
+
+        Assert.AreEqual(screenCapture.Display.Width - 1, zone.X);
+        Assert.AreEqual(screenCapture.Display.Height - 1, zone.Y);
+    }
+
+    [TestMethod]
+    [DataRow(-1, 0, 10, 10)]
+    [DataRow(0, -1, 10, 10)]
+    [DataRow(0, 0, 0, 10)]
+    [DataRow(0, 0, 10, 0)]
+    [DataRow(0, 0, -10, 10)]
+    [DataRow(0, 0, 10, -10)]
+    [DataRow(1911, 0, 10, 10)] // x + width > display width
+    [DataRow(0, 1071, 10, 10)] // y + height > display height
+    [DataRow(0, 0, 1921, 10)]
+    [DataRow(0, 0, 10, 1081)]
+    public void RegisterRejectsInvalidRegion(int x, int y, int width, int height)
+    {
+        using TestScreenCapture screenCapture = new();
+
+        Assert.ThrowsExactly<ArgumentException>(() => screenCapture.RegisterCaptureZone(x, y, width, height));
+    }
+}
