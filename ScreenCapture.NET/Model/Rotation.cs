@@ -6,7 +6,7 @@
 public enum Rotation
 {
     None = 0,
-    Rotation90 = 90,
-    Rotation180 = 180,
-    Rotation270 = 270
+    Rotate90 = 90,
+    Rotate180 = 180,
+    Rotate270 = 270
 }

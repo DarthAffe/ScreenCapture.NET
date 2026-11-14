@@ -94,6 +94,8 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
+        ArgumentNullException.ThrowIfNull(captureZone);
+
         if (_buffer == null) return;
 
         using IDisposable @lock = captureZone.Lock();

@@ -138,6 +138,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
+        ArgumentNullException.ThrowIfNull(captureZone);
+
         if (_context == null) return;
 
         lock (_textures)
@@ -166,15 +168,15 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.Height);
                 switch (Display.Rotation)
                 {
-                    case Rotation.Rotation90:
+                    case Rotation.Rotate90:
                         CopyRotate90(source, mapSource.RowPitch, captureZone, buffer);
                         break;
 
-                    case Rotation.Rotation180:
+                    case Rotation.Rotate180:
                         CopyRotate180(source, mapSource.RowPitch, captureZone, buffer);
                         break;
 
-                    case Rotation.Rotation270:
+                    case Rotation.Rotate270:
                         CopyRotate270(source, mapSource.RowPitch, captureZone, buffer);
                         break;
 
@@ -286,6 +288,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     public override void UpdateCaptureZone(CaptureZone<ColorBGRA> captureZone, int? x = null, int? y = null, int? width = null, int? height = null, int? downscaleLevel = null)
     {
+        ArgumentNullException.ThrowIfNull(captureZone);
+
         base.UpdateCaptureZone(captureZone, x, y, width, height, downscaleLevel);
 
         //TODO DarthAffe 01.05.2022: For now just reinitialize the zone in that case, but this could be optimized to only recreate the textures needed.
@@ -305,7 +309,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void ValidateCaptureZoneAndThrow(int x, int y, int width, int height, int downscaleLevel)
     {
-        if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
+        if (_device == null) throw new InvalidOperationException("ScreenCapture isn't initialized.");
 
         base.ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
     }
@@ -319,7 +323,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         int unscaledWidth;
         int unscaledHeight;
 
-        if (captureZone.Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
+        if (captureZone.Display.Rotation is Rotation.Rotate90 or Rotation.Rotate270)
         {
             x = captureZone.Y;
             y = captureZone.X;
@@ -393,17 +397,17 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                     DisposeDX();
 
-                    using IDXGIAdapter1 adapter = _factory.GetAdapter1(Display.GraphicsCard.Index) ?? throw new ApplicationException("Couldn't create DirectX-Adapter.");
+                    using IDXGIAdapter1 adapter = _factory.GetAdapter1(Display.GraphicsCard.Index) ?? throw new InvalidOperationException("Couldn't create DirectX-Adapter.");
 
                     D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
                     _context = _device!.ImmediateContext;
 
-                    _output = adapter.GetOutput(Display.Index) ?? throw new ApplicationException("Couldn't get DirectX-Output.");
+                    _output = adapter.GetOutput(Display.Index) ?? throw new InvalidOperationException("Couldn't get DirectX-Output.");
                     using IDXGIOutput5 output = _output.QueryInterface<IDXGIOutput5>();
 
                     int width = Display.Width;
                     int height = Display.Height;
-                    if (Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
+                    if (Display.Rotation is Rotation.Rotate90 or Rotation.Rotate270)
                         (width, height) = (height, width);
 
                     Texture2DDescription captureTextureDesc = new()

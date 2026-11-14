@@ -34,7 +34,7 @@ public class X11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         nint display = X11.XOpenDisplay(X11.DISPLAY_NAME);
         try
@@ -51,7 +51,7 @@ public class X11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         nint display = X11.XOpenDisplay(X11.DISPLAY_NAME);
         try
@@ -79,7 +79,7 @@ public class X11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     public X11ScreenCapture GetScreenCapture(Display display)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_screenCaptures.TryGetValue(display, out X11ScreenCapture? screenCapture))
             _screenCaptures.Add(display, screenCapture = new X11ScreenCapture(display));

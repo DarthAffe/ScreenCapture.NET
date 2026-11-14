@@ -182,11 +182,11 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     #endregion
 
-    private class UnlockDisposable : IDisposable
+    private sealed class UnlockDisposable : IDisposable
     {
         #region Properties & Fields
 
-        private bool _disposed = false;
+        private bool _disposed;
         private readonly Lock _lock;
 
         #endregion

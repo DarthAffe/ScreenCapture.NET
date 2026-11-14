@@ -1,11 +1,13 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
 
+using System;
+
 namespace ScreenCapture.NET;
 
 /// <summary>
 /// Represents a graphics-card.
 /// </summary>
-public readonly struct GraphicsCard
+public readonly struct GraphicsCard : IEquatable<GraphicsCard>
 {
     #region Properties & Fields
 

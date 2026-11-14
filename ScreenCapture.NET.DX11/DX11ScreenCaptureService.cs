@@ -37,40 +37,48 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        int i = 0;
-        while (_factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success)
+        for (int i = 0; ; i++)
         {
-            yield return new GraphicsCard(i, adapter.Description1.Description, adapter.Description1.VendorId, adapter.Description1.DeviceId);
-            adapter.Dispose();
-            i++;
+            bool found = _factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
+            using (adapter)
+            {
+                if (!found) yield break;
+
+                AdapterDescription1 description = adapter.Description1;
+                yield return new GraphicsCard(i, description.Description, description.VendorId, description.DeviceId);
+            }
         }
     }
 
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         using IDXGIAdapter1? adapter = _factory.GetAdapter1(graphicsCard.Index);
 
-        int i = 0;
-        while (adapter.EnumOutputs(i, out IDXGIOutput output).Success)
+        for (int i = 0; ; i++)
         {
-            int width = output.Description.DesktopCoordinates.Right - output.Description.DesktopCoordinates.Left;
-            int height = output.Description.DesktopCoordinates.Bottom - output.Description.DesktopCoordinates.Top;
-            yield return new Display(i, output.Description.DeviceName, width, height, GetRotation(output.Description.Rotation), graphicsCard);
-            output.Dispose();
-            i++;
+            bool found = adapter.EnumOutputs(i, out IDXGIOutput output).Success;
+            using (output)
+            {
+                if (!found) yield break;
+
+                OutputDescription description = output.Description;
+                int width = description.DesktopCoordinates.Right - description.DesktopCoordinates.Left;
+                int height = description.DesktopCoordinates.Bottom - description.DesktopCoordinates.Top;
+                yield return new Display(i, description.DeviceName, width, height, GetRotation(description.Rotation), graphicsCard);
+            }
         }
     }
 
     private static Rotation GetRotation(ModeRotation rotation) => rotation switch
     {
-        ModeRotation.Rotate90 => Rotation.Rotation90,
-        ModeRotation.Rotate180 => Rotation.Rotation180,
-        ModeRotation.Rotate270 => Rotation.Rotation270,
+        ModeRotation.Rotate90 => Rotation.Rotate90,
+        ModeRotation.Rotate180 => Rotation.Rotate180,
+        ModeRotation.Rotate270 => Rotation.Rotate270,
         _ => Rotation.None
     };
 
@@ -78,7 +86,7 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
     public DX11ScreenCapture GetScreenCapture(Display display)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_screenCaptures.TryGetValue(display, out DX11ScreenCapture? screenCapture))
             _screenCaptures.Add(display, screenCapture = new DX11ScreenCapture(_factory, display));

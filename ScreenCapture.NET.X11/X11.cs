@@ -1,5 +1,8 @@
 ﻿using System.Runtime.InteropServices;
 
+// Only Windows honors these flags; on Linux the system loader (dlopen) resolves libX11 as before.
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+
 namespace ScreenCapture.NET;
 
 internal static partial class X11

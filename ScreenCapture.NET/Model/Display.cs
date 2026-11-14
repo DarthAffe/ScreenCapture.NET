@@ -7,7 +7,7 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a display connected to graphics-card.
 /// </summary>
-public readonly struct Display
+public readonly struct Display : IEquatable<Display>
 {
     #region Properties & Fields
 

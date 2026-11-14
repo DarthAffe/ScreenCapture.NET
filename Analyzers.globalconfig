@@ -1,0 +1,22 @@
+is_global = true
+
+# CA1000: Do not declare static members on generic types
+dotnet_diagnostic.CA1000.severity = none
+
+# CA1034: Nested types should not be visible
+dotnet_diagnostic.CA1034.severity = none
+
+# CA1031: Do not catch general exception types
+# Intentional: capturing, restarting and disposing must never throw into the caller's capture loop.
+dotnet_diagnostic.CA1031.severity = none
+
+# --- Temporary suppressions, each removed by the step that fixes the underlying design ---
+
+# CA1063: Implement IDisposable correctly / CA2216: Disposable types should declare finalizer
+# TODO: Re-enable with step 3.6 (finalizers removed, dispose pattern simplified) and 3.8 (X11 handles as SafeHandle).
+dotnet_diagnostic.CA1063.severity = none
+dotnet_diagnostic.CA2216.severity = none
+
+# CA1721: Property names should not match get methods (CaptureZone.RefImage vs. GetRefImage)
+# TODO: Re-enable with step 4.1 (GetRefImage is removed).
+dotnet_diagnostic.CA1721.severity = none

@@ -1,4 +1,5 @@
-﻿using HPPH;
+﻿using System;
+using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -21,6 +22,8 @@ public static class BlackBarDetection
     /// <returns>The image with black bars removed.</returns>
     public static IImage RemoveBlackBars(this IImage image, int threshold = 0, bool removeTop = true, bool removeBottom = true, bool removeLeft = true, bool removeRight = true)
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         int top = removeTop ? CalculateTop(image, threshold) : 0;
         int bottom = removeBottom ? CalculateBottom(image, threshold) : image.Height;
         int left = removeLeft ? CalculateLeft(image, threshold) : 0;
@@ -37,6 +40,8 @@ public static class BlackBarDetection
     /// <returns>The row number of the first row with at least one non-black pixel.</returns>
     public static int CalculateTop(IImage image, int threshold)
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         IImageRows rows = image.Rows;
         for (int y = 0; y < rows.Count; y++)
         {
@@ -59,6 +64,8 @@ public static class BlackBarDetection
     /// <returns>The row number of the last row with at least one non-black pixel.</returns>
     public static int CalculateBottom(IImage image, int threshold)
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         IImageRows rows = image.Rows;
         for (int y = rows.Count - 1; y >= 0; y--)
         {
@@ -81,6 +88,8 @@ public static class BlackBarDetection
     /// <returns>The column number of the first column with at least one non-black pixel.</returns>
     public static int CalculateLeft(IImage image, int threshold)
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         IImageColumns columns = image.Columns;
         for (int x = 0; x < columns.Count; x++)
         {
@@ -103,6 +112,8 @@ public static class BlackBarDetection
     /// <returns>The column number of the last column with at least one non-black pixel.</returns>
     public static int CalculateRight(IImage image, int threshold)
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         IImageColumns columns = image.Columns;
         for (int x = columns.Count - 1; x >= 0; x--)
         {
@@ -135,6 +146,8 @@ public static class BlackBarDetection
     public static RefImage<T> RemoveBlackBars<T>(this IImage<T> image, int threshold = 0, bool removeTop = true, bool removeBottom = true, bool removeLeft = true, bool removeRight = true)
         where T : struct, IColor
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         int top = removeTop ? CalculateTop(image, threshold) : 0;
         int bottom = removeBottom ? CalculateBottom(image, threshold) : image.Height;
         int left = removeLeft ? CalculateLeft(image, threshold) : 0;
@@ -152,6 +165,8 @@ public static class BlackBarDetection
     public static int CalculateTop<T>(IImage<T> image, int threshold)
         where T : struct, IColor
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         ImageRows<T> rows = image.Rows;
         for (int y = 0; y < rows.Count; y++)
         {
@@ -175,6 +190,8 @@ public static class BlackBarDetection
     public static int CalculateBottom<T>(IImage<T> image, int threshold)
         where T : struct, IColor
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         ImageRows<T> rows = image.Rows;
         for (int y = rows.Count - 1; y >= 0; y--)
         {
@@ -198,6 +215,8 @@ public static class BlackBarDetection
     public static int CalculateLeft<T>(IImage<T> image, int threshold)
         where T : struct, IColor
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         ImageColumns<T> columns = image.Columns;
         for (int x = 0; x < columns.Count; x++)
         {
@@ -221,6 +240,8 @@ public static class BlackBarDetection
     public static int CalculateRight<T>(IImage<T> image, int threshold)
         where T : struct, IColor
     {
+        ArgumentNullException.ThrowIfNull(image);
+
         ImageColumns<T> columns = image.Columns;
         for (int x = columns.Count - 1; x >= 0; x--)
         {

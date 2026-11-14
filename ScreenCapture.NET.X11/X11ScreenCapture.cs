@@ -62,6 +62,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
+        ArgumentNullException.ThrowIfNull(captureZone);
+
         using IDisposable @lock = captureZone.Lock();
         {
             if (captureZone.DownscaleLevel == 0)

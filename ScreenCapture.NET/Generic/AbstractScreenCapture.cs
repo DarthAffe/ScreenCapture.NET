@@ -50,7 +50,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc />
     public virtual bool CaptureScreen()
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         bool result;
 
@@ -111,7 +111,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc cref="IScreenCapture.RegisterCaptureZone" />
     public virtual CaptureZone<TColor> RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         lock (CaptureZones)
         {
@@ -181,7 +181,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc cref="IScreenCapture.UnregisterCaptureZone" />
     public virtual bool UnregisterCaptureZone(CaptureZone<TColor> captureZone)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         return CaptureZones.Remove(captureZone);
     }
@@ -193,7 +193,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc cref="IScreenCapture.UpdateCaptureZone" />
     public virtual void UpdateCaptureZone(CaptureZone<TColor> captureZone, int? x = null, int? y = null, int? width = null, int? height = null, int? downscaleLevel = null)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ArgumentNullException.ThrowIfNull(captureZone);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         lock (CaptureZones)
         {
@@ -222,7 +223,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc />
     public virtual void Restart()
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
     }
 
     /// <inheritdoc />

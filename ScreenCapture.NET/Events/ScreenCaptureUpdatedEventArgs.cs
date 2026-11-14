@@ -6,7 +6,7 @@ namespace ScreenCapture.NET;
 
 /// <inheritdoc />
 /// <summary>
-/// Represents the information supplied with an <see cref="E:ScreenCapture.IDX11ScreenCapture.Updated" />-event.
+/// Represents the information supplied with an <see cref="IScreenCapture.Updated" />-event.
 /// </summary>
 public class ScreenCaptureUpdatedEventArgs : EventArgs
 {

@@ -37,7 +37,7 @@ public class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         Dictionary<int, GraphicsCard> graphicsCards = new();
         for (int i = 0; i < _direct3D9.AdapterCount; i++)
@@ -53,7 +53,7 @@ public class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         for (int i = 0; i < _direct3D9.AdapterCount; i++)
         {
@@ -70,7 +70,7 @@ public class DX9ScreenCaptureService : IScreenCaptureService
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
     public DX9ScreenCapture GetScreenCapture(Display display)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_screenCaptures.TryGetValue(display, out DX9ScreenCapture? screenCapture))
             _screenCaptures.Add(display, screenCapture = new DX9ScreenCapture(_direct3D9, display));

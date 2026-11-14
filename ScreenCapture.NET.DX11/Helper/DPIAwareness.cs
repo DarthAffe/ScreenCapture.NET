@@ -3,6 +3,9 @@
 
 using System.Runtime.InteropServices;
 
+// user32.dll and SHCore.dll are system libraries; never load them from anywhere else.
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
 namespace ScreenCapture.NET;
 
 /// <summary>
@@ -28,14 +31,14 @@ public static class DPIAwareness
 
     internal enum DPI_AWARENESS_CONTEXT
     {
-        DPI_AWARENESS_CONTEXT_UNAWARE = 16,
-        DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = 17,
-        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = 18,
-        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = 34
+        Unaware = 16,
+        SystemAware = 17,
+        PerMonitorAware = 18,
+        PerMonitorAwareV2 = 34
     }
 
     /// <summary>
     /// Sets the DPI-Awareness-Context to V2. This is needed to prevent issues when using desktop duplication.
     /// </summary>
-    public static void Initalize() => SetProcessDpiAwarenessContext((int)DPI_AWARENESS_CONTEXT.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    public static void Initalize() => SetProcessDpiAwarenessContext((int)DPI_AWARENESS_CONTEXT.PerMonitorAwareV2);
 }
