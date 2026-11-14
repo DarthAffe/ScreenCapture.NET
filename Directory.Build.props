@@ -16,6 +16,11 @@
     <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)Analyzers.globalconfig" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ScreenCapture.NET.Tests" />
+    <InternalsVisibleTo Include="ScreenCapture.NET.Benchmarks" />
+  </ItemGroup>
+
   <PropertyGroup>
     <Version>0.0.1</Version>
 

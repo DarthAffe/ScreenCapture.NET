@@ -101,23 +101,23 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         using IDisposable @lock = captureZone.Lock();
         {
             if (captureZone.DownscaleLevel == 0)
-                CopyZone(captureZone, buffer);
+                CopyZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
             else
-                DownscaleZone(captureZone, buffer);
+                DownscaleZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void CopyZone(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    internal static void CopyZone(ReadOnlySpan<byte> frame, int frameWidth, int frameHeight, int frameStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        RefImage<ColorBGRA>.Wrap(_buffer, Display.Width, Display.Height, _stride)[captureZone.X, captureZone.Y, captureZone.Width, captureZone.Height]
+        RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.X, captureZone.Y, captureZone.Width, captureZone.Height]
                            .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DownscaleZone(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    internal static void DownscaleZone(ReadOnlySpan<byte> frame, int frameWidth, int frameHeight, int frameStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(_buffer, Display.Width, Display.Height, _stride)[captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight];
+        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight];
         Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         int blockSize = 1 << captureZone.DownscaleLevel;
