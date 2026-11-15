@@ -78,4 +78,11 @@ public sealed class DX11HardwareTests
         using DX9ScreenCaptureService reference = new();
         HardwareTestHelper.AssertMatchesReferenceOrientation(service, reference);
     }
+
+    [TestMethod]
+    public void DisposeIsRepeatable()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisposeIsRepeatable(service);
+    }
 }

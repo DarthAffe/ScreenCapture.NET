@@ -22,6 +22,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private nint _imageHandle;
     private X11.XImage _image;
     private int _size;
+    private bool _isDisposed;
     private unsafe ReadOnlySpan<byte> Data => new(_image.data, _size);
 
     #endregion
@@ -123,6 +124,9 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
         base.Dispose(disposing);
 
         lock (_captureLock)

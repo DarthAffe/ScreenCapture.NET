@@ -39,6 +39,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private readonly bool _useNewDuplicationAdapter;
 
+    private bool _isDisposed;
+
     /// <summary>
     /// Gets or sets the timeout in ms used for screen-capturing. (default 1000ms)
     /// This is used in <see cref="PerformScreenCapture"/> https://docs.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgioutputduplication-acquirenextframe
@@ -324,13 +326,16 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
         base.Dispose(disposing);
 
         lock (_captureLock)
             lock (_texturesLock)
             {
                 foreach (ZoneTextures textures in _textures.Values)
-                    textures.Dispose();
+                    try { textures.Dispose(); } catch { /**/ }
                 _textures.Clear();
 
                 DisposeDX();

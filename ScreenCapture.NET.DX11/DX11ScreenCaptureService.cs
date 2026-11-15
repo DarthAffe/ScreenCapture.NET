@@ -7,7 +7,7 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="DX11ScreenCapture"/>.
 /// </summary>
-public class DX11ScreenCaptureService : IScreenCaptureService
+public sealed class DX11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
@@ -27,11 +27,6 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     {
         DXGI.CreateDXGIFactory1(out _factory!).CheckError();
     }
-
-    /// <summary>
-    /// Finalizes an instance of the <see cref="DX11ScreenCaptureService"/> class.
-    /// </summary>
-    ~DX11ScreenCaptureService() => Dispose();
 
     #endregion
 
@@ -108,8 +103,6 @@ public class DX11ScreenCaptureService : IScreenCaptureService
         _screenCaptures.Clear();
 
         try { _factory.Dispose(); } catch { /**/ }
-
-        GC.SuppressFinalize(this);
 
         _isDisposed = true;
     }

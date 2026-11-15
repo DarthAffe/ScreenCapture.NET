@@ -64,11 +64,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         this.Display = display;
     }
 
-    /// <summary>
-    /// Finalizes an instance of the <see cref="AbstractScreenCapture{TColor}"/> class.
-    /// </summary>
-    ~AbstractScreenCapture() => Dispose(false);
-
     #endregion
 
     #region Methods
@@ -302,21 +297,18 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_isDisposed) return;
-
-        try
-        {
-            Dispose(true);
-        }
-        catch { /* don't throw in dispose! */ }
-
+        Dispose(true);
         GC.SuppressFinalize(this);
-
-        _isDisposed = true;
     }
 
-    /// <inheritdoc cref="IDisposable.Dispose" />
-    protected virtual void Dispose(bool disposing) { }
+    /// <summary>
+    /// Releases the resources of this screen capture and marks it as disposed.
+    /// </summary>
+    /// <remarks>
+    /// This can be called more than once. Overrides release their resources only on the first call, call the base implementation and never throw.
+    /// </remarks>
+    /// <param name="disposing">Always <c>true</c>: screen captures have no finalizer.</param>
+    protected virtual void Dispose(bool disposing) => _isDisposed = true;
 
     #endregion
 }

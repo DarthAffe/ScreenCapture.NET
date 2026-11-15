@@ -25,6 +25,8 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private byte[]? _buffer;
     private int _stride;
 
+    private bool _isDisposed;
+
     #endregion
 
     #region Constructors
@@ -160,6 +162,9 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
         base.Dispose(disposing);
 
         lock (_captureLock)

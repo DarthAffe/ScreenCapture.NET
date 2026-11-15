@@ -7,7 +7,7 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="DX9ScreenCapture"/>.
 /// </summary>
-public class DX9ScreenCaptureService : IScreenCaptureService
+public sealed class DX9ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
@@ -27,11 +27,6 @@ public class DX9ScreenCaptureService : IScreenCaptureService
     {
         _direct3D9 = D3D9.Direct3DCreate9();
     }
-
-    /// <summary>
-    /// Finalizes an instance of the <see cref="DX9ScreenCaptureService"/> class.
-    /// </summary>
-    ~DX9ScreenCaptureService() => Dispose();
 
     #endregion
 
@@ -92,8 +87,6 @@ public class DX9ScreenCaptureService : IScreenCaptureService
         _screenCaptures.Clear();
 
         try { _direct3D9.Dispose(); } catch { /**/ }
-
-        GC.SuppressFinalize(this);
 
         _isDisposed = true;
     }

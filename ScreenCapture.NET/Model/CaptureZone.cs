@@ -194,7 +194,6 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
         // ReSharper disable once ConvertToPrimaryConstructor
         public UnlockDisposable(Lock @lock) => this._lock = @lock;
-        ~UnlockDisposable() => Dispose();
 
         #endregion
 
@@ -207,8 +206,6 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
             _lock.Exit();
             _disposed = true;
-
-            GC.SuppressFinalize(this);
         }
 
         #endregion

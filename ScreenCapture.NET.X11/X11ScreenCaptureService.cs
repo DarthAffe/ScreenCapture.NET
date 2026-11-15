@@ -7,7 +7,7 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="X11ScreenCapture"/>.
 /// </summary>
-public class X11ScreenCaptureService : IScreenCaptureService
+public sealed class X11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
@@ -24,11 +24,6 @@ public class X11ScreenCaptureService : IScreenCaptureService
     /// </summary>
     public X11ScreenCaptureService()
     { }
-
-    /// <summary>
-    /// Finalizes an instance of the <see cref="X11ScreenCaptureService"/> class.
-    /// </summary>
-    ~X11ScreenCaptureService() => Dispose();
 
     #endregion
 
@@ -97,8 +92,6 @@ public class X11ScreenCaptureService : IScreenCaptureService
         foreach (X11ScreenCapture screenCapture in _screenCaptures.Values)
             screenCapture.Dispose();
         _screenCaptures.Clear();
-
-        GC.SuppressFinalize(this);
 
         _isDisposed = true;
     }

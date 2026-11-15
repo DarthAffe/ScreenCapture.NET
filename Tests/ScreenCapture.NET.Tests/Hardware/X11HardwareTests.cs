@@ -78,4 +78,11 @@ public sealed class X11HardwareTests
         using X11ScreenCaptureService service = new();
         HardwareTestHelper.AssertPartialZonesMatchFullScreen(service);
     }
+
+    [TestMethod]
+    public void DisposeIsRepeatable()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisposeIsRepeatable(service);
+    }
 }

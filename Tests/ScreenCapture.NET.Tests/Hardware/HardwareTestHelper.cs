@@ -323,6 +323,25 @@ internal static class HardwareTestHelper
         Assert.IsTrue(captured, $"No frame captured after {CAPTURE_ATTEMPTS} attempts.");
     }
 
+    /// <summary>
+    /// Disposes a capture and its service more than once (the service disposes its captures again) and checks that this doesn't throw.
+    /// </summary>
+    public static void AssertDisposeIsRepeatable(IScreenCaptureService service)
+    {
+        (_, Display display) = GetFirstDisplay(service);
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
+        CaptureFrame(screenCapture);
+
+        screenCapture.Dispose();
+        screenCapture.Dispose();
+        Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.CaptureScreen());
+
+        service.Dispose();
+        service.Dispose();
+        Assert.ThrowsExactly<ObjectDisposedException>(() => service.GetGraphicsCards().ToList());
+    }
+
     public static (int x, int y, int width, int height) FullScreen(Display display) => (0, 0, display.Width, display.Height);
 
     public static (int x, int y, int width, int height) Center(Display display) => (display.Width / 4, display.Height / 4, display.Width / 2, display.Height / 2);

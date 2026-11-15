@@ -70,4 +70,11 @@ public sealed class DX9HardwareTests
         using DX9ScreenCaptureService service = new();
         HardwareTestHelper.AssertPartialZonesMatchFullScreen(service);
     }
+
+    [TestMethod]
+    public void DisposeIsRepeatable()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisposeIsRepeatable(service);
+    }
 }
