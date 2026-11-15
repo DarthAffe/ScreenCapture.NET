@@ -13,13 +13,13 @@ internal static partial class X11
     internal const int ZPIXMAP = 2;
 
     [LibraryImport("libX11.so.6")]
-    internal static partial nint XOpenDisplay(nint displayName);
+    internal static partial X11DisplayHandle XOpenDisplay(nint displayName);
 
     [LibraryImport("libX11.so.6")]
-    internal static partial int XScreenCount(nint display);
+    internal static partial int XScreenCount(X11DisplayHandle display);
 
     [LibraryImport("libX11.so.6")]
-    internal static partial nint XScreenOfDisplay(nint display, int screeenNumber);
+    internal static partial nint XScreenOfDisplay(X11DisplayHandle display, int screenNumber);
 
     [LibraryImport("libX11.so.6")]
     internal static partial int XWidthOfScreen(nint screen);
@@ -28,19 +28,19 @@ internal static partial class X11
     internal static partial int XHeightOfScreen(nint screen);
 
     [LibraryImport("libX11.so.6")]
-    internal static partial nint XRootWindowOfScreen(nint screen);
+    internal static partial CULong XRootWindowOfScreen(nint screen);
 
     [LibraryImport("libX11.so.6")]
-    internal static partial nint XGetImage(nint display, nint drawable, int x, int y, uint width, uint height, long planeMask, int format);
+    internal static partial X11ImageHandle XGetImage(X11DisplayHandle display, CULong drawable, int x, int y, uint width, uint height, long planeMask, int format);
 
     [LibraryImport("libX11.so.6")]
-    internal static partial nint XGetSubImage(nint display, nint drawable, int x, int y, uint width, uint height, long planeMask, int format, nint image, int destX, int dextY);
+    internal static partial nint XGetSubImage(X11DisplayHandle display, CULong drawable, int x, int y, uint width, uint height, long planeMask, int format, X11ImageHandle image, int destX, int dextY);
 
     [LibraryImport("libX11.so.6")]
     internal static partial void XDestroyImage(nint image);
 
     [LibraryImport("libX11.so.6")]
-    internal static partial nint XDisplayString(nint display);
+    internal static partial nint XDisplayString(X11DisplayHandle display);
 
     [LibraryImport("libX11.so.6")]
     internal static partial void XCloseDisplay(nint display);

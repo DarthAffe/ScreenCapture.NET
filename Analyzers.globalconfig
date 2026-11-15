@@ -12,10 +12,6 @@ dotnet_diagnostic.CA1031.severity = none
 
 # --- Temporary suppressions, each removed by the step that fixes the underlying design ---
 
-# CA2216: Disposable types should declare finalizer (X11ScreenCapture holds raw display/image handles)
-# TODO: Re-enable with step 3.8 (X11 handles as SafeHandle).
-dotnet_diagnostic.CA2216.severity = none
-
 # CA1721: Property names should not match get methods (CaptureZone.RefImage vs. GetRefImage)
 # TODO: Re-enable with step 4.1 (GetRefImage is removed).
 dotnet_diagnostic.CA1721.severity = none

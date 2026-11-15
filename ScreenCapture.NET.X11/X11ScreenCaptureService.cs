@@ -30,45 +30,52 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     #region Methods
 
     /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">No connection to an X server could be opened.</exception>
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        nint display = X11.XOpenDisplay(X11.DISPLAY_NAME);
-        try
-        {
-            string name = Marshal.PtrToStringAnsi(X11.XDisplayString(display)) ?? string.Empty;
-            yield return new GraphicsCard(0, name, 0, 0);
-        }
-        finally
-        {
-            X11.XCloseDisplay(display);
-        }
+        using X11DisplayHandle display = OpenDisplay();
+
+        string name = Marshal.PtrToStringAnsi(X11.XDisplayString(display)) ?? string.Empty;
+        return [new GraphicsCard(0, name, 0, 0)];
     }
 
     /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">No connection to an X server could be opened.</exception>
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        nint display = X11.XOpenDisplay(X11.DISPLAY_NAME);
-        try
-        {
-            int screenCount = X11.XScreenCount(display);
-            for (int screenNumber = 0; screenNumber < screenCount; screenNumber++)
-            {
-                nint screen = X11.XScreenOfDisplay(display, screenNumber);
-                int screenWidth = X11.XWidthOfScreen(screen);
-                int screenHeight = X11.XHeightOfScreen(screen);
+        using X11DisplayHandle display = OpenDisplay();
 
-                // DarthAffe 10.09.2023: Emulate DX-Displaynames for no real reason ¯\(°_o)/¯
-                yield return new Display(screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", screenWidth, screenHeight, Rotation.None, graphicsCard);
-            }
-        }
-        finally
+        int screenCount = X11.XScreenCount(display);
+        List<Display> displays = new(screenCount);
+        for (int screenNumber = 0; screenNumber < screenCount; screenNumber++)
         {
-            X11.XCloseDisplay(display);
+            nint screen = X11.XScreenOfDisplay(display, screenNumber);
+            int screenWidth = X11.XWidthOfScreen(screen);
+            int screenHeight = X11.XHeightOfScreen(screen);
+
+            // DarthAffe 10.09.2023: Emulate DX-Displaynames for no real reason ¯\(°_o)/¯
+            displays.Add(new Display(screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", screenWidth, screenHeight, Rotation.None, graphicsCard));
         }
+
+        return displays;
+    }
+
+    // The enumeration is eager, so the connection is closed before the caller sees the results and a missing X server throws right away.
+    private static X11DisplayHandle OpenDisplay()
+    {
+        X11DisplayHandle display = X11.XOpenDisplay(X11.DISPLAY_NAME);
+        if (!display.IsInvalid) return display;
+
+        display.Dispose();
+
+        string? displayName = Environment.GetEnvironmentVariable("DISPLAY");
+        throw new InvalidOperationException(string.IsNullOrEmpty(displayName)
+                                                ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, X11 capturing needs XWayland."
+                                                : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");
     }
 
     /// <inheritdoc />

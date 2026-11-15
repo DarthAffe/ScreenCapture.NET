@@ -314,7 +314,7 @@ internal static class HardwareTestHelper
         return result;
     }
 
-    private static void CaptureFrame(IScreenCapture screenCapture)
+    public static void CaptureFrame(IScreenCapture screenCapture)
     {
         bool captured = false;
         for (int i = 0; (i < CAPTURE_ATTEMPTS) && !captured; i++)
