@@ -7,6 +7,12 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="X11ScreenCapture"/>.
 /// </summary>
+/// <remarks>
+/// The first connection to the X server installs a process-wide Xlib error handler (<c>XSetErrorHandler</c>) that stays installed.
+/// It records errors of this library's connections (a failed capture restarts instead of Xlib terminating the process)
+/// and passes errors of all other connections to the handler that was installed before.
+/// If other code installs its own handler afterwards without passing errors on, X errors of the capture are handled by that code.
+/// </remarks>
 public sealed class X11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
@@ -67,7 +73,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     // The enumeration is eager, so the connection is closed before the caller sees the results and a missing X server throws right away.
     private static X11DisplayHandle OpenDisplay()
     {
-        X11DisplayHandle display = X11.XOpenDisplay(X11.DISPLAY_NAME);
+        X11DisplayHandle display = X11DisplayHandle.Open();
         if (!display.IsInvalid) return display;
 
         display.Dispose();

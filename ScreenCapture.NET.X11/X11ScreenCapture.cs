@@ -10,6 +10,12 @@ namespace ScreenCapture.NET;
 /// Represents a ScreenCapture using libX11.
 /// https://x.org/releases/current/doc/libX11/libX11/libX11.html#XGetImage
 /// </summary>
+/// <remarks>
+/// The first connection to the X server installs a process-wide Xlib error handler (<c>XSetErrorHandler</c>) that stays installed.
+/// It records errors of this library's connections (a failed capture restarts instead of Xlib terminating the process)
+/// and passes errors of all other connections to the handler that was installed before.
+/// If other code installs its own handler afterwards without passing errors on, X errors of the capture are handled by that code.
+/// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
@@ -55,7 +61,15 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 return false;
             }
 
-            X11.XGetSubImage(_display, _drawable, 0, 0, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0);
+            _display.ClearError();
+            nint result = X11.XGetSubImage(_display, _drawable, 0, 0, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0);
+
+            // E.g. BadMatch if the screen got smaller than the image. Starting over picks up the current state.
+            if ((result == 0) || (_display.LastError != null))
+            {
+                Restart();
+                return false;
+            }
 
             return true;
         }
@@ -125,7 +139,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             X11ImageHandle? image = null;
             try
             {
-                display = X11.XOpenDisplay(X11.DISPLAY_NAME);
+                display = X11DisplayHandle.Open();
                 if (display.IsInvalid) return;
 
                 // XScreenOfDisplay doesn't check the index.
@@ -135,7 +149,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 CULong drawable = X11.XRootWindowOfScreen(screen);
 
                 image = X11.XGetImage(display, drawable, 0, 0, (uint)Display.Width, (uint)Display.Height, X11.ALL_PLANES, X11.ZPIXMAP);
-                if (image.IsInvalid) return;
+                if (image.IsInvalid || (display.LastError != null)) return;
 
                 image.ReadDescription();
                 if (!image.IsBGRA) throw new NotSupportedException($"The X server uses an unsupported pixel format ({image.Format}). Only 32 bits per pixel with 8-bit BGR channels is supported.");

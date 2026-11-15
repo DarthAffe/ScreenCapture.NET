@@ -167,7 +167,7 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void ImageDescriptionMatchesServer()
     {
-        using X11DisplayHandle display = X11.XOpenDisplay(X11.DISPLAY_NAME);
+        using X11DisplayHandle display = X11DisplayHandle.Open();
         Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
 
         CULong root = X11.XRootWindowOfScreen(X11.XScreenOfDisplay(display, 0));
@@ -180,6 +180,45 @@ public sealed class X11HardwareTests
         Assert.AreEqual(2, image.Height);
         Assert.IsGreaterThanOrEqualTo(3 * 4, image.Stride);
         Assert.IsTrue(image.IsBGRA, $"Unexpected format: {image.Format}");
+    }
+
+    /// <summary>
+    /// Requests an image outside the root window (BadMatch). Xlib's default handler would terminate the test host.
+    /// </summary>
+    [TestMethod]
+    public void XErrorIsRecordedInsteadOfTerminating()
+    {
+        const byte badMatch = 8;
+        const byte getImage = 73;
+
+        using X11DisplayHandle display = X11DisplayHandle.Open();
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
+
+        nint screen = X11.XScreenOfDisplay(display, 0);
+        CULong root = X11.XRootWindowOfScreen(screen);
+        using X11ImageHandle image = X11.XGetImage(display, root, X11.XWidthOfScreen(screen) + 10, 0, 1, 1, X11.ALL_PLANES, X11.ZPIXMAP);
+
+        Assert.IsTrue(image.IsInvalid);
+        Assert.AreEqual(new X11Error(badMatch, getImage, 0), display.LastError);
+
+        display.ClearError();
+        Assert.IsNull(display.LastError);
+    }
+
+    [TestMethod]
+    public void OversizedDisplayFailsWithoutTerminating()
+    {
+        using X11ScreenCaptureService service = new();
+        (GraphicsCard graphicsCard, Display realDisplay) = HardwareTestHelper.GetFirstDisplay(service);
+
+        // XGetImage fails with BadMatch because the image would be larger than the screen.
+        Display display = new(realDisplay.Index, realDisplay.DeviceName, realDisplay.Width + 16, realDisplay.Height, Rotation.None, graphicsCard);
+        using X11ScreenCapture screenCapture = new(display);
+        screenCapture.RegisterCaptureZone(0, 0, 64, 64);
+
+        for (int i = 0; i < 3; i++)
+            Assert.IsFalse(screenCapture.CaptureScreen());
+        AssertNoHandles(screenCapture);
     }
 
     private static void AssertNoHandles(X11ScreenCapture screenCapture)

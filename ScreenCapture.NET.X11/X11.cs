@@ -44,9 +44,29 @@ internal static partial class X11
     [LibraryImport("libX11.so.6")]
     internal static partial nint XDisplayString(X11DisplayHandle display);
 
+    /// <summary>
+    /// Installs a process-wide error handler (<c>int (*)(Display*, XErrorEvent*)</c>) and returns the previous one.
+    /// </summary>
+    [LibraryImport("libX11.so.6")]
+    internal static partial nint XSetErrorHandler(nint handler);
+
     [LibraryImport("libX11.so.6")]
     internal static partial int XCloseDisplay(nint display);
     
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct XErrorEvent
+    {
+        // ReSharper disable MemberCanBePrivate.Global
+        public int type;
+        public nint display;
+        public CULong resourceid;
+        public CULong serial;
+        public byte error_code;
+        public byte request_code;
+        public byte minor_code;
+        // ReSharper restore MemberCanBePrivate.Global
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct XImage
     {
