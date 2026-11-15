@@ -57,4 +57,11 @@ public sealed class X11HardwareTests
         using X11ScreenCaptureService service = new();
         HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service, downscaleLevel: 2);
     }
+
+    [TestMethod]
+    public void PartialZonesMatchFullScreen()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertPartialZonesMatchFullScreen(service);
+    }
 }

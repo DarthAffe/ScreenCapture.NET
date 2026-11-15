@@ -5,6 +5,15 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Maps capture zones, which are in the orientation of the display, to the duplicated texture, which is in the native orientation of the output.
 /// </summary>
+/// <remarks>
+/// The mapping is the inverse of <see cref="CopyRotateHelper"/>: a pixel at (x, y) on a display of size width x height is read from the texture at
+/// <list type="bullet">
+/// <item><see cref="Rotation.None"/>: (x, y)</item>
+/// <item><see cref="Rotation.Rotate90"/>: (y, width - 1 - x)</item>
+/// <item><see cref="Rotation.Rotate180"/>: (width - 1 - x, height - 1 - y)</item>
+/// <item><see cref="Rotation.Rotate270"/>: (height - 1 - y, x)</item>
+/// </list>
+/// </remarks>
 internal static class DX11ZoneLayout
 {
     #region Methods
@@ -12,19 +21,22 @@ internal static class DX11ZoneLayout
     /// <summary>
     /// Calculates the region of the duplicated texture a zone is copied from.
     /// </summary>
-    /// <remarks>
-    /// For displays rotated by 90 or 270 degrees the axes are swapped.
-    /// </remarks>
     /// <param name="rotation">The rotation of the display.</param>
+    /// <param name="displayWidth">The width of the display (display orientation).</param>
+    /// <param name="displayHeight">The height of the display (display orientation).</param>
     /// <param name="x">The x-location of the zone on the display.</param>
     /// <param name="y">The y-location of the zone on the display.</param>
     /// <param name="unscaledWidth">The width of the zone on the display.</param>
     /// <param name="unscaledHeight">The height of the zone on the display.</param>
     /// <returns>The region in texture coordinates.</returns>
-    internal static SourceBox GetSourceBox(Rotation rotation, int x, int y, int unscaledWidth, int unscaledHeight)
-        => IsSwapped(rotation)
-               ? new SourceBox(y, x, unscaledHeight, unscaledWidth)
-               : new SourceBox(x, y, unscaledWidth, unscaledHeight);
+    internal static SourceBox GetSourceBox(Rotation rotation, int displayWidth, int displayHeight, int x, int y, int unscaledWidth, int unscaledHeight)
+        => rotation switch
+        {
+            Rotation.Rotate90 => new SourceBox(y, displayWidth - x - unscaledWidth, unscaledHeight, unscaledWidth),
+            Rotation.Rotate180 => new SourceBox(displayWidth - x - unscaledWidth, displayHeight - y - unscaledHeight, unscaledWidth, unscaledHeight),
+            Rotation.Rotate270 => new SourceBox(displayHeight - y - unscaledHeight, x, unscaledHeight, unscaledWidth),
+            _ => new SourceBox(x, y, unscaledWidth, unscaledHeight)
+        };
 
     /// <summary>
     /// Converts a size on the display to the size of a texture in the native orientation of the output.
@@ -34,9 +46,7 @@ internal static class DX11ZoneLayout
     /// <param name="height">The height on the display.</param>
     /// <returns>The size in texture coordinates.</returns>
     internal static (int width, int height) GetTextureSize(Rotation rotation, int width, int height)
-        => IsSwapped(rotation) ? (height, width) : (width, height);
-
-    private static bool IsSwapped(Rotation rotation) => rotation is Rotation.Rotate90 or Rotation.Rotate270;
+        => rotation is Rotation.Rotate90 or Rotation.Rotate270 ? (height, width) : (width, height);
 
     #endregion
 }

@@ -49,4 +49,11 @@ public sealed class DX9HardwareTests
         using DX9ScreenCaptureService service = new();
         HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service, downscaleLevel: 2);
     }
+
+    [TestMethod]
+    public void PartialZonesMatchFullScreen()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertPartialZonesMatchFullScreen(service);
+    }
 }

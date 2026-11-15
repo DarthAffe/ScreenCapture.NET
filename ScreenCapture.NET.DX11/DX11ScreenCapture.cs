@@ -211,7 +211,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             if (!_textures.TryGetValue(captureZone, out ZoneTextures? textures)) return;
 
             if (textures.FitsSizeOf(captureZone))
-                textures.Source = DX11ZoneLayout.GetSourceBox(Display.Rotation, captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+                textures.Source = GetSourceBox(captureZone);
             else
             {
                 textures.Dispose();
@@ -228,11 +228,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         base.ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
     }
 
+    private SourceBox GetSourceBox(CaptureZone<ColorBGRA> captureZone)
+        => DX11ZoneLayout.GetSourceBox(Display.Rotation, Display.Width, Display.Height,
+                                       captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+
     private void InitializeCaptureZone(CaptureZone<ColorBGRA> captureZone)
     {
-        Rotation rotation = captureZone.Display.Rotation;
-        SourceBox source = DX11ZoneLayout.GetSourceBox(rotation, captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
-        (int width, int height) = DX11ZoneLayout.GetTextureSize(rotation, captureZone.Width, captureZone.Height);
+        SourceBox source = GetSourceBox(captureZone);
+        (int width, int height) = DX11ZoneLayout.GetTextureSize(Display.Rotation, captureZone.Width, captureZone.Height);
 
         Texture2DDescription stagingTextureDesc = new()
         {

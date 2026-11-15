@@ -1,3 +1,6 @@
+using System.Runtime.InteropServices;
+using HPPH;
+
 namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
@@ -102,6 +105,159 @@ internal static class HardwareTestHelper
             Assert.Inconclusive("The top-left corner and the center of the screen look the same, so a move can't be detected.");
 
         Assert.IsTrue(movedPixels.AsSpan().SequenceEqual(referencePixels), "The moved zone doesn't show the pixels at its new position.");
+    }
+
+    /// <summary>
+    /// Checks on every display that partial zones show the same pixels as the same area of a full-screen zone.
+    /// On rotated displays this checks that the source region of a partial zone is mirrored like the full-screen copy.
+    /// </summary>
+    public static void AssertPartialZonesMatchFullScreen(IScreenCaptureService service)
+    {
+        int checkedZones = 0;
+        foreach (Display display in GetAllDisplays(service))
+        {
+            IScreenCapture screenCapture = service.GetScreenCapture(display);
+            (int width, int height) = (display.Width, display.Height);
+
+            // Asymmetric zones near the edges, so a mirrored source region shows something else.
+            (int x, int y, int width, int height)[] regions =
+            [
+                (width / 8, height / 6, width / 3, height / 4),
+                (width - 200, 0, 200, 100),
+                (0, height - 120, 150, 120),
+                (width / 2, height / 3, 1, height / 2)
+            ];
+
+            ICaptureZone fullScreen = screenCapture.RegisterCaptureZone(0, 0, width, height);
+            ICaptureZone[] zones = [.. regions.Select(r => screenCapture.RegisterCaptureZone(r.x, r.y, r.width, r.height))];
+
+            CaptureFrame(screenCapture);
+
+            ColorBGRA[] fullScreenPixels = GetPixels(fullScreen);
+            foreach ((ICaptureZone zone, (int x, int y, int width, int height) region) in zones.Zip(regions))
+            {
+                ColorBGRA[] expected = Crop(fullScreenPixels, width, region.x, region.y, region.width, region.height);
+                ColorBGRA[] mirrored = Crop(fullScreenPixels, width, width - region.x - region.width, height - region.y - region.height, region.width, region.height);
+
+                CollectionAssert.AreEqual(expected, GetPixels(zone), $"{display.DeviceName} ({display.Rotation}): zone {region} differs from the full screen.");
+
+                if (!expected.AsSpan().SequenceEqual(mirrored))
+                    checkedZones++;
+            }
+
+            screenCapture.UnregisterCaptureZone(fullScreen);
+            foreach (ICaptureZone zone in zones)
+                screenCapture.UnregisterCaptureZone(zone);
+        }
+
+        if (checkedZones == 0)
+            Assert.Inconclusive("Every zone looks like its mirrored counterpart, so a wrongly mirrored zone can't be detected.");
+    }
+
+    /// <summary>
+    /// Captures every display with both services and checks that the images have the same orientation.
+    /// <paramref name="reference"/> has to capture in display orientation (like DX9), so this checks the rotation of <paramref name="service"/>.
+    /// </summary>
+    /// <remarks>
+    /// The two captures are taken one after the other, so animated content can differ. Instead of comparing pixels this compares the average
+    /// brightness of a coarse grid, and requires the image to be much closer to the reference than the same image rotated by 180°
+    /// (which is what mixing up 90° and 270° would produce).
+    /// </remarks>
+    public static void AssertMatchesReferenceOrientation(IScreenCaptureService service, IScreenCaptureService reference)
+    {
+        // Below this (average brightness difference, 0-255) the screen looks too much like itself rotated by 180° to tell the difference.
+        const double minRotatedDistance = 4;
+
+        List<Display> referenceDisplays = [.. GetAllDisplays(reference)];
+        int comparedDisplays = 0;
+        foreach (Display display in GetAllDisplays(service))
+        {
+            int referenceIndex = referenceDisplays.FindIndex(d => d.DeviceName == display.DeviceName);
+            if (referenceIndex < 0) continue;
+            Display referenceDisplay = referenceDisplays[referenceIndex];
+
+            Assert.AreEqual((display.Width, display.Height), (referenceDisplay.Width, referenceDisplay.Height),
+                            $"{display.DeviceName} ({display.Rotation}): the size differs from the reference.");
+
+            double[] grid = BrightnessGrid(CaptureFullScreen(service, display), display.Width, display.Height);
+            double[] referenceGrid = BrightnessGrid(CaptureFullScreen(reference, referenceDisplay), display.Width, display.Height);
+
+            if (Distance([.. referenceGrid.Reverse()], referenceGrid) < minRotatedDistance) continue;
+
+            double distance = Distance(grid, referenceGrid);
+            double rotatedDistance = Distance([.. grid.Reverse()], referenceGrid);
+
+            Assert.IsLessThan(rotatedDistance / 2, distance,
+                              $"{display.DeviceName} ({display.Rotation}): the capture differs from the reference by {distance:F1} (rotated by 180°: {rotatedDistance:F1}).");
+
+            comparedDisplays++;
+        }
+
+        if (comparedDisplays == 0)
+            Assert.Inconclusive("No display could be compared (no matching reference display, or the screen looks the same when rotated by 180°).");
+    }
+
+    private static double[] BrightnessGrid(ColorBGRA[] pixels, int width, int height)
+    {
+        const int size = 16;
+
+        double[] grid = new double[size * size];
+        int[] counts = new int[size * size];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                ColorBGRA pixel = pixels[(y * width) + x];
+                int cell = (((y * size) / height) * size) + ((x * size) / width);
+                grid[cell] += (pixel.R + pixel.G + pixel.B) / 3.0;
+                counts[cell]++;
+            }
+
+        for (int i = 0; i < grid.Length; i++)
+            grid[i] /= counts[i];
+
+        return grid;
+    }
+
+    private static double Distance(double[] grid, double[] other)
+    {
+        double sum = 0;
+        for (int i = 0; i < grid.Length; i++)
+            sum += Math.Abs(grid[i] - other[i]);
+
+        return sum / grid.Length;
+    }
+
+    private static IEnumerable<Display> GetAllDisplays(IScreenCaptureService service)
+        => service.GetGraphicsCards().SelectMany(service.GetDisplays);
+
+    private static ColorBGRA[] CaptureFullScreen(IScreenCaptureService service, Display display)
+    {
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
+
+        CaptureFrame(screenCapture);
+        ColorBGRA[] pixels = GetPixels(zone);
+
+        screenCapture.UnregisterCaptureZone(zone);
+        return pixels;
+    }
+
+    private static ColorBGRA[] GetPixels(ICaptureZone zone)
+    {
+        using (zone.Lock())
+        {
+            Assert.AreEqual(ColorBGRA.ColorFormat, zone.ColorFormat, "Only BGRA zones are supported.");
+            return [.. MemoryMarshal.Cast<byte, ColorBGRA>(zone.RawBuffer)];
+        }
+    }
+
+    private static ColorBGRA[] Crop(ColorBGRA[] pixels, int stride, int x, int y, int width, int height)
+    {
+        ColorBGRA[] result = new ColorBGRA[width * height];
+        for (int row = 0; row < height; row++)
+            pixels.AsSpan(((y + row) * stride) + x, width).CopyTo(result.AsSpan(row * width));
+
+        return result;
     }
 
     private static void CaptureFrame(IScreenCapture screenCapture)

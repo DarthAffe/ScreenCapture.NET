@@ -1,27 +1,48 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using HPPH;
 
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// Pins down how DX11 maps a zone (display orientation) to the duplicated texture (native orientation).
-/// The mirroring of partial zones on rotated displays isn't implemented yet; these tests describe the current axis swap.
+/// Checks how DX11 maps a zone (display orientation) to the duplicated texture (native orientation).
 /// </summary>
 [TestClass]
 [OSCondition(OperatingSystems.Windows)]
 [SupportedOSPlatform("windows")]
 public sealed class DX11ZoneLayoutTests
 {
-    [TestMethod]
-    [DataRow(Rotation.None)]
-    [DataRow(Rotation.Rotate180)]
-    public void SourceBoxKeepsAxes(Rotation rotation)
-        => Assert.AreEqual(new SourceBox(10, 20, 300, 400), DX11ZoneLayout.GetSourceBox(rotation, 10, 20, 300, 400));
+    #region Constants
+
+    // A zone at (10, 20) with size 300x400 on a 1920x1080 display.
+    private const int DISPLAY_WIDTH = 1920;
+    private const int DISPLAY_HEIGHT = 1080;
+
+    #endregion
+
+    #region Methods
 
     [TestMethod]
+    [DataRow(Rotation.None, 10, 20, 300, 400)]
+    [DataRow(Rotation.Rotate90, 20, 1920 - 10 - 300, 400, 300)]
+    [DataRow(Rotation.Rotate180, 1920 - 10 - 300, 1080 - 20 - 400, 300, 400)]
+    [DataRow(Rotation.Rotate270, 1080 - 20 - 400, 10, 400, 300)]
+    public void SourceBox(Rotation rotation, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
+        => Assert.AreEqual(new SourceBox(expectedX, expectedY, expectedWidth, expectedHeight),
+                           DX11ZoneLayout.GetSourceBox(rotation, DISPLAY_WIDTH, DISPLAY_HEIGHT, 10, 20, 300, 400));
+
+    [TestMethod]
+    [DataRow(Rotation.None)]
     [DataRow(Rotation.Rotate90)]
+    [DataRow(Rotation.Rotate180)]
     [DataRow(Rotation.Rotate270)]
-    public void SourceBoxSwapsAxes(Rotation rotation)
-        => Assert.AreEqual(new SourceBox(20, 10, 400, 300), DX11ZoneLayout.GetSourceBox(rotation, 10, 20, 300, 400));
+    public void FullScreenSourceBoxCoversTexture(Rotation rotation)
+    {
+        (int textureWidth, int textureHeight) = DX11ZoneLayout.GetTextureSize(rotation, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+        Assert.AreEqual(new SourceBox(0, 0, textureWidth, textureHeight),
+                        DX11ZoneLayout.GetSourceBox(rotation, DISPLAY_WIDTH, DISPLAY_HEIGHT, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT));
+    }
 
     [TestMethod]
     [DataRow(Rotation.None, 300, 400)]
@@ -38,4 +59,57 @@ public sealed class DX11ZoneLayoutTests
 
         Assert.AreEqual((10, 20, 0, 310, 420, 1), (box.Left, box.Top, box.Front, box.Right, box.Bottom, box.Back));
     }
+
+    /// <summary>
+    /// Simulates the DX11 pipeline (copy the source box out of the texture, then <see cref="CopyRotateHelper"/>)
+    /// and checks that a partial zone shows the same pixels as the same area of a full-screen zone.
+    /// </summary>
+    [TestMethod]
+    [DataRow(Rotation.None)]
+    [DataRow(Rotation.Rotate90)]
+    [DataRow(Rotation.Rotate180)]
+    [DataRow(Rotation.Rotate270)]
+    public void PartialZoneMatchesFullScreen(Rotation rotation)
+    {
+        const int displayWidth = 13;
+        const int displayHeight = 7;
+
+        (int textureWidth, int textureHeight) = DX11ZoneLayout.GetTextureSize(rotation, displayWidth, displayHeight);
+        ColorBGRA[] texture = new ColorBGRA[textureWidth * textureHeight];
+        for (int i = 0; i < texture.Length; i++)
+            texture[i] = new ColorBGRA((byte)(i % textureWidth), (byte)(i / textureWidth), 0x42, 0xFF);
+
+        ColorBGRA[] fullScreen = Capture(rotation, texture, textureWidth, displayWidth, displayHeight, 0, 0, displayWidth, displayHeight);
+
+        for (int y = 0; y < displayHeight; y++)
+            for (int x = 0; x < displayWidth; x++)
+                for (int height = 1; (y + height) <= displayHeight; height++)
+                    for (int width = 1; (x + width) <= displayWidth; width++)
+                    {
+                        ColorBGRA[] zone = Capture(rotation, texture, textureWidth, displayWidth, displayHeight, x, y, width, height);
+
+                        for (int zoneY = 0; zoneY < height; zoneY++)
+                            for (int zoneX = 0; zoneX < width; zoneX++)
+                                if (!zone[(zoneY * width) + zoneX].Equals(fullScreen[((y + zoneY) * displayWidth) + x + zoneX]))
+                                    Assert.Fail($"Zone ({x}, {y}, {width}, {height}) differs from the full screen at ({zoneX}, {zoneY}).");
+                    }
+    }
+
+    private static ColorBGRA[] Capture(Rotation rotation, ColorBGRA[] texture, int textureWidth, int displayWidth, int displayHeight, int x, int y, int width, int height)
+    {
+        SourceBox box = DX11ZoneLayout.GetSourceBox(rotation, displayWidth, displayHeight, x, y, width, height);
+
+        // The staging texture: the source box with some row padding, like a mapped texture.
+        int stride = (box.Width + 3) * 4;
+        byte[] staging = new byte[stride * box.Height];
+        for (int row = 0; row < box.Height; row++)
+            MemoryMarshal.AsBytes(texture.AsSpan(((box.Y + row) * textureWidth) + box.X, box.Width)).CopyTo(staging.AsSpan(row * stride));
+
+        byte[] target = new byte[width * height * 4];
+        CopyRotateHelper.Copy(rotation, staging, stride, width, height, target);
+
+        return MemoryMarshal.Cast<byte, ColorBGRA>(target).ToArray();
+    }
+
+    #endregion
 }
