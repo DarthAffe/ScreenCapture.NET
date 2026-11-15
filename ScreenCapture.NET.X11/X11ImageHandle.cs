@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -42,6 +43,17 @@ internal sealed class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
     /// </summary>
     public unsafe ReadOnlySpan<byte> Data => new(_image.data, _image.bytes_per_line * _image.height);
 
+    /// <summary>
+    /// Gets a value indicating whether the pixels are stored as <see cref="HPPH.ColorBGRA"/>.
+    /// </summary>
+    public bool IsBGRA => IsBGRAFormat(_image);
+
+    /// <summary>
+    /// Gets a description of the pixel format for error messages.
+    /// </summary>
+    public string Format => string.Create(CultureInfo.InvariantCulture,
+                                          $"{_image.bits_per_pixel} bits per pixel, depth {_image.depth}, byte order {(_image.byte_order == X11.LSB_FIRST ? "LSBFirst" : "MSBFirst")}, masks R 0x{_image.red_mask.Value:X} G 0x{_image.green_mask.Value:X} B 0x{_image.blue_mask.Value:X}");
+
     #endregion
 
     #region Constructors
@@ -64,8 +76,19 @@ internal sealed class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
         ObjectDisposedException.ThrowIf(IsInvalid || IsClosed, this);
 
-        _image = Marshal.PtrToStructure<X11.XImage>(handle);
+        unsafe { _image = *(X11.XImage*)handle; }
     }
+
+    /// <summary>
+    /// Checks if an image stores its pixels as <see cref="HPPH.ColorBGRA"/>: 32 bits per pixel with the bytes B, G, R, X in memory.
+    /// </summary>
+    /// <remarks>The fourth byte is padding on a depth-24 visual.</remarks>
+    internal static bool IsBGRAFormat(in X11.XImage image)
+        => (image.bits_per_pixel == 32)
+        && (image.byte_order == X11.LSB_FIRST)
+        && (image.red_mask.Value == 0xFF0000)
+        && (image.green_mask.Value == 0xFF00)
+        && (image.blue_mask.Value == 0xFF);
 
     /// <inheritdoc />
     protected override bool ReleaseHandle()

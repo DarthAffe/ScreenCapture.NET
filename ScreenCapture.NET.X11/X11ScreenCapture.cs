@@ -138,7 +138,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 if (image.IsInvalid) return;
 
                 image.ReadDescription();
-                if (image.BitsPerPixel != (ColorBGRA.ColorFormat.BytesPerPixel * 8)) throw new NotSupportedException("The X-Server is configured to a not supported pixel-format. Needs to be 32 bit per pixel BGR.");
+                if (!image.IsBGRA) throw new NotSupportedException($"The X server uses an unsupported pixel format ({image.Format}). Only 32 bits per pixel with 8-bit BGR channels is supported.");
 
                 _display = display;
                 _drawable = drawable;

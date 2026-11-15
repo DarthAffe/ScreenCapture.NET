@@ -161,6 +161,27 @@ public sealed class X11HardwareTests
         HardwareTestHelper.CaptureFrame(screenCapture);
     }
 
+    /// <summary>
+    /// Reads the description of a real image. With wrongly sized <c>unsigned long</c> masks the format check reads padding and fails.
+    /// </summary>
+    [TestMethod]
+    public void ImageDescriptionMatchesServer()
+    {
+        using X11DisplayHandle display = X11.XOpenDisplay(X11.DISPLAY_NAME);
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
+
+        CULong root = X11.XRootWindowOfScreen(X11.XScreenOfDisplay(display, 0));
+        using X11ImageHandle image = X11.XGetImage(display, root, 0, 0, 3, 2, X11.ALL_PLANES, X11.ZPIXMAP);
+        Assert.IsFalse(image.IsInvalid, "Couldn't get an image.");
+
+        image.ReadDescription();
+
+        Assert.AreEqual(3, image.Width);
+        Assert.AreEqual(2, image.Height);
+        Assert.IsGreaterThanOrEqualTo(3 * 4, image.Stride);
+        Assert.IsTrue(image.IsBGRA, $"Unexpected format: {image.Format}");
+    }
+
     private static void AssertNoHandles(X11ScreenCapture screenCapture)
     {
         List<FieldInfo> fields = [.. typeof(X11ScreenCapture).GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
