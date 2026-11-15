@@ -110,6 +110,28 @@ public sealed class DX11HardwareTests
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
     }
 
+    [TestMethod]
+    public void CapturesWithDuplicateOutput1()
+    {
+        // DuplicateOutput1 only works in a per-monitor DPI aware (version 2) process.
+        Assert.IsTrue(DPIAwareness.Initialize());
+
+        Display display;
+        using (DX11ScreenCaptureService service = new())
+            display = HardwareTestHelper.GetFirstDisplay(service).display;
+
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        using DX11ScreenCapture screenCapture = new(factory!, display, useNewDuplicationAdapter: true);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
+
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        using (zone.Lock())
+            Assert.IsTrue(zone.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
+    }
+
     private static void AssertNoDirectXObjects(DX11ScreenCapture screenCapture)
     {
         // The factory belongs to the service.

@@ -65,7 +65,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// Initializes a new instance of the <see cref="DX11ScreenCapture"/> class.
     /// </summary>
     /// <remarks>
-    /// Note that setting useNewDuplicationAdapter to true requires to call <c>DPIAwareness.Initalize();</c> and prevents the capture from running in a WPF-thread.
+    /// Note that setting useNewDuplicationAdapter to true requires a per-monitor DPI aware (version 2) process (see <see cref="DPIAwareness.Initialize"/>) and prevents the capture from running in a WPF-thread.
     /// </remarks>
     /// <param name="factory">The <see cref="IDXGIFactory1"/> used to create underlying objects.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
