@@ -64,13 +64,10 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        using IDisposable @lock = captureZone.Lock();
-        {
-            if (captureZone.DownscaleLevel == 0)
-                CopyZone(captureZone, buffer);
-            else
-                DownscaleZone(captureZone, buffer);
-        }
+        if (captureZone.DownscaleLevel == 0)
+            CopyZone(captureZone, buffer);
+        else
+            DownscaleZone(captureZone, buffer);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

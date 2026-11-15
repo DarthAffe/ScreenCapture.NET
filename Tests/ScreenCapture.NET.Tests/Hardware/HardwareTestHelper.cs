@@ -108,6 +108,60 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
+    /// Changes, registers and unregisters zones while holding a zone lock, while another thread captures continuously.
+    /// This used to deadlock: the capture thread held its locks and waited for the zone lock, the user thread held the zone lock and waited for them.
+    /// </summary>
+    public static void AssertZonesCanBeChangedWhileCapturing(IScreenCaptureService service, int downscaleLevel = 0)
+    {
+        const int iterations = 200;
+        TimeSpan timeout = TimeSpan.FromSeconds(30);
+
+        (_, Display display) = GetFirstDisplay(service);
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(0, 0, 64, 64, downscaleLevel);
+        CaptureFrame(screenCapture);
+
+        using CancellationTokenSource cancellation = new();
+        int captures = 0;
+        Task capture = Task.Factory.StartNew(() =>
+        {
+            while (!cancellation.IsCancellationRequested)
+            {
+                screenCapture.CaptureScreen();
+                captures++;
+            }
+        }, TaskCreationOptions.LongRunning);
+
+        Task worker = Task.Factory.StartNew(() =>
+        {
+            for (int i = 0; i < iterations; i++)
+            {
+                using (zone.Lock())
+                    screenCapture.UpdateCaptureZone(zone, x: i % 100, width: 64 + (i % 2));
+
+                using (zone.Lock())
+                    screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(0, 0, 32, 32, downscaleLevel));
+            }
+        }, TaskCreationOptions.LongRunning);
+
+        bool finished;
+        try
+        {
+            finished = worker.Wait(timeout);
+        }
+        finally
+        {
+            cancellation.Cancel();
+        }
+
+        Assert.IsTrue(finished, "The worker didn't finish (deadlock?).");
+        Assert.IsTrue(capture.Wait(timeout), "The capture thread didn't finish (deadlock?).");
+        Assert.IsGreaterThan(0, captures, "No capture ran while the zones were changed.");
+
+        screenCapture.UnregisterCaptureZone(zone);
+    }
+
+    /// <summary>
     /// Checks on every display that partial zones show the same pixels as the same area of a full-screen zone.
     /// On rotated displays this checks that the source region of a partial zone is mirrored like the full-screen copy.
     /// </summary>

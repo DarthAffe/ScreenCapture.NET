@@ -1,22 +1,45 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET;
 
 /// <inheritdoc />
+/// <remarks>
+/// Lock order: a zone lock (<see cref="CaptureZone{TColor}.Lock"/>) is always acquired before any lock of the screen capture,
+/// and the library never acquires a zone lock while holding one of its own locks.
+/// It's therefore safe to call any method of the screen capture while holding a zone lock.
+/// </remarks>
 public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     where TColor : unmanaged, IColor<TColor>
 {
+    #region Constants
+
+    // Zone counts up to this use a stack buffer for the per-capture "updated" flags; more fall back to the ArrayPool.
+    private const int UPDATED_STACKALLOC_THRESHOLD = 32;
+
+    #endregion
+
     #region Properties & Fields
 
     private bool _isDisposed;
 
+    // Guards all changes to the zone set and to zone positions/sizes. Acquired after a zone lock, never before.
+    private readonly Lock _captureZonesLock = new();
+
+    // Copy-on-write: replaced (never modified) under _captureZonesLock, so a capture can walk it without a lock.
+    private CaptureZone<TColor>[] _captureZones = [];
+
     /// <summary>
-    /// Gets a list of <see cref="CaptureZone{TColor}"/> registered on this ScreenCapture.
+    /// Gets a snapshot of the <see cref="CaptureZone{TColor}"/> registered on this ScreenCapture.
     /// </summary>
-    protected HashSet<CaptureZone<TColor>> CaptureZones { get; } = new();
+    /// <remarks>
+    /// The snapshot doesn't change when zones are registered or unregistered later.
+    /// </remarks>
+    // ReSharper disable once InconsistentlySynchronizedField
+    protected IReadOnlyList<CaptureZone<TColor>> CaptureZones => Volatile.Read(ref _captureZones);
 
     /// <inheritdoc />
     public Display Display { get; }
@@ -66,20 +89,50 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             result = false;
         }
 
-        lock (CaptureZones)
-            foreach (CaptureZone<TColor> captureZone in CaptureZones.Where(x => x.AutoUpdate || x.IsUpdateRequested))
-            {
-                try
-                {
-                    PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
-                    captureZone.SetUpdated();
-                }
-                catch { /* */ }
-            }
+        // ReSharper disable once InconsistentlySynchronizedField
+        CaptureZone<TColor>[] captureZones = Volatile.Read(ref _captureZones);
+        if (captureZones.Length > 0)
+        {
+            // Every slot is written before it's read. If an update throws, the rented array is simply not returned, which the pool tolerates.
+            bool[]? rented = null;
+            Span<bool> updated = captureZones.Length <= UPDATED_STACKALLOC_THRESHOLD
+                                     ? stackalloc bool[UPDATED_STACKALLOC_THRESHOLD]
+                                     : (rented = ArrayPool<bool>.Shared.Rent(captureZones.Length));
+            
+            for (int i = 0; i < captureZones.Length; i++)
+                updated[i] = TryUpdateCaptureZone(captureZones[i]);
+
+            // Raised after the loop and without holding any lock, so handlers can (un)register or update zones and lock other zones.
+            for (int i = 0; i < captureZones.Length; i++)
+                if (updated[i])
+                    captureZones[i].RaiseUpdated();
+
+            if (rented != null)
+                ArrayPool<bool>.Shared.Return(rented);
+        }
 
         OnUpdated(result);
 
         return result;
+    }
+
+    private bool TryUpdateCaptureZone(CaptureZone<TColor> captureZone)
+    {
+        if (!captureZone.AutoUpdate && !captureZone.IsUpdateRequested) return false;
+
+        try
+        {
+            using (captureZone.Lock())
+                PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
+
+            captureZone.ResetUpdateRequest();
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -91,6 +144,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <summary>
     /// Performs an update of the given capture zone.
     /// </summary>
+    /// <remarks>
+    /// Called with the lock of <paramref name="captureZone"/> held, so its position, size and buffer don't change during the update.
+    /// The zone might have been unregistered since the capture started.
+    /// </remarks>
     /// <param name="captureZone">The capture zone to update.</param>
     /// <param name="buffer">The buffer containing the current pixel-data of the capture zone.</param>
     protected abstract void PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<byte> buffer);
@@ -116,7 +173,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        lock (CaptureZones)
+        lock (_captureZonesLock)
         {
             ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
 
@@ -125,7 +182,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             (width, height, downscaleLevel) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
 
             CaptureZone<TColor> captureZone = new(Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight);
-            CaptureZones.Add(captureZone);
+            Volatile.Write(ref _captureZones, [.. _captureZones, captureZone]);
 
             return captureZone;
         }
@@ -186,7 +243,18 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        return CaptureZones.Remove(captureZone);
+        lock (_captureZonesLock)
+        {
+            int index = Array.IndexOf(_captureZones, captureZone);
+            if (index < 0) return false;
+
+            CaptureZone<TColor>[] captureZones = new CaptureZone<TColor>[_captureZones.Length - 1];
+            _captureZones.AsSpan(0, index).CopyTo(captureZones);
+            _captureZones.AsSpan(index + 1).CopyTo(captureZones.AsSpan(index));
+            Volatile.Write(ref _captureZones, captureZones);
+
+            return true;
+        }
     }
 
     /// <inheritdoc />
@@ -199,9 +267,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        lock (CaptureZones)
+        // Zone lock first (see the lock order in the class remarks): the zone doesn't change while a capture updates it.
+        using (captureZone.Lock())
+        lock (_captureZonesLock)
         {
-            if (!CaptureZones.Contains(captureZone))
+            if (Array.IndexOf(_captureZones, captureZone) < 0)
                 throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));
 
             int newX = x ?? captureZone.X;

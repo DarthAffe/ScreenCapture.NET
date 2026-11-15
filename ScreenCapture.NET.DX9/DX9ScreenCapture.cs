@@ -98,13 +98,10 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         if (_buffer == null) return;
 
-        using IDisposable @lock = captureZone.Lock();
-        {
-            if (captureZone.DownscaleLevel == 0)
-                CopyZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
-            else
-                DownscaleZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
-        }
+        if (captureZone.DownscaleLevel == 0)
+            CopyZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
+        else
+            DownscaleZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

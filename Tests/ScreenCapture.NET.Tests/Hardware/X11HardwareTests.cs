@@ -59,6 +59,20 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    public void ZonesCanBeChangedWhileCapturing()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZonesCanBeChangedWhileCapturing(service);
+    }
+
+    [TestMethod]
+    public void DownscaledZonesCanBeChangedWhileCapturing()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZonesCanBeChangedWhileCapturing(service, downscaleLevel: 2);
+    }
+
+    [TestMethod]
     public void PartialZonesMatchFullScreen()
     {
         using X11ScreenCaptureService service = new();

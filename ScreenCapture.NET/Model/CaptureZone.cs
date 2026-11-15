@@ -155,14 +155,15 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public void RequestUpdate() => IsUpdateRequested = true;
 
-    /// <summary>
-    /// Marks the <see cref="CaptureZone{T}"/> as updated.
-    /// </summary>
-    internal void SetUpdated()
-    {
-        IsUpdateRequested = false;
+    internal void ResetUpdateRequest() => IsUpdateRequested = false;
 
-        Updated?.Invoke(this, EventArgs.Empty);
+    internal void RaiseUpdated()
+    {
+        try
+        {
+            Updated?.Invoke(this, EventArgs.Empty);
+        }
+        catch { /* that's not our fault ... */ }
     }
 
     internal void Resize(int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)

@@ -6,6 +6,15 @@ namespace ScreenCapture.NET.Tests;
 
 internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 {
+    #region Properties & Fields
+
+    /// <summary>
+    /// Called at the start of every zone update (with the zone lock held).
+    /// </summary>
+    public Action<CaptureZone<ColorARGB>>? ZoneUpdating { get; set; }
+
+    #endregion
+
     #region Constructors
 
     public TestScreenCapture(Rotation rotation = Rotation.None)
@@ -20,6 +29,8 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 
     protected override void PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
     {
+        ZoneUpdating?.Invoke(captureZone);
+
         Span<ColorARGB> pixels = MemoryMarshal.Cast<byte, ColorARGB>(buffer);
 
         for (int y = 0; y < captureZone.Height; y++)

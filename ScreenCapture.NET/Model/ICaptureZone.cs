@@ -86,6 +86,11 @@ public interface ICaptureZone
     /// <summary>
     /// Locks the image for use. Unlock by disposing the returned disposable.
     /// </summary>
+    /// <remarks>
+    /// While the lock is held, the zone isn't updated by a capture and its position, size and buffer don't change.
+    /// Any method of the <see cref="IScreenCapture"/> can be called while holding the lock, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
+    /// Keep the lock short: a capture waits for it.
+    /// </remarks>
     /// <returns>The disposable used to unlock the image.</returns>
     IDisposable Lock();
 
