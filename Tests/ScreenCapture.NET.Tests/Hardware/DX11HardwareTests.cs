@@ -1,4 +1,8 @@
+using System.Reflection;
 using System.Runtime.Versioning;
+using HPPH;
+using SharpGen.Runtime;
+using Vortice.DXGI;
 
 namespace ScreenCapture.NET.Tests.Hardware;
 
@@ -84,5 +88,36 @@ public sealed class DX11HardwareTests
     {
         using DX11ScreenCaptureService service = new();
         HardwareTestHelper.AssertDisposeIsRepeatable(service);
+    }
+
+    [TestMethod]
+    public void FailedRestartLeavesNoDisposedObjects()
+    {
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        // The output doesn't exist, so every restart fails after the device was created.
+        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        using DX11ScreenCapture screenCapture = new(factory!, display);
+        AssertNoDirectXObjects(screenCapture);
+
+        // Zones can be registered while the capture isn't running; they're filled once it (re)starts.
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(0, 0, 64, 64);
+
+        Assert.IsFalse(screenCapture.CaptureScreen());
+        AssertNoDirectXObjects(screenCapture);
+
+        Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
+    }
+
+    private static void AssertNoDirectXObjects(DX11ScreenCapture screenCapture)
+    {
+        // The factory belongs to the service.
+        List<FieldInfo> fields = [.. typeof(DX11ScreenCapture).GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+                                                              .Where(f => typeof(CppObject).IsAssignableFrom(f.FieldType) && (f.Name != "_factory"))];
+        Assert.IsGreaterThanOrEqualTo(4, fields.Count, "DirectX fields not found.");
+
+        foreach (FieldInfo field in fields)
+            Assert.IsNull(field.GetValue(screenCapture), $"{field.Name} wasn't reset.");
     }
 }

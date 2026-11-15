@@ -50,7 +50,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private readonly IDXGIFactory1 _factory;
 
-    private IDXGIOutput? _output;
     private IDXGIOutputDuplication? _duplicatedOutput;
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
@@ -212,14 +211,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         return true;
     }
 
-    /// <inheritdoc />
-    protected override void ValidateCaptureZoneAndThrow(int x, int y, int width, int height, int downscaleLevel)
-    {
-        if (_device == null) throw new InvalidOperationException("ScreenCapture isn't initialized.");
-
-        base.ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
-    }
-
     private SourceBox GetSourceBox(CaptureZone<ColorBGRA> captureZone)
         => DX11ZoneLayout.GetSourceBox(Display.Rotation, Display.Width, Display.Height,
                                        captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
@@ -291,8 +282,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                     D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
                     _context = _device!.ImmediateContext;
 
-                    _output = adapter.GetOutput(Display.Index) ?? throw new InvalidOperationException("Couldn't get DirectX-Output.");
-                    using IDXGIOutput5 output = _output.QueryInterface<IDXGIOutput5>();
+                    using IDXGIOutput dxgiOutput = adapter.GetOutput(Display.Index) ?? throw new InvalidOperationException("Couldn't get DirectX-Output.");
+                    using IDXGIOutput5 output = dxgiOutput.QueryInterface<IDXGIOutput5>();
 
                     int width = Display.Width;
                     int height = Display.Height;
@@ -344,19 +335,15 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private void DisposeDX()
     {
-        try
-        {
-            try { _duplicatedOutput?.Dispose(); } catch { /**/ }
-            try { _output?.Dispose(); } catch { /**/ }
-            try { _context?.Dispose(); } catch { /**/ }
-            try { _device?.Dispose(); } catch { /**/ }
-            try { _captureTexture?.Dispose(); } catch { /**/ }
+        try { _duplicatedOutput?.Dispose(); } catch { /**/ }
+        try { _captureTexture?.Dispose(); } catch { /**/ }
+        try { _context?.Dispose(); } catch { /**/ }
+        try { _device?.Dispose(); } catch { /**/ }
 
-            _duplicatedOutput = null;
-            _context = null;
-            _captureTexture = null;
-        }
-        catch { /**/ }
+        _duplicatedOutput = null;
+        _captureTexture = null;
+        _context = null;
+        _device = null;
     }
 
     #endregion
