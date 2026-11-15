@@ -63,7 +63,7 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     /// <inheritdoc />
     protected override bool ReleaseHandle()
     {
-        X11.XCloseDisplay(handle);
+        _ = X11.XCloseDisplay(handle);
 
         // Only after closing: XCloseDisplay flushes pending requests, and their errors must not reach Xlib's default handler.
         if (_errors != null)

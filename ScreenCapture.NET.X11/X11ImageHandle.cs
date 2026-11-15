@@ -93,7 +93,7 @@ internal sealed class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
     /// <inheritdoc />
     protected override bool ReleaseHandle()
     {
-        X11.XDestroyImage(handle);
+        _ = X11.XDestroyImage(handle);
         return true;
     }
 
