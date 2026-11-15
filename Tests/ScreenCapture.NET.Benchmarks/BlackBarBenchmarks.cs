@@ -6,8 +6,7 @@ namespace ScreenCapture.NET.Benchmarks;
 
 /// <summary>
 /// <c>RemoveBlackBars</c> on all three overloads.
-/// FullHD contains a letterboxed 2.39:1 picture (black bars top and bottom),
-/// DualWQHD a pillarboxed 16:9 picture (black bars left and right).
+/// See <see cref="BlackBarScene"/> for the frames.
 /// </summary>
 [SimpleJob(RuntimeMoniker.Net10_0)]
 [HtmlExporter]
@@ -18,8 +17,20 @@ public class BlackBarBenchmarks
 
     private const int THRESHOLD = 5;
 
-    [Params(Resolution.FullHD, Resolution.DualWQHD)]
-    public Resolution Resolution { get; set; }
+    public enum BlackBarScene
+    {
+        /// <summary>1920x1080 with a 2.39:1 picture: black bars top and bottom.</summary>
+        FullHDLetterbox,
+
+        /// <summary>5120x1440 with a 16:9 picture: 1280 px black bars left and right.</summary>
+        DualWQHDPillarbox,
+
+        /// <summary>5120x1440 with a 2.37:1 (21:9) picture: 853 px black bars left and right, not a multiple of the 64 px column strips.</summary>
+        DualWQHDCinema
+    }
+
+    [Params(BlackBarScene.FullHDLetterbox, BlackBarScene.DualWQHDPillarbox, BlackBarScene.DualWQHDCinema)]
+    public BlackBarScene Scene { get; set; }
 
     private Image<ColorBGRA>? _image;
 
@@ -30,11 +41,14 @@ public class BlackBarBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        (int width, int height) = BenchmarkHelper.GetSize(Resolution);
+        (int width, int height) = BenchmarkHelper.GetSize(Scene == BlackBarScene.FullHDLetterbox ? Resolution.FullHD : Resolution.DualWQHD);
 
-        (int contentWidth, int contentHeight) = Resolution == Resolution.FullHD
-                                                    ? (width, (int)(width / 2.39))
-                                                    : ((height * 16) / 9, height);
+        (int contentWidth, int contentHeight) = Scene switch
+        {
+            BlackBarScene.FullHDLetterbox => (width, (int)(width / 2.39)),
+            BlackBarScene.DualWQHDPillarbox => ((height * 16) / 9, height),
+            _ => ((int)(height * 2.37), height)
+        };
 
         byte[] content = BenchmarkHelper.CreateFrame(contentWidth, contentHeight, contentWidth * 4);
         byte[] frame = new byte[width * height * 4];
@@ -56,7 +70,7 @@ public class BlackBarBenchmarks
     [Benchmark]
     public int Image()
     {
-        RefImage<ColorBGRA> result = _image!.RemoveBlackBars(THRESHOLD);
+        Image<ColorBGRA> result = _image!.RemoveBlackBars(THRESHOLD);
         return result.Width + result.Height;
     }
 
