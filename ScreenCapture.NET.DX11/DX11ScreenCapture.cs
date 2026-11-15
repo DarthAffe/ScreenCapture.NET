@@ -144,26 +144,24 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             if (!_textures.TryGetValue(captureZone, out ZoneTextures? textures)) return;
 
+            // The zone was resized but its textures aren't recreated yet (UpdateCaptureZone does that right after the resize).
+            if (!textures.FitsSizeOf(captureZone)) return;
+
+            Box sourceBox = textures.Source.ToBox();
             if (textures.ScalingTexture != null)
             {
-                _context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, _captureTexture, 0,
-                                               new Box(textures.X, textures.Y, 0,
-                                                       textures.X + textures.UnscaledWidth,
-                                                       textures.Y + textures.UnscaledHeight, 1));
+                _context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
                 _context.GenerateMips(textures.ScalingTextureView);
-                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, captureZone.DownscaleLevel);
+                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, textures.DownscaleLevel);
             }
             else
-                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, _captureTexture, 0,
-                                               new Box(textures.X, textures.Y, 0,
-                                                       textures.X + textures.UnscaledWidth,
-                                                       textures.Y + textures.UnscaledHeight, 1));
+                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
 
             MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
 
             using IDisposable @lock = captureZone.Lock();
             {
-                ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.Height);
+                ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
                 CopyRotateHelper.Copy(Display.Rotation, source, mapSource.RowPitch, captureZone.Width, captureZone.Height, buffer);
             }
 
@@ -208,16 +206,16 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         base.UpdateCaptureZone(captureZone, x, y, width, height, downscaleLevel);
 
-        //TODO DarthAffe 01.05.2022: For now just reinitialize the zone in that case, but this could be optimized to only recreate the textures needed.
-        if ((width != null) || (height != null) || (downscaleLevel != null))
+        lock (_textures)
         {
-            lock (_textures)
+            if (!_textures.TryGetValue(captureZone, out ZoneTextures? textures)) return;
+
+            if (textures.FitsSizeOf(captureZone))
+                textures.Source = DX11ZoneLayout.GetSourceBox(Display.Rotation, captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+            else
             {
-                if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
-                {
-                    textures.Dispose();
-                    InitializeCaptureZone(captureZone);
-                }
+                textures.Dispose();
+                InitializeCaptureZone(captureZone);
             }
         }
     }
@@ -232,31 +230,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private void InitializeCaptureZone(CaptureZone<ColorBGRA> captureZone)
     {
-        int x;
-        int y;
-        int width;
-        int height;
-        int unscaledWidth;
-        int unscaledHeight;
-
-        if (captureZone.Display.Rotation is Rotation.Rotate90 or Rotation.Rotate270)
-        {
-            x = captureZone.Y;
-            y = captureZone.X;
-            width = captureZone.Height;
-            height = captureZone.Width;
-            unscaledWidth = captureZone.UnscaledHeight;
-            unscaledHeight = captureZone.UnscaledWidth;
-        }
-        else
-        {
-            x = captureZone.X;
-            y = captureZone.Y;
-            width = captureZone.Width;
-            height = captureZone.Height;
-            unscaledWidth = captureZone.UnscaledWidth;
-            unscaledHeight = captureZone.UnscaledHeight;
-        }
+        Rotation rotation = captureZone.Display.Rotation;
+        SourceBox source = DX11ZoneLayout.GetSourceBox(rotation, captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+        (int width, int height) = DX11ZoneLayout.GetTextureSize(rotation, captureZone.Width, captureZone.Height);
 
         Texture2DDescription stagingTextureDesc = new()
         {
@@ -282,8 +258,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 CPUAccessFlags = CpuAccessFlags.None,
                 BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                 Format = Format.B8G8R8A8_UNorm,
-                Width = unscaledWidth,
-                Height = unscaledHeight,
+                Width = source.Width,
+                Height = source.Height,
                 MiscFlags = ResourceOptionFlags.GenerateMips,
                 MipLevels = captureZone.DownscaleLevel + 1,
                 ArraySize = 1,
@@ -294,7 +270,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
         }
 
-        _textures[captureZone] = new ZoneTextures(x, y, width, height, unscaledWidth, unscaledHeight, stagingTexture, scalingTexture, scalingTextureView);
+        _textures[captureZone] = new ZoneTextures(captureZone.UnscaledWidth, captureZone.UnscaledHeight, captureZone.DownscaleLevel, height, source,
+                                                  stagingTexture, scalingTexture, scalingTextureView);
     }
 
     /// <inheritdoc />
@@ -391,12 +368,20 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         #region Properties & Fields
 
-        public int X { get; }
-        public int Y { get; }
-        public int Width { get; }
-        public int Height { get; }
+        // The zone size (display orientation) the textures were created for.
         public int UnscaledWidth { get; }
         public int UnscaledHeight { get; }
+        public int DownscaleLevel { get; }
+
+        /// <summary>
+        /// The height of the staging texture (texture orientation).
+        /// </summary>
+        public int StagingHeight { get; }
+
+        /// <summary>
+        /// The region of the duplicated texture the zone is copied from. Updated when the zone moves.
+        /// </summary>
+        public SourceBox Source { get; set; }
 
         public ID3D11Texture2D StagingTexture { get; }
         public ID3D11Texture2D? ScalingTexture { get; }
@@ -406,15 +391,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         #region Constructors
 
-        public ZoneTextures(int x, int y, int width, int height, int unscaledWidth, int unscaledHeight,
+        public ZoneTextures(int unscaledWidth, int unscaledHeight, int downscaleLevel, int stagingHeight, SourceBox source,
                             ID3D11Texture2D stagingTexture, ID3D11Texture2D? scalingTexture, ID3D11ShaderResourceView? scalingTextureView)
         {
-            this.X = x;
-            this.Y = y;
-            this.Width = width;
-            this.Height = height;
             this.UnscaledWidth = unscaledWidth;
             this.UnscaledHeight = unscaledHeight;
+            this.DownscaleLevel = downscaleLevel;
+            this.StagingHeight = stagingHeight;
+            this.Source = source;
             this.StagingTexture = stagingTexture;
             this.ScalingTexture = scalingTexture;
             this.ScalingTextureView = scalingTextureView;
@@ -423,6 +407,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         #endregion
 
         #region Methods
+
+        /// <summary>
+        /// Checks if the textures were created for the current size and downscale level of <paramref name="captureZone"/>.
+        /// </summary>
+        public bool FitsSizeOf(CaptureZone<ColorBGRA> captureZone)
+            => (captureZone.UnscaledWidth == UnscaledWidth) && (captureZone.UnscaledHeight == UnscaledHeight) && (captureZone.DownscaleLevel == DownscaleLevel);
 
         public void Dispose()
         {

@@ -35,4 +35,18 @@ public sealed class DX11HardwareTests
         using DX11ScreenCaptureService service = new();
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center, downscaleLevel: 2);
     }
+
+    [TestMethod]
+    public void MovedZoneCapturesNewPosition()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service);
+    }
+
+    [TestMethod]
+    public void MovedDownscaledZoneCapturesNewPosition()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service, downscaleLevel: 2);
+    }
 }
