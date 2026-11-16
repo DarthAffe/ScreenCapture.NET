@@ -102,7 +102,7 @@ public sealed class DX11HardwareTests
         AssertNoDirectXObjects(screenCapture);
 
         // Zones can be registered while the capture isn't running; they're filled once it (re)starts.
-        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(0, 0, 64, 64);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         Assert.IsFalse(screenCapture.CaptureScreen());
         AssertNoDirectXObjects(screenCapture);
@@ -124,7 +124,7 @@ public sealed class DX11HardwareTests
         using IDXGIFactory1 _ = factory!;
 
         using DX11ScreenCapture screenCapture = new(factory!, display, useNewDuplicationAdapter: true);
-        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
 
         HardwareTestHelper.CaptureFrame(screenCapture);
 

@@ -111,14 +111,14 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void CopyZone(ReadOnlySpan<byte> frame, int frameWidth, int frameHeight, int frameStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.X, captureZone.Y, captureZone.Width, captureZone.Height]
+        RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.Region.X, captureZone.Region.Y, captureZone.Width, captureZone.Height]
                            .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void DownscaleZone(ReadOnlySpan<byte> frame, int frameWidth, int frameHeight, int frameStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight];
+        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.Region.X, captureZone.Region.Y, captureZone.Region.Width, captureZone.Region.Height];
         Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         int blockSize = 1 << captureZone.DownscaleLevel;

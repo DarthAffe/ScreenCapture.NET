@@ -32,10 +32,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <inheritdoc />
-    public int X { get; internal set; }
-
-    /// <inheritdoc />
-    public int Y { get; internal set; }
+    public CaptureRegion Region { get; private set; }
 
     /// <inheritdoc />
     public int Width { get; private set; }
@@ -52,12 +49,6 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     /// <inheritdoc />
     public int DownscaleLevel { get; private set; }
-
-    /// <inheritdoc />
-    public int UnscaledWidth { get; private set; }
-
-    /// <inheritdoc />
-    public int UnscaledHeight { get; private set; }
 
     /// <inheritdoc />
     public bool IsDoubleBuffered { get; }
@@ -83,24 +74,18 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// Initializes a new instance of the <see cref="CaptureZone{T}"/> class.
     /// </summary>
     /// <param name="display">The <see cref="Display"/> this zone is on.</param>
-    /// <param name="x">The x-location of the region on the screen.</param>
-    /// <param name="y">The y-location of the region on the screen.</param>
-    /// <param name="width">The width of the region on the screen.</param>
-    /// <param name="height">The height of the region on the screen.</param>
+    /// <param name="region">The region on the display.</param>
+    /// <param name="width">The width of the captured pixels (after downscaling).</param>
+    /// <param name="height">The height of the captured pixels (after downscaling).</param>
     /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory.</param>
-    /// <param name="unscaledWidth">The original width of the region.</param>
-    /// <param name="unscaledHeight">The original height of the region.</param>
     /// <param name="doubleBuffered">Whether the capture writes a second buffer instead of waiting for frames.</param>
-    internal CaptureZone(Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight, bool doubleBuffered)
+    internal CaptureZone(Display display, CaptureRegion region, int width, int height, int downscaleLevel, bool doubleBuffered)
     {
         this.Display = display;
-        this.X = x;
-        this.Y = y;
+        this.Region = region;
         this.Width = width;
         this.Height = height;
         this.DownscaleLevel = downscaleLevel;
-        this.UnscaledWidth = unscaledWidth;
-        this.UnscaledHeight = unscaledHeight;
         this.IsDoubleBuffered = doubleBuffered;
 
         _front = new ZoneBuffer(Width, Height, Stride);
@@ -228,13 +213,12 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         catch { /* that's not our fault ... */ }
     }
 
-    internal void Resize(int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
+    internal void Update(CaptureRegion region, int width, int height, int downscaleLevel)
     {
+        Region = region;
         Width = width;
         Height = height;
         DownscaleLevel = downscaleLevel;
-        UnscaledWidth = unscaledWidth;
-        UnscaledHeight = unscaledHeight;
     }
 
     #endregion

@@ -18,13 +18,12 @@ public sealed class CaptureZoneSizeTests
     {
         using TestScreenCapture screenCapture = new();
 
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, width, height, downscaleLevel);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, width, height), downscaleLevel);
 
         Assert.AreEqual(expectedWidth, zone.Width);
         Assert.AreEqual(expectedHeight, zone.Height);
         Assert.AreEqual(expectedDownscaleLevel, zone.DownscaleLevel);
-        Assert.AreEqual(width, zone.UnscaledWidth);
-        Assert.AreEqual(height, zone.UnscaledHeight);
+        Assert.AreEqual(new CaptureRegion(0, 0, width, height), zone.Region);
     }
 
     [TestMethod]
@@ -32,7 +31,7 @@ public sealed class CaptureZoneSizeTests
     {
         using TestScreenCapture screenCapture = new();
 
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(10, 20, 101, 51, 1);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(10, 20, 101, 51), 1);
 
         Assert.AreEqual(zone.Width * ColorARGB.ColorFormat.BytesPerPixel, zone.Stride);
         using CaptureFrame<ColorARGB> frame = zone.Lock();
@@ -45,7 +44,7 @@ public sealed class CaptureZoneSizeTests
     {
         using TestScreenCapture screenCapture = new();
 
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, screenCapture.Display.Width, screenCapture.Display.Height);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, screenCapture.Display.Width, screenCapture.Display.Height));
 
         Assert.AreEqual(screenCapture.Display.Width, zone.Width);
         Assert.AreEqual(screenCapture.Display.Height, zone.Height);
@@ -56,10 +55,9 @@ public sealed class CaptureZoneSizeTests
     {
         using TestScreenCapture screenCapture = new();
 
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(screenCapture.Display.Width - 1, screenCapture.Display.Height - 1, 1, 1);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(screenCapture.Display.Width - 1, screenCapture.Display.Height - 1, 1, 1));
 
-        Assert.AreEqual(screenCapture.Display.Width - 1, zone.X);
-        Assert.AreEqual(screenCapture.Display.Height - 1, zone.Y);
+        Assert.AreEqual(new CaptureRegion(screenCapture.Display.Width - 1, screenCapture.Display.Height - 1, 1, 1), zone.Region);
     }
 
     [TestMethod]
@@ -77,6 +75,6 @@ public sealed class CaptureZoneSizeTests
     {
         using TestScreenCapture screenCapture = new();
 
-        Assert.ThrowsExactly<ArgumentException>(() => screenCapture.RegisterCaptureZone(x, y, width, height));
+        Assert.ThrowsExactly<ArgumentException>(() => screenCapture.RegisterCaptureZone(new CaptureRegion(x, y, width, height)));
     }
 }

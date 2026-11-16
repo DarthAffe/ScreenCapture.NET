@@ -181,22 +181,20 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc />
-    ICaptureZone IScreenCapture.RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel, bool doubleBuffered) => RegisterCaptureZone(x, y, width, height, downscaleLevel, doubleBuffered);
+    ICaptureZone IScreenCapture.RegisterCaptureZone(CaptureRegion region, int downscaleLevel, bool doubleBuffered) => RegisterCaptureZone(region, downscaleLevel, doubleBuffered);
 
     /// <inheritdoc cref="IScreenCapture.RegisterCaptureZone" />
-    public virtual CaptureZone<TColor> RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0, bool doubleBuffered = true)
+    public virtual CaptureZone<TColor> RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0, bool doubleBuffered = true)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         lock (_captureZonesLock)
         {
-            ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
+            ValidateCaptureZoneAndThrow(region, downscaleLevel);
 
-            int unscaledWidth = width;
-            int unscaledHeight = height;
-            (width, height, downscaleLevel) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
+            (int width, int height, downscaleLevel) = CalculateScaledSize(region.Width, region.Height, downscaleLevel);
 
-            CaptureZone<TColor> captureZone = new(Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight, doubleBuffered);
+            CaptureZone<TColor> captureZone = new(Display, region, width, height, downscaleLevel, doubleBuffered);
             Volatile.Write(ref _captureZones, [.. _captureZones, captureZone]);
 
             return captureZone;
@@ -206,20 +204,17 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <summary>
     /// Validates the given values of a capture zone.
     /// </summary>
-    /// <param name="x">The X-location of the zone.</param>
-    /// <param name="y">The Y-location of the zone.</param>
-    /// <param name="width">The width of the zone.</param>
-    /// <param name="height">The height of the zone.</param>
+    /// <param name="region">The region of the zone on the display.</param>
     /// <param name="downscaleLevel">The downscale-level of the zone.</param>
     /// <exception cref="ArgumentException">Throws if some of the provided data is not valid.</exception>
-    protected virtual void ValidateCaptureZoneAndThrow(int x, int y, int width, int height, int downscaleLevel)
+    protected virtual void ValidateCaptureZoneAndThrow(CaptureRegion region, int downscaleLevel)
     {
-        if (x < 0) throw new ArgumentException("x < 0");
-        if (y < 0) throw new ArgumentException("y < 0");
-        if (width <= 0) throw new ArgumentException("with <= 0");
-        if (height <= 0) throw new ArgumentException("height <= 0");
-        if ((x + width) > Display.Width) throw new ArgumentException("x + width > Display width");
-        if ((y + height) > Display.Height) throw new ArgumentException("y + height > Display height");
+        if (region.X < 0) throw new ArgumentException("x < 0");
+        if (region.Y < 0) throw new ArgumentException("y < 0");
+        if (region.Width <= 0) throw new ArgumentException("with <= 0");
+        if (region.Height <= 0) throw new ArgumentException("height <= 0");
+        if ((region.X + region.Width) > Display.Width) throw new ArgumentException("x + width > Display width");
+        if ((region.Y + region.Height) > Display.Height) throw new ArgumentException("y + height > Display height");
     }
 
     /// <summary>
@@ -273,11 +268,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc />
-    void IScreenCapture.UpdateCaptureZone(ICaptureZone captureZone, int? x, int? y, int? width, int? height, int? downscaleLevel)
-        => UpdateCaptureZone(captureZone as CaptureZone<TColor> ?? throw new ArgumentException("Invalid capture-zone."), x, y, width, height, downscaleLevel);
+    void IScreenCapture.UpdateCaptureZone(ICaptureZone captureZone, CaptureRegion? region, int? downscaleLevel)
+        => UpdateCaptureZone(captureZone as CaptureZone<TColor> ?? throw new ArgumentException("Invalid capture-zone."), region, downscaleLevel);
 
     /// <inheritdoc cref="IScreenCapture.UpdateCaptureZone" />
-    public virtual void UpdateCaptureZone(CaptureZone<TColor> captureZone, int? x = null, int? y = null, int? width = null, int? height = null, int? downscaleLevel = null)
+    public virtual void UpdateCaptureZone(CaptureZone<TColor> captureZone, CaptureRegion? region = null, int? downscaleLevel = null)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
@@ -290,22 +285,13 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 if (Array.IndexOf(_captureZones, captureZone) < 0)
                     throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));
 
-                int newX = x ?? captureZone.X;
-                int newY = y ?? captureZone.Y;
-                int newUnscaledWidth = width ?? captureZone.UnscaledWidth;
-                int newUnscaledHeight = height ?? captureZone.UnscaledHeight;
+                CaptureRegion newRegion = region ?? captureZone.Region;
                 int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
 
-                ValidateCaptureZoneAndThrow(newX, newY, newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
+                ValidateCaptureZoneAndThrow(newRegion, newDownscaleLevel);
 
-                captureZone.X = newX;
-                captureZone.Y = newY;
-
-                if ((width != null) || (height != null) || (downscaleLevel != null))
-                {
-                    (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
-                    captureZone.Resize(newWidth, newHeight, newDownscaleLevel, newUnscaledWidth, newUnscaledHeight);
-                }
+                (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newRegion.Width, newRegion.Height, newDownscaleLevel);
+                captureZone.Update(newRegion, newWidth, newHeight, newDownscaleLevel);
             }
     }
 

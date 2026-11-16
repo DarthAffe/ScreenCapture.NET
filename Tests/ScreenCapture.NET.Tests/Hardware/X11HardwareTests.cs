@@ -97,7 +97,7 @@ public sealed class X11HardwareTests
         X11ScreenCapture screenCapture = new(display);
         AssertNoHandles(screenCapture);
 
-        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(0, 0, 64, 64);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         for (int i = 0; i < 3; i++)
             Assert.IsFalse(screenCapture.CaptureScreen());
@@ -122,8 +122,8 @@ public sealed class X11HardwareTests
         using X11ScreenCaptureService service = new();
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
         IScreenCapture screenCapture = service.GetScreenCapture(display);
-        screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
-        screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height, downscaleLevel: 2);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height), downscaleLevel: 2);
         HardwareTestHelper.CaptureFrame(screenCapture);
 
         using CancellationTokenSource cancellation = new();
@@ -214,7 +214,7 @@ public sealed class X11HardwareTests
         // XGetImage fails with BadMatch because the image would be larger than the screen.
         Display display = new(realDisplay.Index, realDisplay.DeviceName, realDisplay.Width + 16, realDisplay.Height, Rotation.None, graphicsCard);
         using X11ScreenCapture screenCapture = new(display);
-        screenCapture.RegisterCaptureZone(0, 0, 64, 64);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         for (int i = 0; i < 3; i++)
             Assert.IsFalse(screenCapture.CaptureScreen());
@@ -271,7 +271,7 @@ public sealed class X11NoServerTests
 
         // The capture doesn't throw: it fails and tries to reconnect on every call.
         using X11ScreenCapture screenCapture = new(new Display(0, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0)));
-        screenCapture.RegisterCaptureZone(0, 0, 64, 64);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         Assert.IsFalse(screenCapture.CaptureScreen());
         Assert.IsFalse(screenCapture.CaptureScreen());

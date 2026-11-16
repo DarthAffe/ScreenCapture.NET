@@ -29,9 +29,9 @@ public sealed class CaptureFrameTests
     {
         using TestScreenCapture screenCapture = new();
 
-        Assert.IsTrue(screenCapture.RegisterCaptureZone(0, 0, 16, 8).IsDoubleBuffered);
-        Assert.AreEqual(doubleBuffered, screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered).IsDoubleBuffered);
-        Assert.AreEqual(doubleBuffered, ((IScreenCapture)screenCapture).RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered).IsDoubleBuffered);
+        Assert.IsTrue(screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8)).IsDoubleBuffered);
+        Assert.AreEqual(doubleBuffered, screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered).IsDoubleBuffered);
+        Assert.AreEqual(doubleBuffered, ((IScreenCapture)screenCapture).RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered).IsDoubleBuffered);
     }
 
     [TestMethod]
@@ -40,7 +40,7 @@ public sealed class CaptureFrameTests
     public void HeldFrameDoesNotBlockCaptureOfDoubleBufferedZone(bool nonGeneric)
     {
         using TestScreenCapture screenCapture = new() { Pattern = (_, _) => COLOR_A };
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         int updates = 0;
@@ -74,7 +74,7 @@ public sealed class CaptureFrameTests
     public void FrameHeldAcrossTwoCapturesMakesTheZoneSkipOne()
     {
         using TestScreenCapture screenCapture = new() { Pattern = (_, _) => COLOR_A };
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         zone.AutoUpdate = false;
         zone.RequestUpdate();
         screenCapture.CaptureScreen();
@@ -118,7 +118,7 @@ public sealed class CaptureFrameTests
     public void DisposingTwiceReleasesOnlyOnceInDoubleBufferedZone()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         int updates = 0;
         zone.Updated += (_, _) => updates++;
@@ -147,7 +147,7 @@ public sealed class CaptureFrameTests
     public void HeldFrameBlocksCaptureOfSingleBufferedZone()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: false);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
 
         int updates = 0;
         screenCapture.ZoneUpdating = _ => Interlocked.Increment(ref updates);
@@ -175,7 +175,7 @@ public sealed class CaptureFrameTests
     public void NonGenericFrameHoldsTheLockOfSingleBufferedZone()
     {
         using TestScreenCapture screenCapture = new();
-        ICaptureZone zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: false);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
 
         CaptureFrame frame = zone.Lock();
         try
@@ -194,7 +194,7 @@ public sealed class CaptureFrameTests
     public void DisposingTwiceReleasesOnlyOnceInSingleBufferedZone()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: false);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
 
         CaptureFrame<ColorARGB> outer = zone.Lock();
         try
@@ -222,7 +222,7 @@ public sealed class CaptureFrameTests
     public void UpdateWithoutPixelsKeepsTheZone(bool doubleBuffered)
     {
         using TestScreenCapture screenCapture = new() { Pattern = (_, _) => COLOR_A };
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
         screenCapture.CaptureScreen();
 
         int updates = 0;
@@ -241,7 +241,7 @@ public sealed class CaptureFrameTests
     public void FrameShowsCapturedPixels()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         using CaptureFrame<ColorARGB> frame = zone.Lock();
@@ -267,7 +267,7 @@ public sealed class CaptureFrameTests
     public void CopyImageIsACopy(bool doubleBuffered)
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
         screenCapture.CaptureScreen();
 
         Image<ColorARGB> image;
@@ -302,12 +302,12 @@ public sealed class CaptureFrameTests
     public void FrameKeepsItsSizeWhenTheZoneIsResized(bool doubleBuffered)
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
         screenCapture.CaptureScreen();
 
         using (CaptureFrame<ColorARGB> frame = zone.Lock())
         {
-            screenCapture.UpdateCaptureZone(zone, width: 32, height: 4);
+            screenCapture.UpdateCaptureZone(zone, zone.Region with { Width = 32, Height = 4 });
 
             Assert.AreEqual((32, 4), (zone.Width, zone.Height));
             Assert.AreEqual((16, 8, 16 * 4), (frame.Width, frame.Height, frame.Stride));
@@ -334,7 +334,7 @@ public sealed class CaptureFrameTests
     public void NonGenericFrameGivesTypedAccess()
     {
         using TestScreenCapture screenCapture = new();
-        ICaptureZone zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         using CaptureFrame frame = zone.Lock();

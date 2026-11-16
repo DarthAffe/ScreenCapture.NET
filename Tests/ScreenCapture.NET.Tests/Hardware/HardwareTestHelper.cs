@@ -42,7 +42,7 @@ internal static class HardwareTestHelper
         IScreenCapture screenCapture = service.GetScreenCapture(display);
 
         (int x, int y, int width, int height) = region(display);
-        ICaptureZone zone = screenCapture.RegisterCaptureZone(x, y, width, height, downscaleLevel);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(x, y, width, height), downscaleLevel);
 
         int updates = 0;
         zone.Updated += (_, _) => updates++;
@@ -79,12 +79,12 @@ internal static class HardwareTestHelper
         const int size = 64;
         (int centerX, int centerY) = ((display.Width - size) / 2, (display.Height - size) / 2);
 
-        ICaptureZone moved = screenCapture.RegisterCaptureZone(0, 0, size, size, downscaleLevel);
+        ICaptureZone moved = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, size, size), downscaleLevel);
         CaptureFrame(screenCapture);
 
-        screenCapture.UpdateCaptureZone(moved, x: centerX, y: centerY);
-        ICaptureZone reference = screenCapture.RegisterCaptureZone(centerX, centerY, size, size, downscaleLevel);
-        ICaptureZone topLeft = screenCapture.RegisterCaptureZone(0, 0, size, size, downscaleLevel);
+        screenCapture.UpdateCaptureZone(moved, moved.Region with { X = centerX, Y = centerY });
+        ICaptureZone reference = screenCapture.RegisterCaptureZone(new CaptureRegion(centerX, centerY, size, size), downscaleLevel);
+        ICaptureZone topLeft = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, size, size), downscaleLevel);
 
         // No new frame needed: the zones are updated from the last captured frame even if this returns false (e.g. on a static desktop).
         screenCapture.CaptureScreen();
@@ -117,7 +117,7 @@ internal static class HardwareTestHelper
 
         (_, Display display) = GetFirstDisplay(service);
         IScreenCapture screenCapture = service.GetScreenCapture(display);
-        ICaptureZone zone = screenCapture.RegisterCaptureZone(0, 0, 64, 64, downscaleLevel);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64), downscaleLevel);
         CaptureFrame(screenCapture);
 
         using CancellationTokenSource cancellation = new();
@@ -136,10 +136,10 @@ internal static class HardwareTestHelper
             for (int i = 0; i < iterations; i++)
             {
                 using (zone.Lock())
-                    screenCapture.UpdateCaptureZone(zone, x: i % 100, width: 64 + (i % 2));
+                    screenCapture.UpdateCaptureZone(zone, zone.Region with { X = i % 100, Width = 64 + (i % 2) });
 
                 using (zone.Lock())
-                    screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(0, 0, 32, 32, downscaleLevel));
+                    screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 32, 32), downscaleLevel));
             }
         }, TaskCreationOptions.LongRunning);
 
@@ -181,8 +181,8 @@ internal static class HardwareTestHelper
                 (width / 2, height / 3, 1, height / 2)
             ];
 
-            ICaptureZone fullScreen = screenCapture.RegisterCaptureZone(0, 0, width, height);
-            ICaptureZone[] zones = [.. regions.Select(r => screenCapture.RegisterCaptureZone(r.x, r.y, r.width, r.height))];
+            ICaptureZone fullScreen = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, width, height));
+            ICaptureZone[] zones = [.. regions.Select(r => screenCapture.RegisterCaptureZone(new CaptureRegion(r.x, r.y, r.width, r.height)))];
 
             CaptureFrame(screenCapture);
 
@@ -286,7 +286,7 @@ internal static class HardwareTestHelper
     private static ColorBGRA[] CaptureFullScreen(IScreenCaptureService service, Display display)
     {
         IScreenCapture screenCapture = service.GetScreenCapture(display);
-        ICaptureZone zone = screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
 
         CaptureFrame(screenCapture);
         ColorBGRA[] pixels = GetPixels(zone);
@@ -327,7 +327,7 @@ internal static class HardwareTestHelper
     {
         (_, Display display) = GetFirstDisplay(service);
         IScreenCapture screenCapture = service.GetScreenCapture(display);
-        screenCapture.RegisterCaptureZone(0, 0, display.Width, display.Height);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
         CaptureFrame(screenCapture);
 
         screenCapture.Dispose();

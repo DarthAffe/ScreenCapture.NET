@@ -215,12 +215,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private SourceBox GetSourceBox(CaptureZone<ColorBGRA> captureZone)
         => DX11ZoneLayout.GetSourceBox(Display.Rotation, Display.Width, Display.Height,
-                                       captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+                                       captureZone.Region.X, captureZone.Region.Y, captureZone.Region.Width, captureZone.Region.Height);
 
     private ZoneTextures CreateTextures(CaptureZone<ColorBGRA> captureZone)
     {
         // Textures only depend on the size, not on the position of the zone.
-        (int unscaledWidth, int unscaledHeight) = DX11ZoneLayout.GetTextureSize(Display.Rotation, captureZone.UnscaledWidth, captureZone.UnscaledHeight);
+        (int unscaledWidth, int unscaledHeight) = DX11ZoneLayout.GetTextureSize(Display.Rotation, captureZone.Region.Width, captureZone.Region.Height);
         (int width, int height) = DX11ZoneLayout.GetTextureSize(Display.Rotation, captureZone.Width, captureZone.Height);
 
         Texture2DDescription stagingTextureDesc = new()
@@ -259,7 +259,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
         }
 
-        return new ZoneTextures(captureZone.UnscaledWidth, captureZone.UnscaledHeight, captureZone.DownscaleLevel, height,
+        return new ZoneTextures(captureZone.Region.Width, captureZone.Region.Height, captureZone.DownscaleLevel, height,
                                 stagingTexture, scalingTexture, scalingTextureView);
     }
 
@@ -392,7 +392,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         /// Checks if the textures were created for the current size and downscale level of <paramref name="captureZone"/>.
         /// </summary>
         public bool FitsSizeOf(CaptureZone<ColorBGRA> captureZone)
-            => (captureZone.UnscaledWidth == UnscaledWidth) && (captureZone.UnscaledHeight == UnscaledHeight) && (captureZone.DownscaleLevel == DownscaleLevel);
+            => (captureZone.Region.Width == UnscaledWidth) && (captureZone.Region.Height == UnscaledHeight) && (captureZone.DownscaleLevel == DownscaleLevel);
 
         public void Dispose()
         {

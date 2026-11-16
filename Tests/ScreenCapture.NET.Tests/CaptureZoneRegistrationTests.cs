@@ -9,7 +9,7 @@ public sealed class CaptureZoneRegistrationTests
     public void CaptureUpdatesRegisteredZone()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         int updates = 0;
         zone.Updated += (_, _) => updates++;
@@ -42,7 +42,7 @@ public sealed class CaptureZoneRegistrationTests
     public void UnregisterReturnsWhetherZoneWasRegistered()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
         Assert.IsFalse(screenCapture.UnregisterCaptureZone(zone));
@@ -52,7 +52,7 @@ public sealed class CaptureZoneRegistrationTests
     public void UnregisteredZoneIsNotUpdated()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         int updates = 0;
         zone.Updated += (_, _) => updates++;
@@ -68,7 +68,7 @@ public sealed class CaptureZoneRegistrationTests
     {
         using TestScreenCapture screenCapture = new();
         using TestScreenCapture otherScreenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         Assert.IsFalse(otherScreenCapture.UnregisterCaptureZone(zone));
     }
@@ -77,7 +77,7 @@ public sealed class CaptureZoneRegistrationTests
     public void ZoneWithoutAutoUpdateIsOnlyUpdatedOnRequest()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         zone.AutoUpdate = false;
 
         int updates = 0;
@@ -103,7 +103,7 @@ public sealed class CaptureZoneRegistrationTests
         using TestScreenCapture screenCapture = new();
         IScreenCapture capture = screenCapture;
 
-        ICaptureZone zone = capture.RegisterCaptureZone(0, 0, 16, 8);
+        ICaptureZone zone = capture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         Assert.IsInstanceOfType<CaptureZone<ColorARGB>>(zone);
         Assert.AreEqual(ColorARGB.ColorFormat, zone.ColorFormat);
@@ -118,21 +118,21 @@ public sealed class CaptureZoneRegistrationTests
         ICaptureZone foreignZone = new ForeignCaptureZone();
 
         Assert.ThrowsExactly<ArgumentException>(() => capture.UnregisterCaptureZone(foreignZone));
-        Assert.ThrowsExactly<ArgumentException>(() => capture.UpdateCaptureZone(foreignZone, x: 0));
+        Assert.ThrowsExactly<ArgumentException>(() => capture.UpdateCaptureZone(foreignZone, new CaptureRegion(0, 0, 1, 1)));
     }
 
     [TestMethod]
     public void DisposedCaptureThrows()
     {
         TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         screenCapture.Dispose();
         screenCapture.Dispose(); // a second dispose is a no-op
 
         Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.CaptureScreen());
-        Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.RegisterCaptureZone(0, 0, 16, 8));
-        Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.UpdateCaptureZone(zone, x: 1));
+        Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8)));
+        Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.UpdateCaptureZone(zone, zone.Region with { X = 1 }));
         Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.UnregisterCaptureZone(zone));
         Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.Restart());
     }
@@ -141,14 +141,11 @@ public sealed class CaptureZoneRegistrationTests
     {
         public Display Display => default;
         public IColorFormat ColorFormat => ColorBGRA.ColorFormat;
-        public int X => 0;
-        public int Y => 0;
+        public CaptureRegion Region => new(0, 0, 1, 1);
         public int Width => 1;
         public int Height => 1;
         public int Stride => 4;
         public int DownscaleLevel => 0;
-        public int UnscaledWidth => 1;
-        public int UnscaledHeight => 1;
         public bool IsDoubleBuffered => true;
         public bool AutoUpdate { get; set; }
         public bool IsUpdateRequested => false;

@@ -21,8 +21,8 @@ public sealed class CaptureZoneThreadingTests
     public void ZoneEventsAreRaisedAfterAllZonesAreUpdated()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> first = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
-        CaptureZone<ColorARGB> second = screenCapture.RegisterCaptureZone(16, 0, 16, 8);
+        CaptureZone<ColorARGB> first = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+        CaptureZone<ColorARGB> second = screenCapture.RegisterCaptureZone(new CaptureRegion(16, 0, 16, 8));
 
         List<string> log = [];
         screenCapture.ZoneUpdating = zone => log.Add($"update {(zone == first ? "first" : "second")}");
@@ -38,7 +38,7 @@ public sealed class CaptureZoneThreadingTests
     public void SingleBufferedZoneCantBeLockedDuringItsUpdate()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: false);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
 
         bool? lockedByOtherThread = null;
         screenCapture.ZoneUpdating = z => lockedByOtherThread = Task.Run(() => { using (z.Lock()) { } }).Wait(TimeSpan.FromMilliseconds(100));
@@ -52,7 +52,7 @@ public sealed class CaptureZoneThreadingTests
     public void DoubleBufferedZoneShowsThePreviousPixelsDuringItsUpdate()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         ColorARGB other = new(255, 1, 2, 3);
@@ -79,16 +79,16 @@ public sealed class CaptureZoneThreadingTests
     public void HandlersCanChangeZones()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
-        CaptureZone<ColorARGB> other = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+        CaptureZone<ColorARGB> other = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         CaptureZone<ColorARGB>? added = null;
         zone.Updated += (_, _) =>
         {
             using (other.Lock())
-                screenCapture.UpdateCaptureZone(other, x: 8);
+                screenCapture.UpdateCaptureZone(other, other.Region with { X = 8 });
 
-            added = screenCapture.RegisterCaptureZone(0, 0, 4, 4);
+            added = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4));
             screenCapture.UnregisterCaptureZone(zone);
         };
         screenCapture.Updated += (_, _) => screenCapture.UnregisterCaptureZone(other);
@@ -96,7 +96,7 @@ public sealed class CaptureZoneThreadingTests
         Assert.IsTrue(screenCapture.CaptureScreen());
 
         Assert.IsNotNull(added);
-        Assert.AreEqual(8, other.X);
+        Assert.AreEqual(8, other.Region.X);
         Assert.IsFalse(screenCapture.UnregisterCaptureZone(zone));
         Assert.IsFalse(screenCapture.UnregisterCaptureZone(other));
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(added));
@@ -109,7 +109,7 @@ public sealed class CaptureZoneThreadingTests
 
         RunWhileCapturing(screenCapture, () =>
         {
-            CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+            CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
             Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
         }, threads: 4);
     }
@@ -121,16 +121,16 @@ public sealed class CaptureZoneThreadingTests
     public void ZoneCanBeChangedWhileHoldingItsLock()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         int i = 0;
         RunWhileCapturing(screenCapture, () =>
         {
             using (zone.Lock())
-                screenCapture.UpdateCaptureZone(zone, x: i++ % 10, width: 16 + (i % 2));
+                screenCapture.UpdateCaptureZone(zone, zone.Region with { X = i++ % 10, Width = 16 + (i % 2) });
 
             using (zone.Lock())
-                screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(0, 0, 4, 4));
+                screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4)));
         });
     }
 
@@ -144,7 +144,7 @@ public sealed class CaptureZoneThreadingTests
     public void FramesNeverTear(bool doubleBuffered)
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
 
         int captureNumber = 0;
         ColorARGB color = default;
@@ -165,7 +165,7 @@ public sealed class CaptureZoneThreadingTests
         Task resize = Task.Factory.StartNew(() =>
         {
             for (int i = 0; !cancellation.IsCancellationRequested; i++)
-                screenCapture.UpdateCaptureZone(zone, width: 16 << (i % 2), height: 8 << (i % 2));
+                screenCapture.UpdateCaptureZone(zone, zone.Region with { Width = 16 << (i % 2), Height = 8 << (i % 2) });
         }, TaskCreationOptions.LongRunning);
 
         try

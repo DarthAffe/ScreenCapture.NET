@@ -19,22 +19,20 @@ public interface ICaptureZone
     IColorFormat ColorFormat { get; }
 
     /// <summary>
-    /// Gets the x-location of the region on the screen.
+    /// Gets the region of the display this zone captures, in display pixels (before downscaling).
     /// </summary>
-    int X { get; }
+    /// <remarks>
+    /// Change it with <see cref="IScreenCapture.UpdateCaptureZone"/>, e.g. <c>screenCapture.UpdateCaptureZone(zone, zone.Region with { X = 100 })</c>.
+    /// </remarks>
+    CaptureRegion Region { get; }
 
     /// <summary>
-    /// Gets the y-location of the region on the screen.
-    /// </summary>
-    int Y { get; }
-
-    /// <summary>
-    /// Gets the width of the captured region.
+    /// Gets the width of the captured pixels (the width of <see cref="Region"/> after downscaling).
     /// </summary>
     int Width { get; }
 
     /// <summary>
-    /// Gets the height of the captured region.
+    /// Gets the height of the captured pixels (the height of <see cref="Region"/> after downscaling).
     /// </summary>
     int Height { get; }
 
@@ -47,16 +45,6 @@ public interface ICaptureZone
     /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
     /// </summary>
     int DownscaleLevel { get; }
-
-    /// <summary>
-    /// Gets the original width of the region (this equals <see cref="Width"/> if <see cref="DownscaleLevel"/> is 0).
-    /// </summary>
-    int UnscaledWidth { get; }
-
-    /// <summary>
-    /// Gets the original height of the region (this equals <see cref="Height"/> if <see cref="DownscaleLevel"/> is 0).
-    /// </summary>
-    int UnscaledHeight { get; }
 
     /// <summary>
     /// Gets if the capture writes a second buffer while frames of this zone are held, instead of waiting for them.

@@ -107,14 +107,14 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void CopyZone(RefImage<ColorBGRA> image, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        image[captureZone.X, captureZone.Y, captureZone.Width, captureZone.Height]
+        image[captureZone.Region.X, captureZone.Region.Y, captureZone.Width, captureZone.Height]
             .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void DownscaleZone(RefImage<ColorBGRA> image, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
-        RefImage<ColorBGRA> source = image[captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight];
+        RefImage<ColorBGRA> source = image[captureZone.Region.X, captureZone.Region.Y, captureZone.Region.Width, captureZone.Region.Height];
         Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
 
         int blockSize = 1 << captureZone.DownscaleLevel;

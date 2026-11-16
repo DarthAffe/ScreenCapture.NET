@@ -43,7 +43,7 @@ public class CpuZoneBenchmarks
         _frame = BenchmarkHelper.CreateFrame(_width, _height, _stride);
 
         _capture = new BenchmarkScreenCapture(_width, _height);
-        _zone = _capture.RegisterCaptureZone(0, 0, _width, _height, DownscaleLevel);
+        _zone = _capture.RegisterCaptureZone(new CaptureRegion(0, 0, _width, _height), DownscaleLevel);
         _buffer = new byte[_zone.Stride * _zone.Height];
     }
 
