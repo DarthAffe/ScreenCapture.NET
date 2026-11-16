@@ -128,8 +128,8 @@ public sealed class DX11HardwareTests
 
         HardwareTestHelper.CaptureFrame(screenCapture);
 
-        using (zone.Lock())
-            Assert.IsTrue(zone.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
+        using CaptureFrame<ColorBGRA> frame = zone.Lock();
+        Assert.IsTrue(frame.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
     }
 
     private static void AssertNoDirectXObjects(DX11ScreenCapture screenCapture)

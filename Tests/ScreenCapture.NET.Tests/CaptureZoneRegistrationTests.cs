@@ -17,13 +17,11 @@ public sealed class CaptureZoneRegistrationTests
         Assert.IsTrue(screenCapture.CaptureScreen());
 
         Assert.AreEqual(1, updates);
-        using (zone.Lock())
-        {
-            ReadOnlySpan<ColorARGB> pixels = zone.Pixels;
-            for (int y = 0; y < zone.Height; y++)
-                for (int x = 0; x < zone.Width; x++)
-                    Assert.AreEqual(TestScreenCapture.GetColorFromLocation(x, y), pixels[(y * zone.Width) + x]);
-        }
+        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        ReadOnlySpan<ColorARGB> pixels = frame.Pixels;
+        for (int y = 0; y < frame.Height; y++)
+            for (int x = 0; x < frame.Width; x++)
+                Assert.AreEqual(TestScreenCapture.GetColorFromLocation(x, y), pixels[(y * frame.Width) + x]);
     }
 
     [TestMethod]
@@ -151,13 +149,10 @@ public sealed class CaptureZoneRegistrationTests
         public int DownscaleLevel => 0;
         public int UnscaledWidth => 1;
         public int UnscaledHeight => 1;
-        public ReadOnlySpan<byte> RawBuffer => [];
-        public IImage Image => throw new NotSupportedException();
         public bool AutoUpdate { get; set; }
         public bool IsUpdateRequested => false;
         public event EventHandler? Updated { add { } remove { } }
-        public IDisposable Lock() => throw new NotSupportedException();
+        public CaptureFrame Lock() => throw new NotSupportedException();
         public void RequestUpdate() { }
-        public RefImage<T> GetRefImage<T>() where T : unmanaged, IColor<T> => throw new NotSupportedException();
     }
 }

@@ -93,7 +93,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             Span<bool> updated = captureZones.Length <= UPDATED_STACKALLOC_THRESHOLD
                                      ? stackalloc bool[UPDATED_STACKALLOC_THRESHOLD]
                                      : (rented = ArrayPool<bool>.Shared.Rent(captureZones.Length));
-            
+
             for (int i = 0; i < captureZones.Length; i++)
                 updated[i] = TryUpdateCaptureZone(captureZones[i]);
 
@@ -117,7 +117,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
         try
         {
-            using (captureZone.Lock())
+            using (captureZone.EnterLockScope())
                 PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
 
             captureZone.ResetUpdateRequest();
@@ -263,29 +263,29 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         // Zone lock first (see the lock order in the class remarks): the zone doesn't change while a capture updates it.
-        using (captureZone.Lock())
-        lock (_captureZonesLock)
-        {
-            if (Array.IndexOf(_captureZones, captureZone) < 0)
-                throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));
-
-            int newX = x ?? captureZone.X;
-            int newY = y ?? captureZone.Y;
-            int newUnscaledWidth = width ?? captureZone.UnscaledWidth;
-            int newUnscaledHeight = height ?? captureZone.UnscaledHeight;
-            int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
-
-            ValidateCaptureZoneAndThrow(newX, newY, newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
-
-            captureZone.X = newX;
-            captureZone.Y = newY;
-
-            if ((width != null) || (height != null) || (downscaleLevel != null))
+        using (captureZone.EnterLockScope())
+            lock (_captureZonesLock)
             {
-                (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
-                captureZone.Resize(newWidth, newHeight, newDownscaleLevel, newUnscaledWidth, newUnscaledHeight);
+                if (Array.IndexOf(_captureZones, captureZone) < 0)
+                    throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));
+
+                int newX = x ?? captureZone.X;
+                int newY = y ?? captureZone.Y;
+                int newUnscaledWidth = width ?? captureZone.UnscaledWidth;
+                int newUnscaledHeight = height ?? captureZone.UnscaledHeight;
+                int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
+
+                ValidateCaptureZoneAndThrow(newX, newY, newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
+
+                captureZone.X = newX;
+                captureZone.Y = newY;
+
+                if ((width != null) || (height != null) || (downscaleLevel != null))
+                {
+                    (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newUnscaledWidth, newUnscaledHeight, newDownscaleLevel);
+                    captureZone.Resize(newWidth, newHeight, newDownscaleLevel, newUnscaledWidth, newUnscaledHeight);
+                }
             }
-        }
     }
 
     /// <inheritdoc />

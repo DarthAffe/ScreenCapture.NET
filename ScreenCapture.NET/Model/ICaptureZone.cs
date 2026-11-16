@@ -59,16 +59,6 @@ public interface ICaptureZone
     int UnscaledHeight { get; }
 
     /// <summary>
-    /// Gets the raw buffer of this zone.
-    /// </summary>
-    ReadOnlySpan<byte> RawBuffer { get; }
-
-    /// <summary>
-    /// Gets the <see cref="IImage"/> represented by the buffer of this zone.
-    /// </summary>
-    IImage Image { get; }
-
-    /// <summary>
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>
     bool AutoUpdate { get; set; }
@@ -84,26 +74,20 @@ public interface ICaptureZone
     event EventHandler? Updated;
 
     /// <summary>
-    /// Locks the image for use. Unlock by disposing the returned disposable.
+    /// Locks the zone and returns its current pixels. Unlock by disposing the returned frame.
     /// </summary>
     /// <remarks>
     /// While the lock is held, the zone isn't updated by a capture and its position, size and buffer don't change.
-    /// Any method of the <see cref="IScreenCapture"/> can be called while holding the lock, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
+    /// Any method of the <see cref="IScreenCapture"/> can be called while holding the lock, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone
+    /// (the frame keeps showing the zone as it was when it was locked).
     /// Keep the lock short: a capture waits for it.
     /// </remarks>
-    /// <returns>The disposable used to unlock the image.</returns>
-    IDisposable Lock();
+    /// <returns>The frame holding the lock.</returns>
+    CaptureFrame Lock();
 
     /// <summary>
     /// Requests to update this <see cref="ICaptureZone"/> when the next frame is captured.
     /// Only necessary if <see cref="AutoUpdate"/> is set to <c>false</c>.
     /// </summary>
     void RequestUpdate();
-
-    /// <summary>
-    /// Gets a <see cref="RefImage{TColor}"/>. Basically the same as <see cref="Image"/> but with better performance if the color-layout is known.
-    /// </summary>
-    /// <typeparam name="TColor">The color used by the buffer of this zone.</typeparam>
-    /// <returns>The <see cref="RefImage{TColor}"/> representing this zone.</returns>
-    RefImage<TColor> GetRefImage<TColor>() where TColor : unmanaged, IColor<TColor>;
 }

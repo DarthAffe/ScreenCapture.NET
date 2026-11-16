@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests.Hardware;
@@ -59,10 +58,10 @@ internal static class HardwareTestHelper
         Assert.AreEqual(width >> zone.DownscaleLevel, zone.Width);
         Assert.AreEqual(height >> zone.DownscaleLevel, zone.Height);
 
-        using (zone.Lock())
+        using (CaptureFrame frame = zone.Lock())
         {
-            Assert.AreEqual(zone.Stride * zone.Height, zone.RawBuffer.Length);
-            Assert.IsTrue(zone.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
+            Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);
+            Assert.IsTrue(frame.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
         }
 
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
@@ -93,9 +92,9 @@ internal static class HardwareTestHelper
         byte[] movedPixels;
         byte[] referencePixels;
         byte[] topLeftPixels;
-        using (moved.Lock()) movedPixels = moved.RawBuffer.ToArray();
-        using (reference.Lock()) referencePixels = reference.RawBuffer.ToArray();
-        using (topLeft.Lock()) topLeftPixels = topLeft.RawBuffer.ToArray();
+        using (CaptureFrame frame = moved.Lock()) movedPixels = frame.RawBuffer.ToArray();
+        using (CaptureFrame frame = reference.Lock()) referencePixels = frame.RawBuffer.ToArray();
+        using (CaptureFrame frame = topLeft.Lock()) topLeftPixels = frame.RawBuffer.ToArray();
 
         screenCapture.UnregisterCaptureZone(moved);
         screenCapture.UnregisterCaptureZone(reference);
@@ -298,11 +297,9 @@ internal static class HardwareTestHelper
 
     private static ColorBGRA[] GetPixels(ICaptureZone zone)
     {
-        using (zone.Lock())
-        {
-            Assert.AreEqual(ColorBGRA.ColorFormat, zone.ColorFormat, "Only BGRA zones are supported.");
-            return [.. MemoryMarshal.Cast<byte, ColorBGRA>(zone.RawBuffer)];
-        }
+        using CaptureFrame frame = zone.Lock();
+        Assert.AreEqual(ColorBGRA.ColorFormat, frame.ColorFormat, "Only BGRA zones are supported.");
+        return frame.AsRefImage<ColorBGRA>().ToArray();
     }
 
     private static ColorBGRA[] Crop(ColorBGRA[] pixels, int stride, int x, int y, int width, int height)

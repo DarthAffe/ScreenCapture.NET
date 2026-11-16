@@ -9,9 +9,3 @@ dotnet_diagnostic.CA1034.severity = none
 # CA1031: Do not catch general exception types
 # Intentional: capturing, restarting and disposing must never throw into the caller's capture loop.
 dotnet_diagnostic.CA1031.severity = none
-
-# --- Temporary suppressions, each removed by the step that fixes the underlying design ---
-
-# CA1721: Property names should not match get methods (CaptureZone.RefImage vs. GetRefImage)
-# TODO: Re-enable with step 4.1 (GetRefImage is removed).
-dotnet_diagnostic.CA1721.severity = none

@@ -1,6 +1,4 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using HPPH;
 
 namespace ScreenCapture.NET.Tests;
 
@@ -29,23 +27,6 @@ public sealed class DisposalTests
         Assert.IsEmpty(typesWithFinalizer, $"Types with a finalizer: {string.Join(", ", typesWithFinalizer)}");
     }
 
-    /// <summary>
-    /// A zone lock that's never disposed must not crash the process when it's collected
-    /// (the old finalizer released the lock on the finalizer thread, which throws <see cref="SynchronizationLockException"/>).
-    /// </summary>
-    [TestMethod]
-    public void AbandonedZoneLockIsCollectedWithoutCrash()
-    {
-        using TestScreenCapture screenCapture = new();
-        WeakReference abandonedLock = LockWithoutDispose(screenCapture.RegisterCaptureZone(0, 0, 16, 8));
-
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        Assert.IsFalse(abandonedLock.IsAlive);
-    }
-
     [TestMethod]
     public void DisposeOverrideRunsOnce()
     {
@@ -57,9 +38,6 @@ public sealed class DisposalTests
         Assert.AreEqual(1, screenCapture.Disposals);
         Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.CaptureScreen());
     }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WeakReference LockWithoutDispose(CaptureZone<ColorARGB> zone) => new(zone.Lock());
 
     /// <summary>
     /// Follows the pattern documented on <see cref="AbstractScreenCapture{TColor}.Dispose(bool)"/>.

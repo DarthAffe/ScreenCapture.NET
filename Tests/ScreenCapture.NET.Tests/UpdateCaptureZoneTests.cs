@@ -26,7 +26,10 @@ public sealed class UpdateCaptureZoneTests
         Assert.AreEqual(width, zone.Width, "Width");
         Assert.AreEqual(height, zone.Height, "Height");
         Assert.AreEqual(downscaleLevel, zone.DownscaleLevel, "DownscaleLevel");
-        Assert.AreEqual(zone.Stride * zone.Height, zone.RawBuffer.Length, "Buffer size");
+
+        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        Assert.AreEqual((zone.Width, zone.Height, zone.Stride), (frame.Width, frame.Height, frame.Stride), "Frame size");
+        Assert.AreEqual(zone.Stride * zone.Height, frame.RawBuffer.Length, "Buffer size");
     }
 
     [TestMethod]

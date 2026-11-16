@@ -2,7 +2,6 @@
 
 using System;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 using HPPH;
 
@@ -56,40 +55,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public int UnscaledHeight { get; private set; }
 
-    internal byte[] InternalBuffer { get; set; }
-
-    /// <inheritdoc />
-    public ReadOnlySpan<byte> RawBuffer
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => InternalBuffer;
-    }
-
-    /// <summary>
-    /// Gets the pixel-data of this zone.
-    /// </summary>
-    public ReadOnlySpan<TColor> Pixels
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => MemoryMarshal.Cast<byte, TColor>(RawBuffer);
-    }
-
-    /// <summary>
-    /// Gets an <see cref="Image{TColor}"/> wrapping the buffer of this zone.
-    /// </summary>
-    public Image<TColor> Image => Image<TColor>.Wrap(InternalBuffer, Width, Height, Stride);
-
-    /// <inheritdoc />
-    IImage ICaptureZone.Image => Image;
-
-    /// <summary>
-    /// Gets a <see cref="RefImage{TColor}"/>.
-    /// </summary>
-    public RefImage<TColor> RefImage
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => RefImage<TColor>.Wrap(RawBuffer, Width, Height, Stride);
-    }
+    // Only read or replaced with _lock held.
+    internal byte[] InternalBuffer { get; private set; }
 
     /// <inheritdoc />
     public bool AutoUpdate { get; set; } = true;
@@ -137,20 +104,42 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     #region Methods
 
-    /// <inheritdoc />
-    public RefImage<T> GetRefImage<T>()
-        where T : unmanaged, IColor<T>
+    /// <summary>
+    /// Locks the zone and returns its current pixels. Unlock by disposing the returned frame.
+    /// </summary>
+    /// <remarks>
+    /// While the lock is held, the zone isn't updated by a capture and its position, size and buffer don't change.
+    /// Any method of the <see cref="IScreenCapture"/> can be called while holding the lock, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone
+    /// (the frame keeps showing the zone as it was when it was locked).
+    /// Keep the lock short: a capture waits for it.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// using (CaptureFrame&lt;ColorBGRA&gt; frame = zone.Lock())
+    /// {
+    ///     ReadOnlySpan&lt;ColorBGRA&gt; pixels = frame.Pixels;
+    ///     // ...
+    /// }
+    /// </code>
+    /// </example>
+    /// <returns>The frame holding the lock.</returns>
+    public CaptureFrame<TColor> Lock()
     {
-        if (typeof(T) != typeof(TColor)) throw new ArgumentException("The requested Color-Format does not match the data.", nameof(T));
-        return RefImage<T>.Wrap(RawBuffer, Width, Height, Stride);
+        Lock.Scope scope = _lock.EnterScope();
+        return new CaptureFrame<TColor>(scope, InternalBuffer, Width, Height, Stride);
     }
 
     /// <inheritdoc />
-    public IDisposable Lock()
+    CaptureFrame ICaptureZone.Lock()
     {
-        _lock.Enter();
-        return new UnlockDisposable(_lock);
+        Lock.Scope scope = _lock.EnterScope();
+        return new CaptureFrame(scope, ColorDispatcher<TColor>.Instance, InternalBuffer, Width, Height, Stride);
     }
+
+    /// <summary>
+    /// Locks the zone without creating a frame (for the capture and zone changes).
+    /// </summary>
+    internal Lock.Scope EnterLockScope() => _lock.EnterScope();
 
     /// <inheritdoc />
     public void RequestUpdate() => IsUpdateRequested = true;
@@ -180,34 +169,4 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     #endregion
-
-    private sealed class UnlockDisposable : IDisposable
-    {
-        #region Properties & Fields
-
-        private bool _disposed;
-        private readonly Lock _lock;
-
-        #endregion
-
-        #region Constructors
-
-        // ReSharper disable once ConvertToPrimaryConstructor
-        public UnlockDisposable(Lock @lock) => this._lock = @lock;
-
-        #endregion
-
-        #region Methods
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-
-            _lock.Exit();
-            _disposed = true;
-        }
-
-        #endregion
-    }
 }

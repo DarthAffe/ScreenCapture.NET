@@ -123,16 +123,16 @@ public sealed class CaptureZoneThreadingTests
         try
         {
             for (int i = 0; i < ITERATIONS; i++)
-                using (zone.Lock())
+                using (CaptureFrame<ColorARGB> frame = zone.Lock())
                 {
                     int width = zone.Width;
                     int height = zone.Height;
-                    int length = zone.RawBuffer.Length;
                     Thread.SpinWait(100);
 
                     Assert.AreEqual(width * 2, height * 4, "Width and height don't belong to the same size.");
-                    Assert.AreEqual((width, height, length), (zone.Width, zone.Height, zone.RawBuffer.Length), "The zone changed while it was locked.");
-                    Assert.AreEqual(zone.Stride * zone.Height, length);
+                    Assert.AreEqual((width, height), (zone.Width, zone.Height), "The zone changed while it was locked.");
+                    Assert.AreEqual((width, height), (frame.Width, frame.Height), "The frame doesn't match the locked zone.");
+                    Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);
                 }
         }
         finally
