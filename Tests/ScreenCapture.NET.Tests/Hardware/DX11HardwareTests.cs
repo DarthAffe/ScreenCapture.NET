@@ -147,6 +147,31 @@ public sealed class DX11HardwareTests
     }
 
     [TestMethod]
+    public void FailedRestartIsReported()
+    {
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        using DX11ScreenCapture screenCapture = new(factory!, display);
+
+        // The restart in the constructor failed already.
+        Exception? constructorError = screenCapture.LastError;
+        Assert.IsNotNull(constructorError);
+
+        List<Exception> errors = [];
+        screenCapture.ErrorOccurred += (_, e) => errors.Add(e.Exception);
+
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+
+        // The constructor's error first, then the one of the restart in this capture.
+        Assert.HasCount(2, errors);
+        Assert.AreSame(constructorError, errors[0]);
+        Assert.AreSame(screenCapture.LastError, errors[1]);
+        Assert.AreEqual(constructorError.GetType(), errors[1].GetType());
+    }
+
+    [TestMethod]
     public void CapturesWithDuplicateOutput1()
     {
         // DuplicateOutput1 only works in a per-monitor DPI aware (version 2) process.

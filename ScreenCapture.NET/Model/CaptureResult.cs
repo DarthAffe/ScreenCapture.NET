@@ -22,17 +22,18 @@ public enum CaptureResult
 
     /// <summary>
     /// The capture lost its source (e.g. a lost device, a display mode change, or an X server error) and restarted. The next call captures again.
+    /// The error that caused the restart is reported with <see cref="IScreenCapture.LastError"/>.
     /// </summary>
     Restarting,
 
     /// <summary>
     /// The capture can't run right now (e.g. the secure desktop of a UAC prompt or the lock screen is shown, or the X server can't be reached).
-    /// It tries to restart on the next call.
+    /// It tries to restart on the next call. <see cref="IScreenCapture.LastError"/> tells why the last restart failed.
     /// </summary>
     Unavailable,
 
     /// <summary>
-    /// An unexpected error stopped the capture.
+    /// An unexpected error stopped the capture (see <see cref="IScreenCapture.LastError"/>).
     /// </summary>
     Failed
 }

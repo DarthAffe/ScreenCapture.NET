@@ -78,10 +78,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
 
         display.Dispose();
 
-        string? displayName = Environment.GetEnvironmentVariable("DISPLAY");
-        throw new InvalidOperationException(string.IsNullOrEmpty(displayName)
-                                                ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, X11 capturing needs XWayland."
-                                                : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");
+        throw X11DisplayHandle.CreateOpenFailedException();
     }
 
     /// <inheritdoc />

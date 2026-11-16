@@ -1,4 +1,5 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System;
+using Microsoft.Win32.SafeHandles;
 
 namespace ScreenCapture.NET;
 
@@ -53,6 +54,17 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
             display.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Creates the exception for a connection that couldn't be opened (see <see cref="Open"/>).
+    /// </summary>
+    public static InvalidOperationException CreateOpenFailedException()
+    {
+        string? displayName = Environment.GetEnvironmentVariable("DISPLAY");
+        return new InvalidOperationException(string.IsNullOrEmpty(displayName)
+                                                 ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, X11 capturing needs XWayland."
+                                                 : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");
     }
 
     /// <summary>

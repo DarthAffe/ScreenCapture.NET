@@ -66,7 +66,10 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             // E.g. BadMatch if the screen got smaller than the image. Starting over picks up the current state.
             if ((result == 0) || (_display.LastError != null))
+            {
+                ReportError(new InvalidOperationException($"XGetSubImage failed{FormatXError(_display.LastError)}."));
                 return RestartCapture();
+            }
 
             // XGetSubImage has no change detection: every successful read counts as a new frame.
             return CaptureResult.NewFrame;
@@ -79,6 +82,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         return (_display != null) && (_image != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
     }
+
+    private static string FormatXError(X11Error? error) => error == null ? string.Empty : $" with {error}";
 
     /// <inheritdoc />
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
@@ -147,16 +152,19 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             try
             {
                 display = X11DisplayHandle.Open();
-                if (display.IsInvalid) return;
+                if (display.IsInvalid) throw X11DisplayHandle.CreateOpenFailedException();
 
                 // XScreenOfDisplay doesn't check the index.
-                if ((Display.Index < 0) || (Display.Index >= X11.XScreenCount(display))) return;
+                int screenCount = X11.XScreenCount(display);
+                if ((Display.Index < 0) || (Display.Index >= screenCount))
+                    throw new InvalidOperationException($"The X server has no screen {Display.Index} (it has {screenCount}).");
 
                 nint screen = X11.XScreenOfDisplay(display, Display.Index);
                 CULong drawable = X11.XRootWindowOfScreen(screen);
 
                 image = X11.XGetImage(display, drawable, 0, 0, (uint)Display.Width, (uint)Display.Height, X11.ALL_PLANES, X11.ZPIXMAP);
-                if (image.IsInvalid || (display.LastError != null)) return;
+                if (image.IsInvalid || (display.LastError != null))
+                    throw new InvalidOperationException($"XGetImage of the {Display.Width}x{Display.Height} screen failed{FormatXError(display.LastError)}.");
 
                 image.ReadDescription();
                 if (!image.IsBGRA) throw new NotSupportedException($"The X server uses an unsupported pixel format ({image.Format}). Only 32 bits per pixel with 8-bit BGR channels is supported.");
@@ -167,7 +175,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 display = null;
                 image = null;
             }
-            catch { /**/ }
+            catch (Exception ex) { ReportError(ex); }
             finally
             {
                 image?.Dispose();

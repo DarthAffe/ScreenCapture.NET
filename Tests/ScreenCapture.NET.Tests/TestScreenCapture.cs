@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests;
@@ -38,6 +39,16 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// </summary>
     public Exception? CaptureException { get; set; }
 
+    /// <summary>
+    /// Gets or sets an error reported (not thrown) by the next screen captures while they hold <see cref="CaptureLock"/>, like a backend that recovers from it.
+    /// </summary>
+    public Exception? ReportedCaptureError { get; set; }
+
+    /// <summary>
+    /// Gets the lock held by <see cref="PerformScreenCapture"/>, like the capture lock of a backend.
+    /// </summary>
+    public Lock CaptureLock { get; } = new();
+
     #endregion
 
     #region Constructors
@@ -52,11 +63,20 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 
     protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        if (CaptureException != null) throw CaptureException;
+        lock (CaptureLock)
+        {
+            if (CaptureException != null) throw CaptureException;
+            if (ReportedCaptureError != null) ReportError(ReportedCaptureError);
 
-        timestamp = Timestamp;
-        return Result;
+            timestamp = Timestamp;
+            return Result;
+        }
     }
+
+    /// <summary>
+    /// Reports an error outside of a capture, like a failed <see cref="AbstractScreenCapture{TColor}.Restart"/>.
+    /// </summary>
+    public void Report(Exception exception) => ReportError(exception);
 
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
     {

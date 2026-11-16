@@ -18,6 +18,27 @@ public interface IScreenCapture : IDisposable
     event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;
 
     /// <summary>
+    /// Gets the most recent error of the screen capture (e.g. why it's <see cref="CaptureResult.Unavailable"/>), or <c>null</c> if none occurred yet.
+    /// </summary>
+    /// <remarks>
+    /// The capture doesn't throw these errors: it recovers from them where it can and reports the outcome with <see cref="CaptureScreen"/>'s result.
+    /// This is set as soon as the error occurs and is never reset, so it's still set after the capture recovered.
+    /// Exceptions thrown by handlers of the <c>Updated</c>-events of the capture or its zones aren't reported.
+    /// </remarks>
+    Exception? LastError { get; }
+
+    /// <summary>
+    /// Occurs for every error reported by <see cref="LastError"/>, in order.
+    /// </summary>
+    /// <remarks>
+    /// Raised by <see cref="CaptureScreen"/> (on its thread, with no lock of the library held, before <see cref="Updated"/>) for all errors since the previous call.
+    /// Errors that occur outside of <see cref="CaptureScreen"/> (when the capture starts or in <see cref="Restart"/>) are raised by the next call,
+    /// so a handler added after creating the capture still gets them. If many errors occur without <see cref="CaptureScreen"/> being called, only the latest are kept.
+    /// Exceptions thrown by a handler are ignored.
+    /// </remarks>
+    event EventHandler<ScreenCaptureErrorEventArgs>? ErrorOccurred;
+
+    /// <summary>
     /// Attempts to capture the current frame shown on the <see cref="Display"/> and updates the zones.
     /// </summary>
     /// <returns>
@@ -78,5 +99,10 @@ public interface IScreenCapture : IDisposable
     /// <summary>
     /// Restarts the <see cref="IScreenCapture"/>.
     /// </summary>
+    /// <remarks>
+    /// A failed restart doesn't throw: the error is reported with <see cref="LastError"/> (and <see cref="ErrorOccurred"/>),
+    /// and <see cref="CaptureScreen"/> returns <see cref="CaptureResult.Unavailable"/> and tries again.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
     void Restart();
 }

@@ -23,11 +23,20 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     private const string NOT_REGISTERED_MESSAGE = "The capture zone is not registered to this screen capture.";
 
+    // Errors reported without a CaptureScreen call raising them (e.g. by repeated Restart calls) are dropped beyond this, oldest first.
+    private const int MAX_PENDING_ERRORS = 16;
+
     #endregion
 
     #region Properties & Fields
 
     private bool _isDisposed;
+
+    private Exception? _lastError;
+
+    // Guards _pendingErrors. A leaf lock, so errors can be reported while holding any other lock.
+    private readonly Lock _errorLock = new();
+    private readonly Queue<Exception> _pendingErrors = new();
 
     // Guards _frameNumber and _frameTimestamp, which always describe the same frame. A leaf lock.
     private readonly Lock _frameLock = new();
@@ -52,12 +61,18 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc />
     public Display Display { get; }
 
+    /// <inheritdoc />
+    public Exception? LastError => Volatile.Read(ref _lastError);
+
     #endregion
 
     #region Events
 
     /// <inheritdoc />
     public event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;
+
+    /// <inheritdoc />
+    public event EventHandler<ScreenCaptureErrorEventArgs>? ErrorOccurred;
 
     #endregion
 
@@ -88,8 +103,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             result = PerformScreenCapture(out timestamp);
         }
-        catch
+        catch (Exception ex)
         {
+            ReportError(ex);
             result = CaptureResult.Failed;
             timestamp = 0;
         }
@@ -129,9 +145,49 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 ArrayPool<bool>.Shared.Return(rented);
         }
 
+        RaisePendingErrors();
+
         OnUpdated(new ScreenCaptureUpdatedEventArgs(result, frameNumber, timestamp));
 
         return result;
+    }
+
+    // Raised here instead of where the errors occur: there the backends often hold their locks, and a handler that locks a zone
+    // could deadlock against a thread that holds a frame of that zone and calls into the capture.
+    private void RaisePendingErrors()
+    {
+        while (true)
+        {
+            Exception? error;
+            lock (_errorLock)
+                if (!_pendingErrors.TryDequeue(out error))
+                    return;
+
+            OnErrorOccurred(new ScreenCaptureErrorEventArgs(error));
+        }
+    }
+
+    /// <summary>
+    /// Reports an error the capture recovers from (or reports as its result) instead of throwing it.
+    /// </summary>
+    /// <remarks>
+    /// Sets <see cref="LastError"/> right away; <see cref="ErrorOccurred"/> is raised by the next <see cref="CaptureScreen"/>.
+    /// It can be called while holding any lock. Exceptions thrown by <see cref="PerformScreenCapture"/> and <see cref="PerformCaptureZoneUpdate"/> are reported by the base class.
+    /// </remarks>
+    /// <param name="exception">The error.</param>
+    protected void ReportError(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        Volatile.Write(ref _lastError, exception);
+
+        lock (_errorLock)
+        {
+            if (_pendingErrors.Count >= MAX_PENDING_ERRORS)
+                _pendingErrors.Dequeue();
+
+            _pendingErrors.Enqueue(exception);
+        }
     }
 
     private bool TryUpdateCaptureZone(CaptureZone<TColor> captureZone)
@@ -162,8 +218,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            ReportError(ex);
             return false;
         }
     }
@@ -172,7 +229,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Performs the actual screen capture.
     /// </summary>
     /// <remarks>
-    /// Exceptions are reported as <see cref="CaptureResult.Failed"/>.
+    /// Exceptions are reported (see <see cref="ReportError"/>) and returned as <see cref="CaptureResult.Failed"/>.
+    /// Errors the capture recovers from (e.g. by restarting) aren't thrown, but should be reported with <see cref="ReportError"/>.
     /// </remarks>
     /// <param name="timestamp">
     /// For <see cref="CaptureResult.NewFrame"/>: when the frame was shown, as a <see cref="Stopwatch"/> timestamp,
@@ -207,7 +265,20 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             Updated?.Invoke(this, args);
         }
-        catch { /**/ }
+        catch { /* Exceptions of handlers aren't errors of the capture. */ }
+    }
+
+    /// <summary>
+    /// Raises the <see cref="ErrorOccurred"/>-event.
+    /// </summary>
+    /// <param name="args">The error.</param>
+    protected virtual void OnErrorOccurred(ScreenCaptureErrorEventArgs args)
+    {
+        try
+        {
+            ErrorOccurred?.Invoke(this, args);
+        }
+        catch { /* Reporting it would raise the event again. */ }
     }
 
     /// <inheritdoc />

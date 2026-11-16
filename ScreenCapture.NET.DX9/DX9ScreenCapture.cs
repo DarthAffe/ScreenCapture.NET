@@ -79,6 +79,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
             catch (SharpGenException dxException) when (dxException.ResultCode == Result.AccessDenied)
             {
+                ReportError(dxException);
                 return RestartCapture();
             }
         }
@@ -90,7 +91,11 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             Restart();
         }
-        catch { Thread.Sleep(100); }
+        catch (Exception ex)
+        {
+            ReportError(ex);
+            Thread.Sleep(100);
+        }
 
         return (_device != null) && (_surface != null) && (_buffer != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
     }
@@ -156,9 +161,11 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 _stride = Display.Width * ColorBGRA.ColorFormat.BytesPerPixel;
                 _buffer = new byte[Display.Height * _stride];
             }
-            catch
+            catch (Exception ex)
             {
+                // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
                 DisposeDX();
+                ReportError(ex);
             }
         }
     }

@@ -101,6 +101,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                                                       || (dxException.ResultCode == ResultCode.AccessDenied)
                                                       || (dxException.ResultCode == ResultCode.InvalidCall))
             {
+                ReportError(dxException);
+
                 // AcquireFrame released the frame (if it got one) before the restart disposes the duplication.
                 return RestartCapture();
             }
@@ -140,7 +142,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 if (acquired)
                     duplicatedOutput.ReleaseFrame();
             }
-            catch { /**/ }
+            catch (Exception ex) { ReportError(ex); }
         }
     }
 
@@ -150,7 +152,11 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             Restart();
         }
-        catch { Thread.Sleep(100); }
+        catch (Exception ex)
+        {
+            ReportError(ex);
+            Thread.Sleep(100);
+        }
 
         return (_context != null) && (_duplicatedOutput != null) && (_captureTexture != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
     }
@@ -331,7 +337,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                     else
                         _duplicatedOutput = output.DuplicateOutput(_device);
                 }
-                catch { DisposeDX(); }
+                catch (Exception ex)
+                {
+                    // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
+                    DisposeDX();
+                    ReportError(ex);
+                }
             }
     }
 

@@ -103,6 +103,9 @@ public sealed class X11HardwareTests
             Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
         AssertNoHandles(screenCapture);
 
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, "no screen 99");
+
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
 
         screenCapture.Dispose();
@@ -219,6 +222,11 @@ public sealed class X11HardwareTests
         for (int i = 0; i < 3; i++)
             Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
         AssertNoHandles(screenCapture);
+
+        // BadMatch (8) for X_GetImage (73).
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, "XGetImage");
+        StringAssert.Contains(error.Message, "X error 8 (request 73");
     }
 
     private static void AssertNoHandles(X11ScreenCapture screenCapture)
@@ -275,5 +283,8 @@ public sealed class X11NoServerTests
 
         Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
         Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, "$DISPLAY");
     }
 }

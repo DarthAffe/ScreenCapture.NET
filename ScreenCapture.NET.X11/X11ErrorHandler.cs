@@ -12,7 +12,11 @@ namespace ScreenCapture.NET;
 /// <param name="ErrorCode">The error code, e.g. 8 (BadMatch).</param>
 /// <param name="RequestCode">The major opcode of the failed request, e.g. 73 (X_GetImage).</param>
 /// <param name="MinorCode">The minor opcode of the failed request.</param>
-internal sealed record X11Error(byte ErrorCode, byte RequestCode, byte MinorCode);
+internal sealed record X11Error(byte ErrorCode, byte RequestCode, byte MinorCode)
+{
+    /// <inheritdoc />
+    public override string ToString() => $"X error {ErrorCode} (request {RequestCode}, minor {MinorCode})";
+}
 
 /// <summary>
 /// The process-wide Xlib error handler (<c>XSetErrorHandler</c>).
