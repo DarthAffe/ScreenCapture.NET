@@ -84,56 +84,75 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     #region Methods
 
     /// <inheritdoc />
-    protected override bool PerformScreenCapture()
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        bool result = false;
+        timestamp = 0;
+
         lock (_captureLock)
         {
             if ((_context == null) || (_duplicatedOutput == null) || (_captureTexture == null))
-            {
-                Restart();
-                return false;
-            }
+                return RestartCapture();
 
             try
             {
-                IDXGIResource? screenResource = null;
-                try
-                {
-                    _duplicatedOutput.AcquireNextFrame(Timeout, out OutduplFrameInfo duplicateFrameInformation, out screenResource).CheckError();
-                    if ((screenResource == null) || (duplicateFrameInformation.LastPresentTime == 0)) return false;
-
-                    using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
-                    _context.CopySubresourceRegion(_captureTexture, 0, 0, 0, 0, screenTexture, 0);
-                }
-                finally
-                {
-                    try
-                    {
-                        screenResource?.Dispose();
-                        _duplicatedOutput?.ReleaseFrame();
-                    }
-                    catch { /**/ }
-                }
-
-                result = true;
+                return AcquireFrame(_duplicatedOutput, _context, _captureTexture, out timestamp);
             }
-            catch (SharpGenException dxException)
+            catch (SharpGenException dxException) when ((dxException.ResultCode == ResultCode.AccessLost)
+                                                      || (dxException.ResultCode == ResultCode.AccessDenied)
+                                                      || (dxException.ResultCode == ResultCode.InvalidCall))
             {
-                if ((dxException.ResultCode == ResultCode.AccessLost)
-                 || (dxException.ResultCode == ResultCode.AccessDenied)
-                 || (dxException.ResultCode == ResultCode.InvalidCall))
-                {
-                    try
-                    {
-                        Restart();
-                    }
-                    catch { Thread.Sleep(100); }
-                }
+                // AcquireFrame released the frame (if it got one) before the restart disposes the duplication.
+                return RestartCapture();
             }
         }
+    }
 
-        return result;
+    private CaptureResult AcquireFrame(IDXGIOutputDuplication duplicatedOutput, ID3D11DeviceContext context, ID3D11Texture2D captureTexture, out long timestamp)
+    {
+        timestamp = 0;
+
+        IDXGIResource? screenResource = null;
+        bool acquired = false;
+        try
+        {
+            Result acquireResult = duplicatedOutput.AcquireNextFrame(Timeout, out OutduplFrameInfo frameInfo, out screenResource);
+            if (acquireResult == ResultCode.WaitTimeout) 
+                return CaptureResult.Timeout;
+
+            acquireResult.CheckError();
+            acquired = true;
+
+            // No present since the last frame (e.g. only the mouse cursor moved): the image didn't change.
+            if ((screenResource == null) || (frameInfo.LastPresentTime == 0)) return CaptureResult.NoChange;
+
+            using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
+            context.CopySubresourceRegion(captureTexture, 0, 0, 0, 0, screenTexture, 0);
+
+            timestamp = frameInfo.LastPresentTime;
+
+            return CaptureResult.NewFrame;
+        }
+        finally
+        {
+            try
+            {
+                screenResource?.Dispose();
+                if (acquired)
+                    duplicatedOutput.ReleaseFrame();
+            }
+            catch { /**/ }
+        }
+    }
+
+    private CaptureResult RestartCapture()
+    {
+        try
+        {
+            Restart();
+        }
+        catch { Thread.Sleep(100); }
+
+        return (_context != null) && (_duplicatedOutput != null) && (_captureTexture != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
     }
 
     /// <inheritdoc />

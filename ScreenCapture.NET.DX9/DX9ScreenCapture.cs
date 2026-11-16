@@ -49,16 +49,15 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     #region Methods
 
     /// <inheritdoc />
-    protected override bool PerformScreenCapture()
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        bool result = false;
+        // DX9 can't tell when the frame was presented: the base uses the time the capture returned.
+        timestamp = 0;
+
         lock (_captureLock)
         {
             if ((_device == null) || (_surface == null) || (_buffer == null))
-            {
-                Restart();
-                return false;
-            }
+                return RestartCapture();
 
             try
             {
@@ -75,22 +74,25 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                 _surface.UnlockRect();
 
-                result = true;
+                // GetFrontBufferData has no change detection: every successful read counts as a new frame.
+                return CaptureResult.NewFrame;
             }
-            catch (SharpGenException dxException)
+            catch (SharpGenException dxException) when (dxException.ResultCode == Result.AccessDenied)
             {
-                if (dxException.ResultCode == Result.AccessDenied)
-                {
-                    try
-                    {
-                        Restart();
-                    }
-                    catch { Thread.Sleep(100); }
-                }
+                return RestartCapture();
             }
         }
+    }
 
-        return result;
+    private CaptureResult RestartCapture()
+    {
+        try
+        {
+            Restart();
+        }
+        catch { Thread.Sleep(100); }
+
+        return (_device != null) && (_surface != null) && (_buffer != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
     }
 
     /// <inheritdoc />

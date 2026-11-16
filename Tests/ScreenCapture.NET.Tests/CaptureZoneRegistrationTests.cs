@@ -14,7 +14,7 @@ public sealed class CaptureZoneRegistrationTests
         int updates = 0;
         zone.Updated += (_, _) => updates++;
 
-        Assert.IsTrue(screenCapture.CaptureScreen());
+        Assert.AreEqual(CaptureResult.NewFrame, screenCapture.CaptureScreen());
 
         Assert.AreEqual(1, updates);
         using CaptureFrame<ColorARGB> frame = zone.Lock();
@@ -35,7 +35,7 @@ public sealed class CaptureZoneRegistrationTests
         screenCapture.CaptureScreen();
 
         Assert.IsNotNull(args);
-        Assert.IsTrue(args.IsSuccessful);
+        Assert.AreEqual(CaptureResult.NewFrame, args.Value.Result);
     }
 
     [TestMethod]

@@ -51,28 +51,33 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     #region Methods
 
     /// <inheritdoc />
-    protected override bool PerformScreenCapture()
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
+        // X11 can't tell when the frame was presented: the base uses the time the capture returned.
+        timestamp = 0;
+
         lock (_captureLock)
         {
             if ((_display == null) || (_image == null))
-            {
-                Restart();
-                return false;
-            }
+                return RestartCapture();
 
             _display.ClearError();
             nint result = X11.XGetSubImage(_display, _drawable, 0, 0, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0);
 
             // E.g. BadMatch if the screen got smaller than the image. Starting over picks up the current state.
             if ((result == 0) || (_display.LastError != null))
-            {
-                Restart();
-                return false;
-            }
+                return RestartCapture();
 
-            return true;
+            // XGetSubImage has no change detection: every successful read counts as a new frame.
+            return CaptureResult.NewFrame;
         }
+    }
+
+    private CaptureResult RestartCapture()
+    {
+        Restart();
+
+        return (_display != null) && (_image != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
     }
 
     /// <inheritdoc />
@@ -136,7 +141,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             DisposeHandles();
 
-            // On failure the capture stays without handles: CaptureScreen returns false and restarts on the next call.
+            // On failure the capture stays without handles: CaptureScreen returns Unavailable and restarts on the next call.
             X11DisplayHandle? display = null;
             X11ImageHandle? image = null;
             try

@@ -1,34 +1,25 @@
 ﻿// ReSharper disable MemberCanBePrivate.Global
 
-using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ScreenCapture.NET;
 
-/// <inheritdoc />
 /// <summary>
 /// Represents the information supplied with an <see cref="IScreenCapture.Updated" />-event.
 /// </summary>
-public class ScreenCaptureUpdatedEventArgs : EventArgs
-{
-    #region Properties & Fields
-
-    /// <summary>
-    /// <c>true</c> if the update was successful; otherwise, <c>false</c>.
-    /// </summary>
-    public bool IsSuccessful { get; set; }
-
-    #endregion
-
-    #region Constructors
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ScreenCaptureUpdatedEventArgs"/> class.
-    /// </summary>
-    /// <param name="isSuccessful">Indicates if the last update was successful.</param>
-    public ScreenCaptureUpdatedEventArgs(bool isSuccessful)
-    {
-        this.IsSuccessful = isSuccessful;
-    }
-
-    #endregion
-}
+/// <remarks>
+/// A struct, so raising the event on every capture allocates nothing.
+/// </remarks>
+/// <param name="Result">The result of the capture that raised the event.</param>
+/// <param name="FrameNumber">
+/// The number of the latest captured frame, counting <see cref="CaptureResult.NewFrame"/> results of this screen capture (the first frame is 1).
+/// For other results it's the number of the frame captured before. 0 if no frame was captured yet.
+/// </param>
+/// <param name="Timestamp">
+/// When the latest captured frame was shown, as a <see cref="Stopwatch"/> timestamp (e.g. <c>Stopwatch.GetElapsedTime(e.Timestamp)</c> is the age of the frame).
+/// DX11 reports when the frame was presented on the display, DX9 and X11 when it was read.
+/// For results other than <see cref="CaptureResult.NewFrame"/> it's the timestamp of the frame captured before. 0 if no frame was captured yet.
+/// </param>
+[SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "It is the argument of the Updated event. A struct can't derive from EventArgs, which EventHandler<T> doesn't require anymore.")]
+public readonly record struct ScreenCaptureUpdatedEventArgs(CaptureResult Result, long FrameNumber, long Timestamp);

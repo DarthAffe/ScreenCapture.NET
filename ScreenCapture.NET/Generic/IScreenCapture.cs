@@ -13,15 +13,19 @@ public interface IScreenCapture : IDisposable
     Display Display { get; }
 
     /// <summary>
-    /// Occurs when the <see cref="IScreenCapture"/> is updated.
+    /// Occurs at the end of every <see cref="CaptureScreen"/>, after the zones were updated, whatever the result.
     /// </summary>
     event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;
 
     /// <summary>
-    /// Attempts to capture the current frame showed on the <see cref="Display"/>.
+    /// Attempts to capture the current frame shown on the <see cref="Display"/> and updates the zones.
     /// </summary>
-    /// <returns><c>true</c> if the current frame was captured successfully; otherwise, <c>false</c>.</returns>
-    bool CaptureScreen();
+    /// <returns>
+    /// <see cref="CaptureResult.NewFrame"/> if a new frame was captured; otherwise why not.
+    /// <see cref="CaptureResult.NoChange"/> and <see cref="CaptureResult.Timeout"/> are normal when the screen doesn't change.
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
+    CaptureResult CaptureScreen();
 
     /// <summary>
     /// Creates a new <see cref="ICaptureZone"/> for this <see cref="IScreenCapture"/>.

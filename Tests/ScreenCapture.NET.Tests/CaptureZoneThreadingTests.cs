@@ -94,7 +94,7 @@ public sealed class CaptureZoneThreadingTests
         };
         screenCapture.Updated += (_, _) => screenCapture.UnregisterCaptureZone(other);
 
-        Assert.IsTrue(screenCapture.CaptureScreen());
+        Assert.AreEqual(CaptureResult.NewFrame, screenCapture.CaptureScreen());
 
         Assert.IsNotNull(added);
         Assert.AreEqual(8, other.Region.X);

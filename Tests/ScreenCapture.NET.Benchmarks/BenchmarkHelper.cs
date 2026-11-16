@@ -47,7 +47,11 @@ internal static class BenchmarkHelper
 internal sealed class BenchmarkScreenCapture(int width, int height)
     : AbstractScreenCapture<ColorBGRA>(new Display(0, "Benchmark", width, height, Rotation.None, new GraphicsCard(0, "Benchmark", 0, 0)))
 {
-    protected override bool PerformScreenCapture() => true;
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
+    {
+        timestamp = 0;
+        return CaptureResult.NewFrame;
+    }
 
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer) => true;
 }

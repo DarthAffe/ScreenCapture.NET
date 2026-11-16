@@ -23,6 +23,21 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// </summary>
     public bool WriteZones { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the result of the next screen captures.
+    /// </summary>
+    public CaptureResult Result { get; set; } = CaptureResult.NewFrame;
+
+    /// <summary>
+    /// Gets or sets the timestamp reported with <see cref="CaptureResult.NewFrame"/> (0: the base takes the current time).
+    /// </summary>
+    public long Timestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets an exception thrown by the next screen captures instead of returning <see cref="Result"/>.
+    /// </summary>
+    public Exception? CaptureException { get; set; }
+
     #endregion
 
     #region Constructors
@@ -35,7 +50,13 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 
     #region Methods
 
-    protected override bool PerformScreenCapture() => true;
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
+    {
+        if (CaptureException != null) throw CaptureException;
+
+        timestamp = Timestamp;
+        return Result;
+    }
 
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
     {

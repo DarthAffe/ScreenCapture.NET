@@ -100,7 +100,7 @@ public sealed class X11HardwareTests
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         for (int i = 0; i < 3; i++)
-            Assert.IsFalse(screenCapture.CaptureScreen());
+            Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
         AssertNoHandles(screenCapture);
 
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
@@ -217,7 +217,7 @@ public sealed class X11HardwareTests
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         for (int i = 0; i < 3; i++)
-            Assert.IsFalse(screenCapture.CaptureScreen());
+            Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
         AssertNoHandles(screenCapture);
     }
 
@@ -273,7 +273,7 @@ public sealed class X11NoServerTests
         using X11ScreenCapture screenCapture = new(new Display(0, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0)));
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
-        Assert.IsFalse(screenCapture.CaptureScreen());
-        Assert.IsFalse(screenCapture.CaptureScreen());
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
     }
 }

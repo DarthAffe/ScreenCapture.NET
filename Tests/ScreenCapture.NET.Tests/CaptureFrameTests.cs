@@ -153,7 +153,7 @@ public sealed class CaptureFrameTests
         screenCapture.ZoneUpdating = _ => Interlocked.Increment(ref updates);
 
         CaptureFrame<ColorARGB> frame = zone.Lock();
-        Task<bool> capture;
+        Task<CaptureResult> capture;
         try
         {
             capture = Task.Run(screenCapture.CaptureScreen);
@@ -167,7 +167,7 @@ public sealed class CaptureFrameTests
         }
 
         Assert.IsTrue(capture.Wait(TIMEOUT), "The capture didn't continue after the frame was disposed.");
-        Assert.IsTrue(capture.Result);
+        Assert.AreEqual(CaptureResult.NewFrame, capture.Result);
         Assert.AreEqual(1, updates);
     }
 

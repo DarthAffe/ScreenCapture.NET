@@ -50,7 +50,7 @@ internal static class HardwareTestHelper
         // The first frame after (re)starting a capture can take a few attempts, e.g. if the desktop doesn't change.
         bool captured = false;
         for (int i = 0; (i < CAPTURE_ATTEMPTS) && !captured; i++)
-            captured = screenCapture.CaptureScreen();
+            captured = screenCapture.CaptureScreen() == CaptureResult.NewFrame;
 
         Assert.IsTrue(captured, $"No frame captured after {CAPTURE_ATTEMPTS} attempts.");
         Assert.IsGreaterThan(0, updates, "Zone wasn't updated.");
@@ -315,7 +315,7 @@ internal static class HardwareTestHelper
     {
         bool captured = false;
         for (int i = 0; (i < CAPTURE_ATTEMPTS) && !captured; i++)
-            captured = screenCapture.CaptureScreen();
+            captured = screenCapture.CaptureScreen() == CaptureResult.NewFrame;
 
         Assert.IsTrue(captured, $"No frame captured after {CAPTURE_ATTEMPTS} attempts.");
     }

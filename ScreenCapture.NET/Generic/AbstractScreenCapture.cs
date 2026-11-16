@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using HPPH;
 
@@ -27,6 +28,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     #region Properties & Fields
 
     private bool _isDisposed;
+
+    // Guards _frameNumber and _frameTimestamp, which always describe the same frame. A leaf lock.
+    private readonly Lock _frameLock = new();
+    private long _frameNumber;
+    private long _frameTimestamp;
 
     // Guards all changes to the zone set and to zone positions/sizes. Acquired after a zone lock, never before.
     private readonly Lock _captureZonesLock = new();
@@ -71,19 +77,34 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     #region Methods
 
     /// <inheritdoc />
-    public virtual bool CaptureScreen()
+    public virtual CaptureResult CaptureScreen()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        bool result;
+        CaptureResult result;
+        long timestamp;
 
         try
         {
-            result = PerformScreenCapture();
+            result = PerformScreenCapture(out timestamp);
         }
         catch
         {
-            result = false;
+            result = CaptureResult.Failed;
+            timestamp = 0;
+        }
+
+        long frameNumber;
+        lock (_frameLock)
+        {
+            if (result == CaptureResult.NewFrame)
+            {
+                _frameNumber++;
+                _frameTimestamp = timestamp != 0 ? timestamp : Stopwatch.GetTimestamp();
+            }
+
+            frameNumber = _frameNumber;
+            timestamp = _frameTimestamp;
         }
 
         // ReSharper disable once InconsistentlySynchronizedField
@@ -108,7 +129,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 ArrayPool<bool>.Shared.Return(rented);
         }
 
-        OnUpdated(result);
+        OnUpdated(new ScreenCaptureUpdatedEventArgs(result, frameNumber, timestamp));
 
         return result;
     }
@@ -150,8 +171,15 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <summary>
     /// Performs the actual screen capture.
     /// </summary>
-    /// <returns><c>true</c> if the screen was captured successfully; otherwise, <c>false</c>.</returns>
-    protected abstract bool PerformScreenCapture();
+    /// <remarks>
+    /// Exceptions are reported as <see cref="CaptureResult.Failed"/>.
+    /// </remarks>
+    /// <param name="timestamp">
+    /// For <see cref="CaptureResult.NewFrame"/>: when the frame was shown, as a <see cref="Stopwatch"/> timestamp,
+    /// or 0 to use the time this method returned. Ignored for other results.
+    /// </param>
+    /// <returns><see cref="CaptureResult.NewFrame"/> if a new frame was captured; otherwise why not.</returns>
+    protected abstract CaptureResult PerformScreenCapture(out long timestamp);
 
     /// <summary>
     /// Performs an update of the given capture zone.
@@ -172,12 +200,12 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <summary>
     /// Raises the <see cref="Updated"/>-event.
     /// </summary>
-    /// <param name="result">A bool indicating whether the update was successful or not.</param>
-    protected virtual void OnUpdated(bool result)
+    /// <param name="args">The result of the capture and the latest frame.</param>
+    protected virtual void OnUpdated(ScreenCaptureUpdatedEventArgs args)
     {
         try
         {
-            Updated?.Invoke(this, new ScreenCaptureUpdatedEventArgs(result));
+            Updated?.Invoke(this, args);
         }
         catch { /**/ }
     }

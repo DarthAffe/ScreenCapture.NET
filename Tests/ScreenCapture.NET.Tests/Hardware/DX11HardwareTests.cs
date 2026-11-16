@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Versioning;
 using HPPH;
@@ -38,6 +39,41 @@ public sealed class DX11HardwareTests
     {
         using DX11ScreenCaptureService service = new();
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center, downscaleLevel: 2);
+    }
+
+    [TestMethod]
+    public void TimestampIsAStopwatchTimestamp()
+    {
+        using DX11ScreenCaptureService service = new();
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+
+        ScreenCaptureUpdatedEventArgs args = default;
+        screenCapture.Updated += (_, e) => args = e;
+
+        HardwareTestHelper.CaptureFrame(screenCapture);
+        long now = Stopwatch.GetTimestamp();
+
+        // DDA's LastPresentTime is a QueryPerformanceCounter value: on another clock (e.g. FILETIME) it would be far in the future.
+        Assert.AreEqual(CaptureResult.NewFrame, args.Result);
+        Assert.IsGreaterThan(0, args.FrameNumber);
+        Assert.IsInRange(1, now, args.Timestamp);
+    }
+
+    [TestMethod]
+    public void NoNewFrameIsNoFailure()
+    {
+        using DX11ScreenCaptureService service = new();
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        // Without waiting, most calls find no new frame (unless something renders at a high rate). Neither may count as a failure.
+        screenCapture.Timeout = 0;
+        CaptureResult[] results = [.. Enumerable.Range(0, 50).Select(_ => screenCapture.CaptureScreen())];
+
+        CollectionAssert.IsSubsetOf(results.Distinct().ToArray(), new[] { CaptureResult.NewFrame, CaptureResult.NoChange, CaptureResult.Timeout },
+                                    $"Unexpected results: {string.Join(", ", results.Distinct())}");
     }
 
     [TestMethod]
@@ -104,7 +140,7 @@ public sealed class DX11HardwareTests
         // Zones can be registered while the capture isn't running; they're filled once it (re)starts.
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
-        Assert.IsFalse(screenCapture.CaptureScreen());
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
         AssertNoDirectXObjects(screenCapture);
 
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
