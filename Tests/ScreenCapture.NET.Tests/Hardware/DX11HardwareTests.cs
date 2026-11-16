@@ -217,6 +217,24 @@ public sealed class DX11HardwareTests
     }
 
     [TestMethod]
+    public void FailedRestartsBackOff()
+    {
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        // The restart in the constructor fails, so the captures wait 100, 200 and 400 ms before their attempts.
+        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        using DX11ScreenCapture screenCapture = new(factory!, display);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        for (int i = 0; i < 3; i++)
+            Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+        stopwatch.Stop();
+
+        Assert.IsInRange(TimeSpan.FromMilliseconds(690), TimeSpan.FromSeconds(3), stopwatch.Elapsed);
+    }
+
+    [TestMethod]
     public void CapturesWithDuplicateOutput1()
     {
         // DuplicateOutput1 only works in a per-monitor DPI aware (version 2) process.

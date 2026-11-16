@@ -85,21 +85,6 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
-    private CaptureResult RestartCapture()
-    {
-        try
-        {
-            Restart();
-        }
-        catch (Exception ex)
-        {
-            ReportError(ex);
-            Thread.Sleep(100);
-        }
-
-        return (_device != null) && (_surface != null) && (_buffer != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
-    }
-
     /// <inheritdoc />
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
@@ -139,12 +124,13 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    public override void Restart()
+    protected override bool PerformRestart()
     {
-        base.Restart();
-
         lock (_captureLock)
         {
+            // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
+            if (_isDisposed) return false;
+
             DisposeDX();
 
             try
@@ -160,12 +146,16 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 _surface = _device.CreateOffscreenPlainSurface(Display.Width, Display.Height, Format.A8R8G8B8, Pool.Scratch);
                 _stride = Display.Width * ColorBGRA.ColorFormat.BytesPerPixel;
                 _buffer = new byte[Display.Height * _stride];
+
+                return true;
             }
             catch (Exception ex)
             {
                 // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
                 DisposeDX();
                 ReportError(ex);
+
+                return false;
             }
         }
     }

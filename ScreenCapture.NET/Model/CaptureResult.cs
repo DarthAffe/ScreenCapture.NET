@@ -28,7 +28,8 @@ public enum CaptureResult
 
     /// <summary>
     /// The capture can't run right now (e.g. the secure desktop of a UAC prompt or the lock screen is shown, or the X server can't be reached).
-    /// It tries to restart on the next call. <see cref="IScreenCapture.LastError"/> tells why the last restart failed.
+    /// The next call tries to restart it, after a delay that grows from 100 ms to 2 s while restarts keep failing (see <see cref="IScreenCapture.CaptureScreen"/>).
+    /// <see cref="IScreenCapture.LastError"/> tells why the last restart failed.
     /// </summary>
     Unavailable,
 

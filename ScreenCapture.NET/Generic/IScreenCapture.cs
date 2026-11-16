@@ -46,6 +46,11 @@ public interface IScreenCapture : IDisposable
     /// After <see cref="CaptureResult.NoChange"/> and <see cref="CaptureResult.Timeout"/>, the last frame is still current: only zones that requested an update
     /// and zones that don't show it yet (registered or changed since, or skipped because a frame held their buffer) are written from it.
     /// After other results no zone is written; requested updates stay until the next frame.
+    /// <para>
+    /// While the capture isn't running, every call tries to restart it. After a failed restart, the next attempt waits 100 ms,
+    /// doubling with every further failure up to 2 s: the call blocks until then (less if the capture is disposed or <see cref="Restart"/> succeeds meanwhile).
+    /// A successful restart resets the delay, so a capture that loses its source (e.g. a display mode change) restarts right away.
+    /// </para>
     /// </remarks>
     /// <returns>
     /// <see cref="CaptureResult.NewFrame"/> if a new frame was captured; otherwise why not.
@@ -106,8 +111,9 @@ public interface IScreenCapture : IDisposable
     /// Restarts the <see cref="IScreenCapture"/>.
     /// </summary>
     /// <remarks>
+    /// The restart is attempted right away, also while <see cref="CaptureScreen"/> waits for its next attempt.
     /// A failed restart doesn't throw: the error is reported with <see cref="LastError"/> (and <see cref="ErrorOccurred"/>),
-    /// and <see cref="CaptureScreen"/> returns <see cref="CaptureResult.Unavailable"/> and tries again.
+    /// and <see cref="CaptureScreen"/> tries again after the backoff (see <see cref="CaptureScreen"/>), returning <see cref="CaptureResult.Unavailable"/> while it keeps failing.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
     void Restart();

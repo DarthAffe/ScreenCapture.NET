@@ -1,6 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests;
@@ -49,6 +48,28 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// </summary>
     public Lock CaptureLock { get; } = new();
 
+    /// <summary>
+    /// Gets or sets if the simulated backend runs. While it doesn't, captures restart it (with the backoff of the base class) instead of returning <see cref="Result"/>.
+    /// </summary>
+    public bool IsRunning { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets if restarts succeed (and make the capture run).
+    /// </summary>
+    public bool RestartSucceeds { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets an exception thrown by the next restarts.
+    /// </summary>
+    public Exception? RestartException { get; set; }
+
+    /// <summary>
+    /// Gets the times of all restart attempts, since the capture was created.
+    /// </summary>
+    public List<TimeSpan> RestartAttempts { get; } = [];
+
+    private readonly long _created = Stopwatch.GetTimestamp();
+
     #endregion
 
     #region Constructors
@@ -65,6 +86,9 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     {
         lock (CaptureLock)
         {
+            timestamp = 0;
+            if (!IsRunning) return RestartCapture();
+
             if (CaptureException != null) throw CaptureException;
             if (ReportedCaptureError != null) ReportError(ReportedCaptureError);
 
@@ -77,6 +101,18 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// Reports an error outside of a capture, like a failed <see cref="AbstractScreenCapture{TColor}.Restart"/>.
     /// </summary>
     public void Report(Exception exception) => ReportError(exception);
+
+    protected override bool PerformRestart()
+    {
+        lock (CaptureLock)
+        {
+            RestartAttempts.Add(Stopwatch.GetElapsedTime(_created));
+            if (RestartException != null) throw RestartException;
+
+            IsRunning = RestartSucceeds;
+            return IsRunning;
+        }
+    }
 
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
     {

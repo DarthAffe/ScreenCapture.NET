@@ -146,21 +146,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
-    private CaptureResult RestartCapture()
-    {
-        try
-        {
-            Restart();
-        }
-        catch (Exception ex)
-        {
-            ReportError(ex);
-            Thread.Sleep(100);
-        }
-
-        return (_context != null) && (_duplicatedOutput != null) && (_captureTexture != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
-    }
-
     /// <inheritdoc />
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
@@ -289,13 +274,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    public override void Restart()
+    protected override bool PerformRestart()
     {
-        base.Restart();
-
         lock (_captureLock)
             lock (_texturesLock)
             {
+                // Dispose releases everything under these locks after setting the flag: nothing created here may outlive it.
+                if (_isDisposed) return false;
+
                 try
                 {
                     foreach (ZoneTextures textures in _textures.Values)
@@ -336,12 +322,16 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                         _duplicatedOutput = output.DuplicateOutput1(_device, new[] { Format.B8G8R8A8_UNorm }); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
                     else
                         _duplicatedOutput = output.DuplicateOutput(_device);
+
+                    return true;
                 }
                 catch (Exception ex)
                 {
                     // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
                     DisposeDX();
                     ReportError(ex);
+
+                    return false;
                 }
             }
     }

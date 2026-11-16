@@ -76,13 +76,6 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
-    private CaptureResult RestartCapture()
-    {
-        Restart();
-
-        return (_display != null) && (_image != null) ? CaptureResult.Restarting : CaptureResult.Unavailable;
-    }
-
     private static string FormatXError(X11Error? error) => error == null ? string.Empty : $" with {error}";
 
     /// <inheritdoc />
@@ -138,15 +131,16 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    public override void Restart()
+    protected override bool PerformRestart()
     {
-        base.Restart();
-
         lock (_captureLock)
         {
+            // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
+            if (_isDisposed) return false;
+
             DisposeHandles();
 
-            // On failure the capture stays without handles: CaptureScreen returns Unavailable and restarts on the next call.
+            // On failure the capture stays without handles: CaptureScreen returns Unavailable and restarts with the next attempt.
             X11DisplayHandle? display = null;
             X11ImageHandle? image = null;
             try
@@ -174,8 +168,15 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 Volatile.Write(ref _image, image);
                 display = null;
                 image = null;
+
+                return true;
             }
-            catch (Exception ex) { ReportError(ex); }
+            catch (Exception ex)
+            {
+                ReportError(ex);
+
+                return false;
+            }
             finally
             {
                 image?.Dispose();

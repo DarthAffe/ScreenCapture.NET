@@ -26,6 +26,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     // Errors reported without a CaptureScreen call raising them (e.g. by repeated Restart calls) are dropped beyond this, oldest first.
     private const int MAX_PENDING_ERRORS = 16;
 
+    private static readonly TimeSpan RESTART_WAIT_SLICE = TimeSpan.FromMilliseconds(50);
+
     #endregion
 
     #region Properties & Fields
@@ -44,6 +46,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     private long _frameTimestamp;
 
     private bool _hasFrame;
+
+    // Guards the restart backoff. A leaf lock: never held while restarting, so it doesn't matter which backend locks the caller holds.
+    private readonly Lock _restartLock = new();
+    private readonly RestartBackoff _restartBackoff = new();
 
     // Guards all changes to the zone set and to zone positions/sizes. Acquired after a zone lock, never before.
     private readonly Lock _captureZonesLock = new();
@@ -97,6 +103,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     public virtual CaptureResult CaptureScreen()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+        WaitForRestartAttempt();
 
         CaptureResult result;
         long timestamp;
@@ -436,13 +444,86 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc />
-    public virtual void Restart()
+    public void Restart()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
+        TryRestart();
+    }
+
+    /// <summary>
+    /// Restarts the capture if it's due: right away the first time, after a failed restart only once the backoff has passed.
+    /// </summary>
+    /// <remarks>
+    /// Call this from <see cref="PerformScreenCapture"/> when the capture isn't running or lost its source, and return its result.
+    /// <see cref="CaptureScreen"/> already waited for the backoff before calling <see cref="PerformScreenCapture"/>, so the restart is usually due.
+    /// </remarks>
+    /// <returns><see cref="CaptureResult.Restarting"/> if the capture runs again; otherwise <see cref="CaptureResult.Unavailable"/>.</returns>
+    protected CaptureResult RestartCapture()
+    {
+        if (Volatile.Read(ref _isDisposed)) return CaptureResult.Unavailable;
+
+        lock (_restartLock)
+            if (_restartBackoff.GetRemaining(Stopwatch.GetTimestamp()) > TimeSpan.Zero)
+                return CaptureResult.Unavailable;
+
+        return TryRestart() ? CaptureResult.Restarting : CaptureResult.Unavailable;
+    }
+
+    private bool TryRestart()
+    {
         lock (_frameLock)
             _hasFrame = false;
+
+        bool running;
+        try
+        {
+            running = PerformRestart();
+        }
+        catch (Exception ex)
+        {
+            ReportError(ex);
+            running = false;
+        }
+
+        lock (_restartLock)
+        {
+            if (running)
+                _restartBackoff.Succeeded();
+            else
+                _restartBackoff.Failed(Stopwatch.GetTimestamp());
+        }
+
+        return running;
     }
+
+    private void WaitForRestartAttempt()
+    {
+        while (!Volatile.Read(ref _isDisposed))
+        {
+            TimeSpan remaining;
+            lock (_restartLock)
+                remaining = _restartBackoff.GetRemaining(Stopwatch.GetTimestamp());
+
+            if (remaining <= TimeSpan.Zero) return;
+
+            Thread.Sleep(remaining < RESTART_WAIT_SLICE ? remaining : RESTART_WAIT_SLICE);
+        }
+    }
+
+    /// <summary>
+    /// (Re)starts the capture: releases what the capture holds and creates it again.
+    /// </summary>
+    /// <remarks>
+    /// Called by <see cref="Restart"/>, by <see cref="RestartCapture"/> and usually by the constructor of the backend (through <see cref="Restart"/>).
+    /// Don't throw: report errors with <see cref="ReportError"/> and return <c>false</c> (exceptions are reported and count as a failed restart).
+    /// After a failed restart, <see cref="RestartCapture"/> waits 100 ms before the next attempt, doubling with every further failure up to 2 s.
+    /// <para>
+    /// It can run concurrently with <see cref="PerformScreenCapture"/> (from <see cref="Restart"/>) and must return <c>false</c> once the capture is disposed.
+    /// </para>
+    /// </remarks>
+    /// <returns><c>true</c> if the capture runs; otherwise <c>false</c>.</returns>
+    protected abstract bool PerformRestart();
 
     /// <inheritdoc />
     public void Dispose()
