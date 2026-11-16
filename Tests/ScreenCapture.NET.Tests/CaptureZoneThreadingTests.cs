@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests;
@@ -174,7 +175,10 @@ public sealed class CaptureZoneThreadingTests
             int contentChanges = 0;
             (int width, ColorARGB first) previous = default;
 
-            for (int i = 0; i < ITERATIONS; i++)
+            // Under load the other threads can get the zone lock late (single-buffered frames hold it), so after ITERATIONS frames
+            // keep reading until both kinds of change were seen. Only a capture or resize thread starved for TIMEOUT fails the test.
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            for (int i = 0; (i < ITERATIONS) || (((sizeChanges <= 1) || (contentChanges <= 1)) && (stopwatch.Elapsed < TIMEOUT)); i++)
                 using (CaptureFrame<ColorARGB> frame = zone.Lock())
                 {
                     Assert.AreEqual(frame.Width * 2, frame.Height * 4, "Width and height don't belong to the same size.");
