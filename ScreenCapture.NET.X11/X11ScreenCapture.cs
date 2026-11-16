@@ -76,12 +76,12 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
         X11ImageHandle? image = Volatile.Read(ref _image);
-        if (image == null) return;
+        if (image == null) return false;
 
         // A concurrent Restart or Dispose closes the handle, but the memory is only freed once this reference is released.
         bool addedRef = false;
@@ -94,6 +94,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 CopyZone(source, captureZone, buffer);
             else
                 DownscaleZone(source, captureZone, buffer);
+
+            return true;
         }
         finally
         {

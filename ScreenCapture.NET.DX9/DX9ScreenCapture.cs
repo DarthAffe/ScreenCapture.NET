@@ -94,16 +94,18 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        if (_buffer == null) return;
+        if (_buffer == null) return false;
 
         if (captureZone.DownscaleLevel == 0)
             CopyZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
         else
             DownscaleZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
+
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -16,6 +16,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     #region Properties & Fields
 
     private readonly Lock _lock = new();
+    private readonly Lock _frontLock = new();
+
+    private ZoneBuffer _front;
+    private ZoneBuffer? _back;
 
     /// <inheritdoc />
     public Display Display { get; }
@@ -55,8 +59,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <inheritdoc />
     public int UnscaledHeight { get; private set; }
 
-    // Only read or replaced with _lock held.
-    internal byte[] InternalBuffer { get; private set; }
+    /// <inheritdoc />
+    public bool IsDoubleBuffered { get; }
 
     /// <inheritdoc />
     public bool AutoUpdate { get; set; } = true;
@@ -86,7 +90,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory.</param>
     /// <param name="unscaledWidth">The original width of the region.</param>
     /// <param name="unscaledHeight">The original height of the region.</param>
-    internal CaptureZone(Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight)
+    /// <param name="doubleBuffered">Whether the capture writes a second buffer instead of waiting for frames.</param>
+    internal CaptureZone(Display display, int x, int y, int width, int height, int downscaleLevel, int unscaledWidth, int unscaledHeight, bool doubleBuffered)
     {
         this.Display = display;
         this.X = x;
@@ -96,8 +101,9 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         this.DownscaleLevel = downscaleLevel;
         this.UnscaledWidth = unscaledWidth;
         this.UnscaledHeight = unscaledHeight;
+        this.IsDoubleBuffered = doubleBuffered;
 
-        InternalBuffer = new byte[Stride * Height];
+        _front = new ZoneBuffer(Width, Height, Stride);
     }
 
     #endregion
@@ -105,13 +111,22 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     #region Methods
 
     /// <summary>
-    /// Locks the zone and returns its current pixels. Unlock by disposing the returned frame.
+    /// Locks the current pixels of the zone. Release them by disposing the returned frame.
     /// </summary>
     /// <remarks>
-    /// While the lock is held, the zone isn't updated by a capture and its position, size and buffer don't change.
-    /// Any method of the <see cref="IScreenCapture"/> can be called while holding the lock, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone
-    /// (the frame keeps showing the zone as it was when it was locked).
-    /// Keep the lock short: a capture waits for it.
+    /// The pixels of the frame don't change while it's held.
+    /// <para>
+    /// Double-buffered zones (the default, see <see cref="IsDoubleBuffered"/>): the capture writes a second buffer and never waits for frames.
+    /// A frame that's still held when the capture after the next one starts makes the zone skip that capture.
+    /// </para>
+    /// <para>
+    /// Single-buffered zones: the capture waits until the frame is disposed, and <see cref="Lock"/> waits while the capture writes the zone.
+    /// The lock is reentrant: a capture on the thread holding the frame writes the zone anyway, and the frame shows the new pixels.
+    /// </para>
+    /// <para>
+    /// Any method of the <see cref="IScreenCapture"/> can be called while holding a frame, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
+    /// The frame keeps the size it was created with. Keep frames short anyway.
+    /// </para>
     /// </remarks>
     /// <example>
     /// <code>
@@ -122,24 +137,82 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// }
     /// </code>
     /// </example>
-    /// <returns>The frame holding the lock.</returns>
+    /// <returns>The frame holding the pixels.</returns>
     public CaptureFrame<TColor> Lock()
     {
+        if (IsDoubleBuffered)
+            return new CaptureFrame<TColor>(AddFrontReader());
+
         Lock.Scope scope = _lock.EnterScope();
-        return new CaptureFrame<TColor>(scope, InternalBuffer, Width, Height, Stride);
+        return new CaptureFrame<TColor>(_front, scope);
     }
 
     /// <inheritdoc />
     CaptureFrame ICaptureZone.Lock()
     {
+        if (IsDoubleBuffered)
+            return new CaptureFrame(ColorDispatcher<TColor>.Instance, AddFrontReader());
+
         Lock.Scope scope = _lock.EnterScope();
-        return new CaptureFrame(scope, ColorDispatcher<TColor>.Instance, InternalBuffer, Width, Height, Stride);
+        return new CaptureFrame(ColorDispatcher<TColor>.Instance, _front, scope);
+    }
+
+    private ZoneBuffer AddFrontReader()
+    {
+        lock (_frontLock)
+        {
+            _front.AddReader();
+            return _front;
+        }
     }
 
     /// <summary>
-    /// Locks the zone without creating a frame (for the capture and zone changes).
+    /// Locks the zone against changes and concurrent captures (and against frames of single-buffered zones).
     /// </summary>
-    internal Lock.Scope EnterLockScope() => _lock.EnterScope();
+    internal Lock.Scope EnterUpdateScope() => _lock.EnterScope();
+
+    /// <summary>
+    /// Gets the buffer the capture writes, sized for the current zone.
+    /// </summary>
+    /// <remarks>
+    /// Called under <see cref="EnterUpdateScope"/>. Every call is followed by <see cref="EndWrite"/>.
+    /// </remarks>
+    /// <returns>The buffer, or <c>null</c> if the zone has to skip this capture because a frame still reads its back buffer.</returns>
+    internal ZoneBuffer? BeginWrite()
+    {
+        if (!IsDoubleBuffered)
+        {
+            // Frames hold _lock, so nobody reads the buffer now.
+            if (!_front.Fits(Width, Height, Stride))
+                _front = new ZoneBuffer(Width, Height, Stride);
+
+            return _front;
+        }
+
+        // _back stopped being the front when it was swapped out (under _frontLock), so no frame can start reading it anymore.
+        if (_back?.IsInUse == true) return null;
+
+        if ((_back == null) || !_back.Fits(Width, Height, Stride))
+            _back = new ZoneBuffer(Width, Height, Stride);
+
+        return _back;
+    }
+
+    /// <summary>
+    /// Finishes a write started with <see cref="BeginWrite"/>. Double-buffered zones show the written buffer from now on.
+    /// </summary>
+    /// <param name="buffer">The buffer returned by <see cref="BeginWrite"/>.</param>
+    /// <param name="written"><c>true</c> if the buffer was filled; otherwise the zone keeps showing its previous pixels (double-buffered only).</param>
+    internal void EndWrite(ZoneBuffer buffer, bool written)
+    {
+        if (!IsDoubleBuffered || !written) return;
+
+        lock (_frontLock)
+        {
+            _back = _front;
+            _front = buffer;
+        }
+    }
 
     /// <inheritdoc />
     public void RequestUpdate() => IsUpdateRequested = true;
@@ -162,10 +235,6 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         DownscaleLevel = downscaleLevel;
         UnscaledWidth = unscaledWidth;
         UnscaledHeight = unscaledHeight;
-
-        int newBufferSize = Stride * Height;
-        if (newBufferSize != InternalBuffer.Length)
-            InternalBuffer = new byte[newBufferSize];
     }
 
     #endregion

@@ -149,6 +149,7 @@ public sealed class CaptureZoneRegistrationTests
         public int DownscaleLevel => 0;
         public int UnscaledWidth => 1;
         public int UnscaledHeight => 1;
+        public bool IsDoubleBuffered => true;
         public bool AutoUpdate { get; set; }
         public bool IsUpdateRequested => false;
         public event EventHandler? Updated { add { } remove { } }

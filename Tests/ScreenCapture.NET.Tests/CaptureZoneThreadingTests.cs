@@ -35,17 +35,44 @@ public sealed class CaptureZoneThreadingTests
     }
 
     [TestMethod]
-    public void ZoneIsUpdatedWithItsLockHeld()
+    public void SingleBufferedZoneCantBeLockedDuringItsUpdate()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: false);
 
         bool? lockedByOtherThread = null;
-        screenCapture.ZoneUpdating = z => lockedByOtherThread = !Task.Run(() => { using (z.Lock()) { } }).Wait(TimeSpan.FromMilliseconds(100));
+        screenCapture.ZoneUpdating = z => lockedByOtherThread = Task.Run(() => { using (z.Lock()) { } }).Wait(TimeSpan.FromMilliseconds(100));
 
         screenCapture.CaptureScreen();
 
-        Assert.IsTrue(lockedByOtherThread, "Another thread could lock the zone during its update.");
+        Assert.IsFalse(lockedByOtherThread, "Another thread could lock the zone during its update.");
+    }
+
+    [TestMethod]
+    public void DoubleBufferedZoneShowsThePreviousPixelsDuringItsUpdate()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        screenCapture.CaptureScreen();
+
+        ColorARGB other = new(255, 1, 2, 3);
+        screenCapture.Pattern = (_, _) => other;
+
+        // Exceptions in zone updates are swallowed by the capture, so the results are checked afterwards.
+        bool? lockedByOtherThread = null;
+        ColorARGB? pixelDuringUpdate = null;
+        screenCapture.ZoneUpdating = z => lockedByOtherThread = Task.Run(() =>
+        {
+            using CaptureFrame<ColorARGB> frame = z.Lock();
+            pixelDuringUpdate = frame.Image[1, 1];
+        }).Wait(TIMEOUT);
+
+        screenCapture.CaptureScreen();
+
+        Assert.IsTrue(lockedByOtherThread, "Another thread couldn't lock the zone during its update.");
+        Assert.AreEqual(TestScreenCapture.GetColorFromLocation(1, 1), pixelDuringUpdate, "The frame doesn't show the previous pixels.");
+        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+            Assert.AreEqual(other, frame.Image[1, 1], "The update wasn't shown afterwards.");
     }
 
     [TestMethod]
@@ -107,37 +134,71 @@ public sealed class CaptureZoneThreadingTests
         });
     }
 
+    /// <summary>
+    /// One thread captures continuously (every capture fills the zone with one color, different for each capture), another one resizes the zone.
+    /// Every frame must show the pixels of exactly one capture in one size, and they must not change while it's held.
+    /// </summary>
     [TestMethod]
-    public void ResizeDoesNotChangeALockedZone()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void FramesNeverTear(bool doubleBuffered)
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(0, 0, 16, 8, doubleBuffered: doubleBuffered);
+
+        int captureNumber = 0;
+        ColorARGB color = default;
+        screenCapture.ZoneUpdating = _ =>
+        {
+            int number = ++captureNumber;
+            color = new ColorARGB(255, (byte)number, (byte)(number >> 8), (byte)(number >> 16));
+        };
+        screenCapture.Pattern = (_, _) => color;
+        screenCapture.CaptureScreen();
 
         using CancellationTokenSource cancellation = new();
-        Task resize = Task.Run(() =>
+        Task capture = Task.Factory.StartNew(() =>
+        {
+            while (!cancellation.IsCancellationRequested)
+                screenCapture.CaptureScreen();
+        }, TaskCreationOptions.LongRunning);
+        Task resize = Task.Factory.StartNew(() =>
         {
             for (int i = 0; !cancellation.IsCancellationRequested; i++)
                 screenCapture.UpdateCaptureZone(zone, width: 16 << (i % 2), height: 8 << (i % 2));
-        });
+        }, TaskCreationOptions.LongRunning);
 
         try
         {
+            int sizeChanges = 0;
+            int contentChanges = 0;
+            (int width, ColorARGB first) previous = default;
+
             for (int i = 0; i < ITERATIONS; i++)
                 using (CaptureFrame<ColorARGB> frame = zone.Lock())
                 {
-                    int width = zone.Width;
-                    int height = zone.Height;
+                    Assert.AreEqual(frame.Width * 2, frame.Height * 4, "Width and height don't belong to the same size.");
+                    Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);
+
+                    ReadOnlySpan<ColorARGB> pixels = frame.Pixels;
+                    ColorARGB first = pixels[0];
                     Thread.SpinWait(100);
 
-                    Assert.AreEqual(width * 2, height * 4, "Width and height don't belong to the same size.");
-                    Assert.AreEqual((width, height), (zone.Width, zone.Height), "The zone changed while it was locked.");
-                    Assert.AreEqual((width, height), (frame.Width, frame.Height), "The frame doesn't match the locked zone.");
-                    Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);
+                    Assert.IsFalse(pixels.ContainsAnyExcept(first), "The frame contains pixels of different captures.");
+
+                    if (previous.width != frame.Width) sizeChanges++;
+                    if (!previous.first.Equals(first)) contentChanges++;
+                    previous = (frame.Width, first);
                 }
+
+            // Makes sure the test actually raced against captures and resizes.
+            Assert.IsGreaterThan(1, sizeChanges, "The frames never changed their size.");
+            Assert.IsGreaterThan(1, contentChanges, "The frames never changed their pixels.");
         }
         finally
         {
             cancellation.Cancel();
+            Assert.IsTrue(capture.Wait(TIMEOUT), "The capture thread didn't finish.");
             Assert.IsTrue(resize.Wait(TIMEOUT), "The resize thread didn't finish.");
         }
     }

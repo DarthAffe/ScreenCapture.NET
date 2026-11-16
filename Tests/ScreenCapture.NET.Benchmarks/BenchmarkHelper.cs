@@ -49,5 +49,5 @@ internal sealed class BenchmarkScreenCapture(int width, int height)
 {
     protected override bool PerformScreenCapture() => true;
 
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer) { }
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer) => true;
 }

@@ -5,10 +5,10 @@ using HPPH;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents the pixels of an <see cref="ICaptureZone"/> while its lock is held, for code that doesn't know the color format at compile time.
+/// Represents the pixels of an <see cref="ICaptureZone"/> while it's locked, for code that doesn't know the color format at compile time.
 /// </summary>
 /// <remarks>
-/// Get it from <see cref="ICaptureZone.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: a capture waits for the lock to update the zone.
+/// Get it from <see cref="ICaptureZone.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer or, if the zone isn't double-buffered, waits for it.
 /// <para>
 /// Use <see cref="Execute{TOperation, TResult}(TOperation)"/> to process the pixels without knowing their color format,
 /// or <see cref="AsRefImage{TColor}"/> if the format is known.
@@ -17,7 +17,7 @@ namespace ScreenCapture.NET;
 /// The pixels are only valid until the frame is disposed. Don't keep the spans or images obtained from it, use <see cref="CopyImage"/> to keep a copy.
 /// </para>
 /// <para>
-/// The frame is a view of the zone at the time it was locked. Dispose it exactly once and on the thread that locked it, and don't copy it.
+/// The frame is a view of the zone at the time it was locked and keeps its size if the zone is changed later. Dispose it exactly once and on the thread that locked it, and don't copy it.
 /// </para>
 /// </remarks>
 public ref struct CaptureFrame
@@ -25,6 +25,7 @@ public ref struct CaptureFrame
     #region Properties & Fields
 
     private Lock.Scope _scope;
+    private ZoneBuffer? _reader;
     private readonly ColorDispatcher _dispatcher;
     private readonly ReadOnlySpan<byte> _buffer;
 
@@ -57,14 +58,29 @@ public ref struct CaptureFrame
 
     #region Constructors
 
-    internal CaptureFrame(Lock.Scope scope, ColorDispatcher dispatcher, ReadOnlySpan<byte> buffer, int width, int height, int stride)
+    /// <summary>
+    /// Creates a frame of a single-buffered zone that holds the zone lock.
+    /// </summary>
+    internal CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer, Lock.Scope scope)
+        : this(dispatcher, buffer, scope, null)
+    { }
+
+    /// <summary>
+    /// Creates a frame of a double-buffered zone that holds a reader of <paramref name="buffer"/> (already added by the caller).
+    /// </summary>
+    internal CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer)
+        : this(dispatcher, buffer, default, buffer)
+    { }
+
+    private CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer, Lock.Scope scope, ZoneBuffer? reader)
     {
         this._scope = scope;
         this._dispatcher = dispatcher;
-        this._buffer = buffer;
-        this.Width = width;
-        this.Height = height;
-        this.Stride = stride;
+        this._reader = reader;
+        this._buffer = buffer.Data;
+        this.Width = buffer.Width;
+        this.Height = buffer.Height;
+        this.Stride = buffer.Stride;
     }
 
     #endregion
@@ -129,9 +145,16 @@ public ref struct CaptureFrame
     public readonly IImage CopyImage() => ColorFormat.CreateImage(_buffer, Width, Height, Stride);
 
     /// <summary>
-    /// Releases the lock of the zone.
+    /// Releases the pixels, so the capture can write them again.
     /// </summary>
-    public void Dispose() => _scope.Dispose();
+    public void Dispose()
+    {
+        _scope.Dispose();
+
+        ZoneBuffer? reader = _reader;
+        _reader = null;
+        reader?.RemoveReader();
+    }
 
     #endregion
 }

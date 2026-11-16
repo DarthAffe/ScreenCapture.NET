@@ -137,16 +137,16 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
         lock (_texturesLock)
         {
-            if ((_device == null) || (_context == null) || (_captureTexture == null)) return;
+            if ((_device == null) || (_context == null) || (_captureTexture == null)) return false;
 
             ZoneTextures? textures = GetTextures(captureZone);
-            if (textures == null) return;
+            if (textures == null) return false;
 
             Box sourceBox = GetSourceBox(captureZone).ToBox();
             if (textures.ScalingTexture != null)
@@ -169,6 +169,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 _context.Unmap(textures.StagingTexture, 0);
             }
         }
+
+        return true;
     }
 
     /// <summary>

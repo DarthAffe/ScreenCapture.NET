@@ -8,9 +8,9 @@ namespace ScreenCapture.NET;
 
 /// <inheritdoc />
 /// <remarks>
-/// Lock order: a zone lock (<see cref="CaptureZone{TColor}.Lock"/>) is always acquired before any lock of the screen capture,
-/// and the library never acquires a zone lock while holding one of its own locks.
-/// It's therefore safe to call any method of the screen capture while holding a zone lock.
+/// Lock order: a zone lock (held while a zone is written or changed, and by frames of single-buffered zones, see <see cref="CaptureZone{TColor}.Lock"/>)
+/// is always acquired before any lock of the screen capture, and the library never acquires a zone lock while holding one of its own locks.
+/// It's therefore safe to call any method of the screen capture while holding a frame.
 /// </remarks>
 public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     where TColor : unmanaged, IColor<TColor>
@@ -117,8 +117,23 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
         try
         {
-            using (captureZone.EnterLockScope())
-                PerformCaptureZoneUpdate(captureZone, captureZone.InternalBuffer);
+            using (captureZone.EnterUpdateScope())
+            {
+                ZoneBuffer? buffer = captureZone.BeginWrite();
+                if (buffer == null) return false; // A frame still reads the back buffer. The next capture tries again.
+
+                bool written = false;
+                try
+                {
+                    written = PerformCaptureZoneUpdate(captureZone, buffer.Data);
+                }
+                finally
+                {
+                    captureZone.EndWrite(buffer, written);
+                }
+
+                if (!written) return false;
+            }
 
             captureZone.ResetUpdateRequest();
 
@@ -140,12 +155,17 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Performs an update of the given capture zone.
     /// </summary>
     /// <remarks>
-    /// Called with the lock of <paramref name="captureZone"/> held, so its position, size and buffer don't change during the update.
+    /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update.
     /// The zone might have been unregistered since the capture started.
+    /// <para>
+    /// <paramref name="buffer"/> has the zone's current size (<see cref="CaptureZone{TColor}.Stride"/> * <see cref="CaptureZone{TColor}.Height"/>).
+    /// For a double-buffered zone it's the back buffer, which contains an older frame (or zeros) and is only shown if this returns <c>true</c>.
+    /// </para>
     /// </remarks>
     /// <param name="captureZone">The capture zone to update.</param>
-    /// <param name="buffer">The buffer containing the current pixel-data of the capture zone.</param>
-    protected abstract void PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<byte> buffer);
+    /// <param name="buffer">The buffer to write the pixels of the capture zone to.</param>
+    /// <returns><c>true</c> if <paramref name="buffer"/> was filled; <c>false</c> if there was nothing to write (e.g. no captured frame yet), so the zone keeps its pixels.</returns>
+    protected abstract bool PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<byte> buffer);
 
     /// <summary>
     /// Raises the <see cref="Updated"/>-event.
@@ -161,10 +181,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc />
-    ICaptureZone IScreenCapture.RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel) => RegisterCaptureZone(x, y, width, height, downscaleLevel);
+    ICaptureZone IScreenCapture.RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel, bool doubleBuffered) => RegisterCaptureZone(x, y, width, height, downscaleLevel, doubleBuffered);
 
     /// <inheritdoc cref="IScreenCapture.RegisterCaptureZone" />
-    public virtual CaptureZone<TColor> RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
+    public virtual CaptureZone<TColor> RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0, bool doubleBuffered = true)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
@@ -176,7 +196,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             int unscaledHeight = height;
             (width, height, downscaleLevel) = CalculateScaledSize(unscaledWidth, unscaledHeight, downscaleLevel);
 
-            CaptureZone<TColor> captureZone = new(Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight);
+            CaptureZone<TColor> captureZone = new(Display, x, y, width, height, downscaleLevel, unscaledWidth, unscaledHeight, doubleBuffered);
             Volatile.Write(ref _captureZones, [.. _captureZones, captureZone]);
 
             return captureZone;
@@ -262,8 +282,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        // Zone lock first (see the lock order in the class remarks): the zone doesn't change while a capture updates it.
-        using (captureZone.EnterLockScope())
+        // Zone lock first (see the lock order in the class remarks): the zone doesn't change while a capture writes it.
+        // The buffers are resized by the next capture, frames keep their size.
+        using (captureZone.EnterUpdateScope())
             lock (_captureZonesLock)
             {
                 if (Array.IndexOf(_captureZones, captureZone) < 0)

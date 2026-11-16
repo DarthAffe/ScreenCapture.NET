@@ -17,7 +17,7 @@ public sealed class UpdateCaptureZoneTests
         return (screenCapture, screenCapture.RegisterCaptureZone(X, Y, WIDTH, HEIGHT, DOWNSCALE_LEVEL));
     }
 
-    private static void AssertZone(CaptureZone<ColorARGB> zone, int x, int y, int unscaledWidth, int unscaledHeight, int width, int height, int downscaleLevel)
+    private static void AssertZone(TestScreenCapture screenCapture, CaptureZone<ColorARGB> zone, int x, int y, int unscaledWidth, int unscaledHeight, int width, int height, int downscaleLevel)
     {
         Assert.AreEqual(x, zone.X, "X");
         Assert.AreEqual(y, zone.Y, "Y");
@@ -27,6 +27,8 @@ public sealed class UpdateCaptureZoneTests
         Assert.AreEqual(height, zone.Height, "Height");
         Assert.AreEqual(downscaleLevel, zone.DownscaleLevel, "DownscaleLevel");
 
+        // The buffers get the new size with the next capture.
+        screenCapture.CaptureScreen();
         using CaptureFrame<ColorARGB> frame = zone.Lock();
         Assert.AreEqual((zone.Width, zone.Height, zone.Stride), (frame.Width, frame.Height, frame.Stride), "Frame size");
         Assert.AreEqual(zone.Stride * zone.Height, frame.RawBuffer.Length, "Buffer size");
@@ -40,7 +42,7 @@ public sealed class UpdateCaptureZoneTests
         {
             screenCapture.UpdateCaptureZone(zone);
 
-            AssertZone(zone, X, Y, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
+            AssertZone(screenCapture, zone, X, Y, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
         }
     }
 
@@ -52,7 +54,7 @@ public sealed class UpdateCaptureZoneTests
         {
             screenCapture.UpdateCaptureZone(zone, x: 300);
 
-            AssertZone(zone, 300, Y, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
+            AssertZone(screenCapture, zone, 300, Y, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
         }
     }
 
@@ -64,7 +66,7 @@ public sealed class UpdateCaptureZoneTests
         {
             screenCapture.UpdateCaptureZone(zone, y: 300);
 
-            AssertZone(zone, X, 300, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
+            AssertZone(screenCapture, zone, X, 300, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
         }
     }
 
@@ -76,7 +78,7 @@ public sealed class UpdateCaptureZoneTests
         {
             screenCapture.UpdateCaptureZone(zone, width: 400);
 
-            AssertZone(zone, X, Y, 400, HEIGHT, 200, 50, DOWNSCALE_LEVEL);
+            AssertZone(screenCapture, zone, X, Y, 400, HEIGHT, 200, 50, DOWNSCALE_LEVEL);
         }
     }
 
@@ -88,7 +90,7 @@ public sealed class UpdateCaptureZoneTests
         {
             screenCapture.UpdateCaptureZone(zone, height: 400);
 
-            AssertZone(zone, X, Y, WIDTH, 400, 100, 200, DOWNSCALE_LEVEL);
+            AssertZone(screenCapture, zone, X, Y, WIDTH, 400, 100, 200, DOWNSCALE_LEVEL);
         }
     }
 
@@ -99,10 +101,10 @@ public sealed class UpdateCaptureZoneTests
         using (screenCapture)
         {
             screenCapture.UpdateCaptureZone(zone, downscaleLevel: 2);
-            AssertZone(zone, X, Y, WIDTH, HEIGHT, 50, 25, 2);
+            AssertZone(screenCapture, zone, X, Y, WIDTH, HEIGHT, 50, 25, 2);
 
             screenCapture.UpdateCaptureZone(zone, downscaleLevel: 0);
-            AssertZone(zone, X, Y, WIDTH, HEIGHT, WIDTH, HEIGHT, 0);
+            AssertZone(screenCapture, zone, X, Y, WIDTH, HEIGHT, WIDTH, HEIGHT, 0);
         }
     }
 
@@ -114,7 +116,7 @@ public sealed class UpdateCaptureZoneTests
         {
             screenCapture.UpdateCaptureZone(zone, 1, 2, 64, 32, 3);
 
-            AssertZone(zone, 1, 2, 64, 32, 8, 4, 3);
+            AssertZone(screenCapture, zone, 1, 2, 64, 32, 8, 4, 3);
         }
     }
 
@@ -134,7 +136,7 @@ public sealed class UpdateCaptureZoneTests
         {
             Assert.ThrowsExactly<ArgumentException>(() => screenCapture.UpdateCaptureZone(zone, x, y, width, height));
 
-            AssertZone(zone, X, Y, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
+            AssertZone(screenCapture, zone, X, Y, WIDTH, HEIGHT, 100, 50, DOWNSCALE_LEVEL);
         }
     }
 

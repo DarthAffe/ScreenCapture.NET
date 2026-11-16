@@ -59,6 +59,14 @@ public interface ICaptureZone
     int UnscaledHeight { get; }
 
     /// <summary>
+    /// Gets if the capture writes a second buffer while frames of this zone are held, instead of waiting for them.
+    /// </summary>
+    /// <remarks>
+    /// Set when the zone is registered. Double-buffered zones need twice the memory for their pixels.
+    /// </remarks>
+    bool IsDoubleBuffered { get; }
+
+    /// <summary>
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>
     bool AutoUpdate { get; set; }
@@ -74,15 +82,24 @@ public interface ICaptureZone
     event EventHandler? Updated;
 
     /// <summary>
-    /// Locks the zone and returns its current pixels. Unlock by disposing the returned frame.
+    /// Locks the current pixels of the zone. Release them by disposing the returned frame.
     /// </summary>
     /// <remarks>
-    /// While the lock is held, the zone isn't updated by a capture and its position, size and buffer don't change.
-    /// Any method of the <see cref="IScreenCapture"/> can be called while holding the lock, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone
-    /// (the frame keeps showing the zone as it was when it was locked).
-    /// Keep the lock short: a capture waits for it.
+    /// The pixels of the frame don't change while it's held.
+    /// <para>
+    /// Double-buffered zones (the default, see <see cref="IsDoubleBuffered"/>): the capture writes a second buffer and never waits for frames.
+    /// A frame that's still held when the capture after the next one starts makes the zone skip that capture.
+    /// </para>
+    /// <para>
+    /// Single-buffered zones: the capture waits until the frame is disposed, and <see cref="Lock"/> waits while the capture writes the zone.
+    /// The lock is reentrant: a capture on the thread holding the frame writes the zone anyway, and the frame shows the new pixels.
+    /// </para>
+    /// <para>
+    /// Any method of the <see cref="IScreenCapture"/> can be called while holding a frame, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
+    /// The frame keeps the size it was created with. Keep frames short anyway.
+    /// </para>
     /// </remarks>
-    /// <returns>The frame holding the lock.</returns>
+    /// <returns>The frame holding the pixels.</returns>
     CaptureFrame Lock();
 
     /// <summary>

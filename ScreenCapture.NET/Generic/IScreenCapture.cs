@@ -31,8 +31,12 @@ public interface IScreenCapture : IDisposable
     /// <param name="width">The width of the region to capture (must be &gt;= 0 and this + x must be &lt;= screen-width).</param>
     /// <param name="height">The height of the region to capture (must be &gt;= 0 and this + y must be &lt;= screen-height).</param>
     /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.</param>
+    /// <param name="doubleBuffered">
+    /// <c>true</c> (default) to let the capture write a second buffer while frames of the zone are held (see <see cref="ICaptureZone.Lock"/>);
+    /// <c>false</c> to make it wait for them instead, which saves the memory of the second buffer for very large zones.
+    /// </param>
     /// <returns>The new <see cref="ICaptureZone"/>.</returns>
-    ICaptureZone RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0);
+    ICaptureZone RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0, bool doubleBuffered = true);
 
     /// <summary>
     /// Removes the given <see cref="ICaptureZone"/> from the <see cref="IScreenCapture"/>.
