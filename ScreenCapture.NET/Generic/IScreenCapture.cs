@@ -30,19 +30,27 @@ public interface IScreenCapture : IDisposable
     /// The region of the display to capture: <see cref="CaptureRegion.X"/> and <see cref="CaptureRegion.Y"/> must be &gt;= 0,
     /// <see cref="CaptureRegion.Width"/> and <see cref="CaptureRegion.Height"/> &gt; 0, and the region must lie within the display.
     /// </param>
-    /// <param name="downscaleLevel">The level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.</param>
+    /// <param name="downscaleLevel">
+    /// The level of downscaling applied to the image of this region before copying to local memory (must be &gt;= 0). The calculation is (width and height)/2^downscaleLevel.
+    /// Levels the region is too small for are reduced, see <see cref="ICaptureZone.DownscaleLevel"/>.
+    /// </param>
     /// <param name="doubleBuffered">
     /// <c>true</c> (default) to let the capture write a second buffer while frames of the zone are held (see <see cref="ICaptureZone.Lock"/>);
     /// <c>false</c> to make it wait for them instead, which saves the memory of the second buffer for very large zones.
     /// </param>
     /// <returns>The new <see cref="ICaptureZone"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="region"/> is empty or doesn't lie within the display, or <paramref name="downscaleLevel"/> is negative.</exception>
+    /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
     ICaptureZone RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0, bool doubleBuffered = true);
 
     /// <summary>
     /// Removes the given <see cref="ICaptureZone"/> from the <see cref="IScreenCapture"/>.
     /// </summary>
     /// <param name="captureZone">The previously registered <see cref="ICaptureZone"/>.</param>
-    /// <returns><c>true</c> if the <see cref="ICaptureZone"/> was successfully removed; otherwise, <c>false</c>.</returns>
+    /// <returns><c>true</c> if the <see cref="ICaptureZone"/> was successfully removed; otherwise (e.g. it was already removed), <c>false</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="captureZone"/> can't belong to this screen capture (e.g. it has another color format).</exception>
+    /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
     bool UnregisterCaptureZone(ICaptureZone captureZone);
 
     /// <summary>
@@ -56,7 +64,11 @@ public interface IScreenCapture : IDisposable
     /// </remarks>
     /// <param name="captureZone">The previously registered <see cref="ICaptureZone"/>.</param>
     /// <param name="region">The new region of the display to capture (same rules as for <see cref="RegisterCaptureZone"/>).</param>
-    /// <param name="downscaleLevel">The new level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.</param>
+    /// <param name="downscaleLevel">The new level of downscaling applied to the image of this region before copying to local memory (must be &gt;= 0). The calculation is (width and height)/2^downscaleLevel.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="captureZone"/> isn't registered to this screen capture.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="region"/> is empty or doesn't lie within the display, or <paramref name="downscaleLevel"/> is negative. The zone isn't changed.</exception>
+    /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
     void UpdateCaptureZone(ICaptureZone captureZone, CaptureRegion? region = null, int? downscaleLevel = null);
 
     /// <summary>

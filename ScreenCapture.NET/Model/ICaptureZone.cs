@@ -44,6 +44,9 @@ public interface ICaptureZone
     /// <summary>
     /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
     /// </summary>
+    /// <remarks>
+    /// This can be lower than the requested level: downscaling stops once both sides of the region are down to 1 pixel.
+    /// </remarks>
     int DownscaleLevel { get; }
 
     /// <summary>

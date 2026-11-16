@@ -117,8 +117,19 @@ public sealed class CaptureZoneRegistrationTests
         IScreenCapture capture = screenCapture;
         ICaptureZone foreignZone = new ForeignCaptureZone();
 
-        Assert.ThrowsExactly<ArgumentException>(() => capture.UnregisterCaptureZone(foreignZone));
-        Assert.ThrowsExactly<ArgumentException>(() => capture.UpdateCaptureZone(foreignZone, new CaptureRegion(0, 0, 1, 1)));
+        Assert.AreEqual("captureZone", Assert.ThrowsExactly<ArgumentException>(() => capture.UnregisterCaptureZone(foreignZone)).ParamName);
+        Assert.AreEqual("captureZone", Assert.ThrowsExactly<ArgumentException>(() => capture.UpdateCaptureZone(foreignZone, new CaptureRegion(0, 0, 1, 1))).ParamName);
+    }
+
+    [TestMethod]
+    public void NullZoneThrows()
+    {
+        using TestScreenCapture screenCapture = new();
+        IScreenCapture capture = screenCapture;
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => screenCapture.UnregisterCaptureZone(null!));
+        Assert.ThrowsExactly<ArgumentNullException>(() => capture.UnregisterCaptureZone(null!));
+        Assert.ThrowsExactly<ArgumentNullException>(() => capture.UpdateCaptureZone(null!, new CaptureRegion(0, 0, 1, 1)));
     }
 
     [TestMethod]

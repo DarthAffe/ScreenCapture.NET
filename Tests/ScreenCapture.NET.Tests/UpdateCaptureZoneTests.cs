@@ -155,12 +155,28 @@ public sealed class UpdateCaptureZoneTests
     [DataRow(10, 1000, 200, 100)] // y + height > display height
     [DataRow(10, 20, 1911, 100)] // x + new width > display width
     [DataRow(10, 20, 200, 1061)] // y + new height > display height
+    [DataRow(10, 20, int.MaxValue, 100)] // x + width overflows
+    [DataRow(10, 20, 200, int.MaxValue)] // y + height overflows
     public void InvalidUpdateThrowsAndKeepsZone(int x, int y, int width, int height)
     {
         (TestScreenCapture screenCapture, CaptureZone<ColorARGB> zone) = Create();
         using (screenCapture)
         {
-            Assert.ThrowsExactly<ArgumentException>(() => screenCapture.UpdateCaptureZone(zone, new CaptureRegion(x, y, width, height)));
+            ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => screenCapture.UpdateCaptureZone(zone, new CaptureRegion(x, y, width, height)));
+            Assert.AreEqual("region", exception.ParamName);
+
+            AssertZone(screenCapture, zone, REGION, 100, 50, DOWNSCALE_LEVEL);
+        }
+    }
+
+    [TestMethod]
+    public void NegativeDownscaleLevelThrowsAndKeepsZone()
+    {
+        (TestScreenCapture screenCapture, CaptureZone<ColorARGB> zone) = Create();
+        using (screenCapture)
+        {
+            ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => screenCapture.UpdateCaptureZone(zone, downscaleLevel: -1));
+            Assert.AreEqual("downscaleLevel", exception.ParamName);
 
             AssertZone(screenCapture, zone, REGION, 100, 50, DOWNSCALE_LEVEL);
         }

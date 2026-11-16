@@ -71,10 +71,29 @@ public sealed class CaptureZoneSizeTests
     [DataRow(0, 1071, 10, 10)] // y + height > display height
     [DataRow(0, 0, 1921, 10)]
     [DataRow(0, 0, 10, 1081)]
+    [DataRow(1920, 0, 1, 1)] // starts right of the display
+    [DataRow(0, 1080, 1, 1)] // starts below the display
+    [DataRow(10, 0, int.MaxValue, 10)] // x + width overflows
+    [DataRow(0, 10, 10, int.MaxValue)] // y + height overflows
+    [DataRow(int.MaxValue, 0, 10, 10)] // x + width overflows
+    [DataRow(0, int.MaxValue, 10, 10)] // y + height overflows
     public void RegisterRejectsInvalidRegion(int x, int y, int width, int height)
     {
         using TestScreenCapture screenCapture = new();
 
-        Assert.ThrowsExactly<ArgumentException>(() => screenCapture.RegisterCaptureZone(new CaptureRegion(x, y, width, height)));
+        ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => screenCapture.RegisterCaptureZone(new CaptureRegion(x, y, width, height)));
+
+        Assert.AreEqual("region", exception.ParamName);
+        Assert.AreEqual(new CaptureRegion(x, y, width, height), exception.ActualValue);
+    }
+
+    [TestMethod]
+    public void RegisterRejectsNegativeDownscaleLevel()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), -1));
+
+        Assert.AreEqual("downscaleLevel", exception.ParamName);
     }
 }

@@ -20,6 +20,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     // Zone counts up to this use a stack buffer for the per-capture "updated" flags; more fall back to the ArrayPool.
     private const int UPDATED_STACKALLOC_THRESHOLD = 32;
 
+    private const string NOT_REGISTERED_MESSAGE = "The capture zone is not registered to this screen capture.";
+
     #endregion
 
     #region Properties & Fields
@@ -206,15 +208,23 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// </summary>
     /// <param name="region">The region of the zone on the display.</param>
     /// <param name="downscaleLevel">The downscale-level of the zone.</param>
-    /// <exception cref="ArgumentException">Throws if some of the provided data is not valid.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="region"/> doesn't lie within the display or is empty, or <paramref name="downscaleLevel"/> is negative.
+    /// </exception>
     protected virtual void ValidateCaptureZoneAndThrow(CaptureRegion region, int downscaleLevel)
     {
-        if (region.X < 0) throw new ArgumentException("x < 0");
-        if (region.Y < 0) throw new ArgumentException("y < 0");
-        if (region.Width <= 0) throw new ArgumentException("with <= 0");
-        if (region.Height <= 0) throw new ArgumentException("height <= 0");
-        if ((region.X + region.Width) > Display.Width) throw new ArgumentException("x + width > Display width");
-        if ((region.Y + region.Height) > Display.Height) throw new ArgumentException("y + height > Display height");
+        if (region.X < 0) throw new ArgumentOutOfRangeException(nameof(region), region, "X must not be negative.");
+        if (region.Y < 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Y must not be negative.");
+        if (region.Width <= 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Width must be greater than 0.");
+        if (region.Height <= 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Height must be greater than 0.");
+
+        // Compared this way, X + Width can't overflow (X and Y aren't negative here).
+        if (region.Width > (Display.Width - region.X))
+            throw new ArgumentOutOfRangeException(nameof(region), region, $"X + Width must not be greater than the display width ({Display.Width}).");
+        if (region.Height > (Display.Height - region.Y))
+            throw new ArgumentOutOfRangeException(nameof(region), region, $"Y + Height must not be greater than the display height ({Display.Height}).");
+
+        ArgumentOutOfRangeException.ThrowIfNegative(downscaleLevel);
     }
 
     /// <summary>
@@ -246,11 +256,12 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc />
-    bool IScreenCapture.UnregisterCaptureZone(ICaptureZone captureZone) => UnregisterCaptureZone(captureZone as CaptureZone<TColor> ?? throw new ArgumentException("Invalid capture-zone."));
+    bool IScreenCapture.UnregisterCaptureZone(ICaptureZone captureZone) => UnregisterCaptureZone(AsCaptureZone(captureZone));
 
     /// <inheritdoc cref="IScreenCapture.UnregisterCaptureZone" />
     public virtual bool UnregisterCaptureZone(CaptureZone<TColor> captureZone)
     {
+        ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         lock (_captureZonesLock)
@@ -269,7 +280,15 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     /// <inheritdoc />
     void IScreenCapture.UpdateCaptureZone(ICaptureZone captureZone, CaptureRegion? region, int? downscaleLevel)
-        => UpdateCaptureZone(captureZone as CaptureZone<TColor> ?? throw new ArgumentException("Invalid capture-zone."), region, downscaleLevel);
+        => UpdateCaptureZone(AsCaptureZone(captureZone), region, downscaleLevel);
+
+    // A zone of another color format (or another ICaptureZone implementation) can't be registered to this capture.
+    private static CaptureZone<TColor> AsCaptureZone(ICaptureZone captureZone)
+    {
+        ArgumentNullException.ThrowIfNull(captureZone);
+
+        return captureZone as CaptureZone<TColor> ?? throw new ArgumentException(NOT_REGISTERED_MESSAGE, nameof(captureZone));
+    }
 
     /// <inheritdoc cref="IScreenCapture.UpdateCaptureZone" />
     public virtual void UpdateCaptureZone(CaptureZone<TColor> captureZone, CaptureRegion? region = null, int? downscaleLevel = null)
@@ -283,7 +302,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             lock (_captureZonesLock)
             {
                 if (Array.IndexOf(_captureZones, captureZone) < 0)
-                    throw new ArgumentException("The capture zone is not registered to this ScreenCapture", nameof(captureZone));
+                    throw new ArgumentException(NOT_REGISTERED_MESSAGE, nameof(captureZone));
 
                 CaptureRegion newRegion = region ?? captureZone.Region;
                 int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
