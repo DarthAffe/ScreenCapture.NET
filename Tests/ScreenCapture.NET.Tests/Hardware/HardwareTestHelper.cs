@@ -295,7 +295,7 @@ internal static class HardwareTestHelper
         return pixels;
     }
 
-    private static ColorBGRA[] GetPixels(ICaptureZone zone)
+    public static ColorBGRA[] GetPixels(ICaptureZone zone)
     {
         using CaptureFrame frame = zone.Lock();
         Assert.AreEqual(ColorBGRA.ColorFormat, frame.ColorFormat, "Only BGRA zones are supported.");

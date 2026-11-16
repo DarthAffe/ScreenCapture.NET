@@ -38,10 +38,12 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     private readonly Lock _errorLock = new();
     private readonly Queue<Exception> _pendingErrors = new();
 
-    // Guards _frameNumber and _frameTimestamp, which always describe the same frame. A leaf lock.
+    // Guards _frameNumber, _frameTimestamp and _hasFrame, which always describe the same frame. A leaf lock.
     private readonly Lock _frameLock = new();
     private long _frameNumber;
     private long _frameTimestamp;
+
+    private bool _hasFrame;
 
     // Guards all changes to the zone set and to zone positions/sizes. Acquired after a zone lock, never before.
     private readonly Lock _captureZonesLock = new();
@@ -111,21 +113,34 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         }
 
         long frameNumber;
+        bool hasFrame;
         lock (_frameLock)
         {
-            if (result == CaptureResult.NewFrame)
+            switch (result)
             {
-                _frameNumber++;
-                _frameTimestamp = timestamp != 0 ? timestamp : Stopwatch.GetTimestamp();
+                case CaptureResult.NewFrame:
+                    _frameNumber++;
+                    _frameTimestamp = timestamp != 0 ? timestamp : Stopwatch.GetTimestamp();
+                    _hasFrame = true;
+                    break;
+
+                case CaptureResult.NoChange:
+                case CaptureResult.Timeout:
+                    break;
+
+                default:
+                    _hasFrame = false;
+                    break;
             }
 
             frameNumber = _frameNumber;
             timestamp = _frameTimestamp;
+            hasFrame = _hasFrame;
         }
 
         // ReSharper disable once InconsistentlySynchronizedField
         CaptureZone<TColor>[] captureZones = Volatile.Read(ref _captureZones);
-        if (captureZones.Length > 0)
+        if (hasFrame && (captureZones.Length > 0))
         {
             // Every slot is written before it's read. If an update throws, the rented array is simply not returned, which the pool tolerates.
             bool[]? rented = null;
@@ -134,7 +149,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                                      : (rented = ArrayPool<bool>.Shared.Rent(captureZones.Length));
 
             for (int i = 0; i < captureZones.Length; i++)
-                updated[i] = TryUpdateCaptureZone(captureZones[i]);
+                updated[i] = TryUpdateCaptureZone(captureZones[i], frameNumber);
 
             // Raised after the loop and without holding any lock, so handlers can (un)register or update zones and lock other zones.
             for (int i = 0; i < captureZones.Length; i++)
@@ -190,16 +205,16 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         }
     }
 
-    private bool TryUpdateCaptureZone(CaptureZone<TColor> captureZone)
+    private bool TryUpdateCaptureZone(CaptureZone<TColor> captureZone, long frameNumber)
     {
-        if (!captureZone.AutoUpdate && !captureZone.IsUpdateRequested) return false;
+        if (!captureZone.NeedsUpdate(frameNumber)) return false;
 
         try
         {
             using (captureZone.EnterUpdateScope())
             {
                 ZoneBuffer? buffer = captureZone.BeginWrite();
-                if (buffer == null) return false; // A frame still reads the back buffer. The next capture tries again.
+                if (buffer == null) return false;
 
                 bool written = false;
                 try
@@ -212,6 +227,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 }
 
                 if (!written) return false;
+
+                captureZone.SetWritten(frameNumber);
             }
 
             captureZone.ResetUpdateRequest();
@@ -245,6 +262,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <remarks>
     /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update.
     /// The zone might have been unregistered since the capture started.
+    /// <para>
+    /// Called after <see cref="CaptureResult.NewFrame"/>, and after <see cref="CaptureResult.NoChange"/> or <see cref="CaptureResult.Timeout"/>
+    /// for zones that requested an update or don't show the last frame yet (e.g. new or changed zones): the backend has to keep the last frame for that.
+    /// Not called after other results or after <see cref="Restart"/> until the next <see cref="CaptureResult.NewFrame"/>.
+    /// </para>
     /// <para>
     /// <paramref name="buffer"/> has the zone's current size (<see cref="CaptureZone{TColor}.Stride"/> * <see cref="CaptureZone{TColor}.Height"/>).
     /// For a double-buffered zone it's the back buffer, which contains an older frame (or zeros) and is only shown if this returns <c>true</c>.
@@ -417,6 +439,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     public virtual void Restart()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+        lock (_frameLock)
+            _hasFrame = false;
     }
 
     /// <inheritdoc />

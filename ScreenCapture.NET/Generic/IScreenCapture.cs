@@ -41,6 +41,12 @@ public interface IScreenCapture : IDisposable
     /// <summary>
     /// Attempts to capture the current frame shown on the <see cref="Display"/> and updates the zones.
     /// </summary>
+    /// <remarks>
+    /// After <see cref="CaptureResult.NewFrame"/>, every zone with <see cref="ICaptureZone.AutoUpdate"/> (and every zone that requested an update) is written.
+    /// After <see cref="CaptureResult.NoChange"/> and <see cref="CaptureResult.Timeout"/>, the last frame is still current: only zones that requested an update
+    /// and zones that don't show it yet (registered or changed since, or skipped because a frame held their buffer) are written from it.
+    /// After other results no zone is written; requested updates stay until the next frame.
+    /// </remarks>
     /// <returns>
     /// <see cref="CaptureResult.NewFrame"/> if a new frame was captured; otherwise why not.
     /// <see cref="CaptureResult.NoChange"/> and <see cref="CaptureResult.Timeout"/> are normal when the screen doesn't change.

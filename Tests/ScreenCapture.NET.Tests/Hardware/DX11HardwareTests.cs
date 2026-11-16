@@ -76,6 +76,51 @@ public sealed class DX11HardwareTests
                                     $"Unexpected results: {string.Join(", ", results.Distinct())}");
     }
 
+    /// <summary>
+    /// Without a new frame, a zone registered since is written from the last frame (DX11 keeps it in the capture texture),
+    /// and zones that already show it aren't written again.
+    /// </summary>
+    [TestMethod]
+    public void ZoneAddedOnAStaticScreenGetsTheLastFrame()
+    {
+        using DX11ScreenCaptureService service = new();
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+
+        (int x, int y, int width, int height) = HardwareTestHelper.Center(display);
+        CaptureRegion region = new(x, y, width, height);
+        CaptureZone<ColorBGRA> reference = screenCapture.RegisterCaptureZone(region);
+
+        int referenceWrites = 0;
+        reference.Updated += (_, _) => referenceWrites++;
+
+        HardwareTestHelper.CaptureFrame(screenCapture);
+        screenCapture.Timeout = 0;
+
+        // Something on the screen might render (cursor blinking, clock); try until a capture finds no new frame.
+        for (int i = 0; i < 50; i++)
+        {
+            CaptureZone<ColorBGRA> added = screenCapture.RegisterCaptureZone(region);
+            bool addedWritten = false;
+            added.Updated += (_, _) => addedWritten = true;
+
+            int writesBefore = referenceWrites;
+            CaptureResult result = screenCapture.CaptureScreen();
+            if (result is CaptureResult.NoChange or CaptureResult.Timeout)
+            {
+                Assert.IsTrue(addedWritten, "The new zone wasn't written.");
+                Assert.AreEqual(writesBefore, referenceWrites, "The zone showing the last frame was written again.");
+                CollectionAssert.AreEqual(HardwareTestHelper.GetPixels(reference), HardwareTestHelper.GetPixels(added));
+                return;
+            }
+
+            Assert.AreEqual(CaptureResult.NewFrame, result);
+            screenCapture.UnregisterCaptureZone(added);
+        }
+
+        Assert.Inconclusive("Every capture found a new frame: the screen never stood still.");
+    }
+
     [TestMethod]
     public void MovedZoneCapturesNewPosition()
     {

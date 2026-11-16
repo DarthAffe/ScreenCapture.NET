@@ -21,6 +21,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     private ZoneBuffer _front;
     private ZoneBuffer? _back;
 
+    private long _writtenFrameNumber;
+
     /// <inheritdoc />
     public Display Display { get; }
 
@@ -204,6 +206,18 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     internal void ResetUpdateRequest() => IsUpdateRequested = false;
 
+    /// <summary>
+    /// Checks if the capture has to write the zone with the given frame: if an update was requested,
+    /// or if it's updated automatically and doesn't show that frame yet (it's new, was changed, skipped or not written).
+    /// </summary>
+    /// <param name="frameNumber">The number of the frame the capture holds.</param>
+    internal bool NeedsUpdate(long frameNumber) => IsUpdateRequested || (AutoUpdate && (Volatile.Read(ref _writtenFrameNumber) != frameNumber));
+
+    /// <summary>
+    /// Records that the zone was written with the given frame. Called under <see cref="EnterUpdateScope"/>.
+    /// </summary>
+    internal void SetWritten(long frameNumber) => Volatile.Write(ref _writtenFrameNumber, frameNumber);
+
     internal void RaiseUpdated()
     {
         try
@@ -215,10 +229,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     internal void Update(CaptureRegion region, int width, int height, int downscaleLevel)
     {
+        if ((region == Region) && (width == Width) && (height == Height) && (downscaleLevel == DownscaleLevel)) return;
+
         Region = region;
         Width = width;
         Height = height;
         DownscaleLevel = downscaleLevel;
+
+        Volatile.Write(ref _writtenFrameNumber, 0);
     }
 
     #endregion

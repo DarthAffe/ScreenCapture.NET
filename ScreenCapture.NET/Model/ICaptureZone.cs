@@ -60,15 +60,20 @@ public interface ICaptureZone
     /// <summary>
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>
+    /// <remarks>
+    /// Captures without a new frame (<see cref="CaptureResult.NoChange"/>, <see cref="CaptureResult.Timeout"/>) don't write the zone again,
+    /// unless it doesn't show the last frame yet: it was registered or changed (<see cref="IScreenCapture.UpdateCaptureZone"/>) since,
+    /// or it missed the frame because a frame of the zone was still held (see <see cref="Lock"/>). So it's never left behind on a static screen.
+    /// </remarks>
     bool AutoUpdate { get; set; }
 
     /// <summary>
-    /// Gets if an update for the <see cref="ICaptureZone"/> is requested on the next captured frame.
+    /// Gets if an update for the <see cref="ICaptureZone"/> is requested (see <see cref="RequestUpdate"/>).
     /// </summary>
     bool IsUpdateRequested { get; }
 
     /// <summary>
-    /// Occurs when the <see cref="ICaptureZone"/> is updated.
+    /// Occurs when the <see cref="ICaptureZone"/> was written by a capture.
     /// </summary>
     event EventHandler? Updated;
 
@@ -94,8 +99,11 @@ public interface ICaptureZone
     CaptureFrame Lock();
 
     /// <summary>
-    /// Requests to update this <see cref="ICaptureZone"/> when the next frame is captured.
+    /// Requests to update this <see cref="ICaptureZone"/> with the next capture, also if it has no new frame (from the last frame, which is still current).
     /// Only necessary if <see cref="AutoUpdate"/> is set to <c>false</c>.
     /// </summary>
+    /// <remarks>
+    /// The request stays until the zone is written: captures without a frame (e.g. <see cref="CaptureResult.Unavailable"/>) don't write zones.
+    /// </remarks>
     void RequestUpdate();
 }
