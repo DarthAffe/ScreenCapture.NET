@@ -178,6 +178,24 @@ public sealed class DX11HardwareTests
     }
 
     [TestMethod]
+    [DataRow(0)]
+    [DataRow(2)]
+    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
+    {
+        using DX11ScreenCaptureService service = new();
+
+        // The held capture doesn't wait for a frame: the zones are changed after it got one.
+        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel, c => ((DX11ScreenCapture)c).Timeout = TimeSpan.Zero);
+    }
+
+    [TestMethod]
+    public void ZoneShowsTheLatestFrame()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZoneShowsTheLatestFrame(service);
+    }
+
+    [TestMethod]
     public void ZonesCanBeChangedWhileCapturing()
     {
         using DX11ScreenCaptureService service = new();

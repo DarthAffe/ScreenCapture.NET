@@ -185,6 +185,22 @@ public sealed class DX9HardwareTests
     }
 
     [TestMethod]
+    [DataRow(0)]
+    [DataRow(2)]
+    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
+    }
+
+    [TestMethod]
+    public void ZoneShowsTheLatestFrame()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZoneShowsTheLatestFrame(service);
+    }
+
+    [TestMethod]
     public void ZonesCanBeChangedWhileCapturing()
     {
         using DX9ScreenCaptureService service = new();

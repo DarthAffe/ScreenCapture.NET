@@ -161,6 +161,22 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    [DataRow(0)]
+    [DataRow(2)]
+    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
+    }
+
+    [TestMethod]
+    public void ZoneShowsTheLatestFrame()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertZoneShowsTheLatestFrame(service);
+    }
+
+    [TestMethod]
     public void ZonesCanBeChangedWhileCapturing()
     {
         using X11ScreenCaptureService service = new();
