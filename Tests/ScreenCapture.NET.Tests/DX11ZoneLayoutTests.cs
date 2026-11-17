@@ -23,20 +23,20 @@ public sealed class DX11ZoneLayoutTests
     #region Methods
 
     [TestMethod]
-    [DataRow(Rotation.None, 10, 20, 300, 400)]
-    [DataRow(Rotation.Rotate90, 20, 1920 - 10 - 300, 400, 300)]
-    [DataRow(Rotation.Rotate180, 1920 - 10 - 300, 1080 - 20 - 400, 300, 400)]
-    [DataRow(Rotation.Rotate270, 1080 - 20 - 400, 10, 400, 300)]
-    public void SourceBox(Rotation rotation, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
+    [DataRow(ImageRotation.None, 10, 20, 300, 400)]
+    [DataRow(ImageRotation.Rotate90, 20, 1920 - 10 - 300, 400, 300)]
+    [DataRow(ImageRotation.Rotate180, 1920 - 10 - 300, 1080 - 20 - 400, 300, 400)]
+    [DataRow(ImageRotation.Rotate270, 1080 - 20 - 400, 10, 400, 300)]
+    public void SourceBox(ImageRotation rotation, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
         => Assert.AreEqual(new SourceBox(expectedX, expectedY, expectedWidth, expectedHeight),
                            DX11ZoneLayout.GetSourceBox(rotation, DISPLAY_WIDTH, DISPLAY_HEIGHT, 10, 20, 300, 400));
 
     [TestMethod]
-    [DataRow(Rotation.None)]
-    [DataRow(Rotation.Rotate90)]
-    [DataRow(Rotation.Rotate180)]
-    [DataRow(Rotation.Rotate270)]
-    public void FullScreenSourceBoxCoversTexture(Rotation rotation)
+    [DataRow(ImageRotation.None)]
+    [DataRow(ImageRotation.Rotate90)]
+    [DataRow(ImageRotation.Rotate180)]
+    [DataRow(ImageRotation.Rotate270)]
+    public void FullScreenSourceBoxCoversTexture(ImageRotation rotation)
     {
         (int textureWidth, int textureHeight) = DX11ZoneLayout.GetTextureSize(rotation, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
@@ -45,11 +45,11 @@ public sealed class DX11ZoneLayoutTests
     }
 
     [TestMethod]
-    [DataRow(Rotation.None, 300, 400)]
-    [DataRow(Rotation.Rotate90, 400, 300)]
-    [DataRow(Rotation.Rotate180, 300, 400)]
-    [DataRow(Rotation.Rotate270, 400, 300)]
-    public void TextureSize(Rotation rotation, int expectedWidth, int expectedHeight)
+    [DataRow(ImageRotation.None, 300, 400)]
+    [DataRow(ImageRotation.Rotate90, 400, 300)]
+    [DataRow(ImageRotation.Rotate180, 300, 400)]
+    [DataRow(ImageRotation.Rotate270, 400, 300)]
+    public void TextureSize(ImageRotation rotation, int expectedWidth, int expectedHeight)
         => Assert.AreEqual((expectedWidth, expectedHeight), DX11ZoneLayout.GetTextureSize(rotation, 300, 400));
 
     [TestMethod]
@@ -65,11 +65,11 @@ public sealed class DX11ZoneLayoutTests
     /// and checks that a partial zone shows the same pixels as the same area of a full-screen zone.
     /// </summary>
     [TestMethod]
-    [DataRow(Rotation.None)]
-    [DataRow(Rotation.Rotate90)]
-    [DataRow(Rotation.Rotate180)]
-    [DataRow(Rotation.Rotate270)]
-    public void PartialZoneMatchesFullScreen(Rotation rotation)
+    [DataRow(ImageRotation.None)]
+    [DataRow(ImageRotation.Rotate90)]
+    [DataRow(ImageRotation.Rotate180)]
+    [DataRow(ImageRotation.Rotate270)]
+    public void PartialZoneMatchesFullScreen(ImageRotation rotation)
     {
         const int displayWidth = 13;
         const int displayHeight = 7;
@@ -95,7 +95,7 @@ public sealed class DX11ZoneLayoutTests
                     }
     }
 
-    private static ColorBGRA[] Capture(Rotation rotation, ColorBGRA[] texture, int textureWidth, int displayWidth, int displayHeight, int x, int y, int width, int height)
+    private static ColorBGRA[] Capture(ImageRotation rotation, ColorBGRA[] texture, int textureWidth, int displayWidth, int displayHeight, int x, int y, int width, int height)
     {
         SourceBox box = DX11ZoneLayout.GetSourceBox(rotation, displayWidth, displayHeight, x, y, width, height);
 

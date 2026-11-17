@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using HPPH;
 
 namespace ScreenCapture.NET.Benchmarks;
 
@@ -30,8 +31,8 @@ public class DX11RotationBenchmarks
     [Params(ZoneSize.FullHD, ZoneSize.SuperUltraWide, ZoneSize.Downscaled)]
     public ZoneSize Size { get; set; }
 
-    [Params(Rotation.None, Rotation.Rotate90, Rotation.Rotate180, Rotation.Rotate270)]
-    public Rotation Rotation { get; set; }
+    [Params(ImageRotation.None, ImageRotation.Rotate90, ImageRotation.Rotate180, ImageRotation.Rotate270)]
+    public ImageRotation Rotation { get; set; }
 
     private int _width;
     private int _height;
@@ -55,7 +56,7 @@ public class DX11RotationBenchmarks
         };
 
         // For 90/270 the texture is in the native orientation: one row per zone column.
-        bool swapped = Rotation is Rotation.Rotate90 or Rotation.Rotate270;
+        bool swapped = Rotation is ImageRotation.Rotate90 or ImageRotation.Rotate270;
         int sourceRows = swapped ? _width : _height;
         int sourceRowPixels = swapped ? _height : _width;
 

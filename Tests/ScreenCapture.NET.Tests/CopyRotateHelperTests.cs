@@ -47,7 +47,7 @@ public sealed class CopyRotateHelperTests
         return (data, stride);
     }
 
-    private static ColorBGRA[] Copy(Rotation rotation, int sourceRows, int sourceColumns)
+    private static ColorBGRA[] Copy(ImageRotation rotation, int sourceRows, int sourceColumns)
     {
         (byte[] source, int stride) = CreateSource(sourceRows, sourceColumns);
         byte[] target = new byte[WIDTH * HEIGHT * 4];
@@ -61,25 +61,25 @@ public sealed class CopyRotateHelperTests
     public void Rotate0CopiesRowsWithoutPadding()
         => CollectionAssert.AreEqual(new[] { S(0, 0), S(0, 1), S(0, 2),
                                              S(1, 0), S(1, 1), S(1, 2) },
-                                     Copy(Rotation.None, HEIGHT, WIDTH));
+                                     Copy(ImageRotation.None, HEIGHT, WIDTH));
 
     [TestMethod]
     public void Rotate180()
         => CollectionAssert.AreEqual(new[] { S(1, 2), S(1, 1), S(1, 0),
                                              S(0, 2), S(0, 1), S(0, 0) },
-                                     Copy(Rotation.Rotate180, HEIGHT, WIDTH));
+                                     Copy(ImageRotation.Rotate180, HEIGHT, WIDTH));
 
     [TestMethod]
     public void Rotate90()
         => CollectionAssert.AreEqual(new[] { S(2, 0), S(1, 0), S(0, 0),
                                              S(2, 1), S(1, 1), S(0, 1) },
-                                     Copy(Rotation.Rotate90, WIDTH, HEIGHT));
+                                     Copy(ImageRotation.Rotate90, WIDTH, HEIGHT));
 
     [TestMethod]
     public void Rotate270()
         => CollectionAssert.AreEqual(new[] { S(0, 1), S(1, 1), S(2, 1),
                                              S(0, 0), S(1, 0), S(2, 0) },
-                                     Copy(Rotation.Rotate270, WIDTH, HEIGHT));
+                                     Copy(ImageRotation.Rotate270, WIDTH, HEIGHT));
 
     #endregion
 }

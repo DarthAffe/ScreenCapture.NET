@@ -213,7 +213,7 @@ public sealed class CaptureZoneThreadingTests
     [TestMethod]
     public void ZonePropertiesNeverTear()
     {
-        Display[] displays = [TestScreenCapture.CreateDisplay(1920, 1080), TestScreenCapture.CreateDisplay(2560, 1440, Rotation.Rotate180)];
+        Display[] displays = [TestScreenCapture.CreateDisplay(1920, 1080), TestScreenCapture.CreateDisplay(2560, 1440, ImageRotation.Rotate180)];
         CaptureRegion[] regions = [new(0, 0, 10, 10), new(100, 200, 300, 400)];
 
         using TestScreenCapture screenCapture = new();

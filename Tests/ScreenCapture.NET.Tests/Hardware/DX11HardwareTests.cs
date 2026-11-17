@@ -310,7 +310,7 @@ public sealed class DX11HardwareTests
             X = display.X + 7,
             Width = display.Width / 2,
             Height = display.Height / 2,
-            Rotation = display.Rotation == Rotation.None ? Rotation.Rotate90 : Rotation.None,
+            Rotation = display.Rotation == ImageRotation.None ? ImageRotation.Rotate90 : ImageRotation.None,
             GraphicsCard = display.GraphicsCard with { Index = 99 }
         };
 

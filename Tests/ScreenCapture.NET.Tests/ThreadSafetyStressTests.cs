@@ -17,7 +17,7 @@ public sealed class ThreadSafetyStressTests
     private static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(30);
 
     private static readonly Display BIG = TestScreenCapture.CreateDisplay(1920, 1080);
-    private static readonly Display SMALL = TestScreenCapture.CreateDisplay(600, 800, Rotation.Rotate90);
+    private static readonly Display SMALL = TestScreenCapture.CreateDisplay(600, 800, ImageRotation.Rotate90);
 
     // These fit both displays.
     private static readonly CaptureRegion[] REGIONS = [new(0, 0, 16, 8), new(100, 50, 64, 32), new(0, 0, 600, 800)];

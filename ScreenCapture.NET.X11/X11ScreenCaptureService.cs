@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -87,7 +88,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
             int screenHeight = X11.XHeightOfScreen(screen);
 
             // DarthAffe 10.09.2023: Emulate DX-Displaynames for no real reason ¯\(°_o)/¯
-            displays.Add(new Display($"{name}/{screenNumber}", screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", string.Empty, 0, 0, screenWidth, screenHeight, Rotation.None, graphicsCard));
+            displays.Add(new Display($"{name}/{screenNumber}", screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", string.Empty, 0, 0, screenWidth, screenHeight, ImageRotation.None, graphicsCard));
         }
 
         return displays;

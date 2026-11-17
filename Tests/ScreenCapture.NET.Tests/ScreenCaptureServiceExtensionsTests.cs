@@ -1,3 +1,5 @@
+using HPPH;
+
 namespace ScreenCapture.NET.Tests;
 
 [TestClass]
@@ -11,7 +13,7 @@ public sealed class ScreenCaptureServiceExtensionsTests
     private static readonly Display THIRD_DISPLAY = CreateDisplay("display-c", 1, SECOND_CARD);
 
     private static Display CreateDisplay(string id, int index, GraphicsCard graphicsCard)
-        => new(id, index, $@"\\.\DISPLAY{index + 1}", id.ToUpperInvariant(), index * 1920, 0, 1920, 1080, Rotation.None, graphicsCard);
+        => new(id, index, $@"\\.\DISPLAY{index + 1}", id.ToUpperInvariant(), index * 1920, 0, 1920, 1080, ImageRotation.None, graphicsCard);
 
     private static TestScreenCaptureService CreateService()
         => new([FIRST_CARD, SECOND_CARD], [FIRST_DISPLAY, SECOND_DISPLAY, THIRD_DISPLAY]);

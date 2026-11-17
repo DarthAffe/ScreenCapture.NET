@@ -1,4 +1,5 @@
 using System;
+using HPPH;
 using Vortice.DXGI;
 
 namespace ScreenCapture.NET;
@@ -73,12 +74,12 @@ internal static class DX11Devices
         }
     }
 
-    private static Rotation GetRotation(ModeRotation rotation) => rotation switch
+    private static ImageRotation GetRotation(ModeRotation rotation) => rotation switch
     {
-        ModeRotation.Rotate90 => Rotation.Rotate90,
-        ModeRotation.Rotate180 => Rotation.Rotate180,
-        ModeRotation.Rotate270 => Rotation.Rotate270,
-        _ => Rotation.None
+        ModeRotation.Rotate90 => ImageRotation.Rotate90,
+        ModeRotation.Rotate180 => ImageRotation.Rotate180,
+        ModeRotation.Rotate270 => ImageRotation.Rotate270,
+        _ => ImageRotation.None
     };
 
     #endregion

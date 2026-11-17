@@ -11,7 +11,7 @@ public sealed class DisplayChangeTests
 {
     private static readonly Display ORIGINAL = TestScreenCapture.CreateDisplay(1920, 1080);
     private static readonly Display SMALLER = TestScreenCapture.CreateDisplay(1280, 720);
-    private static readonly Display ROTATED = TestScreenCapture.CreateDisplay(1080, 1920, Rotation.Rotate90);
+    private static readonly Display ROTATED = TestScreenCapture.CreateDisplay(1080, 1920, ImageRotation.Rotate90);
 
     private static readonly ColorARGB FIRST = new(255, 1, 2, 3);
     private static readonly ColorARGB SECOND = new(255, 4, 5, 6);

@@ -84,7 +84,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 
     #region Constructors
 
-    public TestScreenCapture(Rotation rotation = Rotation.None)
+    public TestScreenCapture(ImageRotation rotation = ImageRotation.None)
         : base(CreateDisplay(1920, 1080, rotation))
     { }
 
@@ -95,7 +95,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// <summary>
     /// Creates the display of the test capture with the given size (the same <see cref="Display.Id"/>).
     /// </summary>
-    public static Display CreateDisplay(int width, int height, Rotation rotation = Rotation.None)
+    public static Display CreateDisplay(int width, int height, ImageRotation rotation = ImageRotation.None)
         => new("Test", 0, "Test", string.Empty, 0, 0, width, height, rotation, new GraphicsCard("Test", 0, "Test", 0, 0));
 
     protected override CaptureResult PerformScreenCapture(out long timestamp)

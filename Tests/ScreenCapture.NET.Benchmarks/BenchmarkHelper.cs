@@ -45,7 +45,7 @@ internal static class BenchmarkHelper
 /// A capture without a backend, used to create zones with the real size calculation.
 /// </summary>
 internal sealed class BenchmarkScreenCapture(int width, int height)
-    : AbstractScreenCapture<ColorBGRA>(new Display("Benchmark", 0, "Benchmark", string.Empty, 0, 0, width, height, Rotation.None, new GraphicsCard("Benchmark", 0, "Benchmark", 0, 0)))
+    : AbstractScreenCapture<ColorBGRA>(new Display("Benchmark", 0, "Benchmark", string.Empty, 0, 0, width, height, ImageRotation.None, new GraphicsCard("Benchmark", 0, "Benchmark", 0, 0)))
 {
     protected override CaptureResult PerformScreenCapture(out long timestamp)
     {

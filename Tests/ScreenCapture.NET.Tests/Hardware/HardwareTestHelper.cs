@@ -15,7 +15,7 @@ internal static class HardwareTestHelper
     /// A display that doesn't exist (by default: its index is out of range on every backend), so every restart of a capture fails.
     /// </summary>
     public static Display CreateMissingDisplay(int index = 99)
-        => new("missing", index, "missing", string.Empty, 0, 0, 640, 480, Rotation.None, new GraphicsCard("first", 0, "first", 0, 0));
+        => new("missing", index, "missing", string.Empty, 0, 0, 640, 480, ImageRotation.None, new GraphicsCard("first", 0, "first", 0, 0));
 
     public static (GraphicsCard graphicsCard, Display display) GetFirstDisplay(IScreenCaptureService service)
     {

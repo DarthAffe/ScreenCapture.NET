@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using HPPH;
 using Vortice.Direct3D9;
 
 namespace ScreenCapture.NET;
@@ -42,7 +43,7 @@ internal static partial class DX9Devices
         (string id, string friendlyName) = devices.GetMonitor(identifier.DeviceName);
         (int x, int y) = GetPosition(direct3D9.GetAdapterMonitor(adapter));
 
-        return new Display(id, adapter, identifier.DeviceName, friendlyName, x, y, displayMode.Width, displayMode.Height, Rotation.None, graphicsCard);
+        return new Display(id, adapter, identifier.DeviceName, friendlyName, x, y, displayMode.Width, displayMode.Height, ImageRotation.None, graphicsCard);
     }
 
     /// <summary>

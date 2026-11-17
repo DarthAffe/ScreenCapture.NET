@@ -1,3 +1,5 @@
+using HPPH;
+
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
@@ -10,7 +12,7 @@ public sealed class ScreenCaptureCacheTests
     private static readonly TestOptions OTHER_OPTIONS = new(2);
 
     private static Display CreateDisplay(string id, int index = 0)
-        => new(id, index, $@"\\.\DISPLAY{index + 1}", string.Empty, 0, 0, 1920, 1080, Rotation.None, new GraphicsCard("card", 0, "card", 0, 0));
+        => new(id, index, $@"\\.\DISPLAY{index + 1}", string.Empty, 0, 0, 1920, 1080, ImageRotation.None, new GraphicsCard("card", 0, "card", 0, 0));
 
     [TestMethod]
     public void SameDisplayIdReturnsTheSameCapture()

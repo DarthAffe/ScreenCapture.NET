@@ -404,7 +404,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                     int width = display.Width;
                     int height = display.Height;
-                    if (display.Rotation is Rotation.Rotate90 or Rotation.Rotate270)
+                    if (display.Rotation is ImageRotation.Rotate90 or ImageRotation.Rotate270)
                         (width, height) = (height, width);
 
                     Texture2DDescription captureTextureDesc = new()

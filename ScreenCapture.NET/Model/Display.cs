@@ -1,4 +1,6 @@
-﻿// ReSharper disable MemberCanBePrivate.Global
+﻿using HPPH;
+
+// ReSharper disable MemberCanBePrivate.Global
 
 namespace ScreenCapture.NET;
 
@@ -25,6 +27,9 @@ namespace ScreenCapture.NET;
 /// <param name="Y">The y-position of the display on the desktop, in pixels. The primary display is at 0, displays above it are negative. Always 0 on X11, where every screen has its own coordinates.</param>
 /// <param name="Width">The width of the display on the desktop, in pixels (rotation already applied).</param>
 /// <param name="Height">The height of the display on the desktop, in pixels (rotation already applied).</param>
-/// <param name="Rotation">The rotation the backend has to undo when capturing the display.</param>
+/// <param name="Rotation">
+/// How the display is rotated, clockwise (on Windows: the orientation set in the display settings).
+/// Zones are always in the orientation of the display: a backend that captures the output in its native orientation (DX11) rotates the pixels by this.
+/// </param>
 /// <param name="GraphicsCard">The <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.</param>
-public readonly record struct Display(string Id, int Index, string DeviceName, string FriendlyName, int X, int Y, int Width, int Height, Rotation Rotation, GraphicsCard GraphicsCard);
+public readonly record struct Display(string Id, int Index, string DeviceName, string FriendlyName, int X, int Y, int Width, int Height, ImageRotation Rotation, GraphicsCard GraphicsCard);

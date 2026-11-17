@@ -1,3 +1,4 @@
+using HPPH;
 using Vortice.Mathematics;
 
 namespace ScreenCapture.NET;
@@ -8,10 +9,10 @@ namespace ScreenCapture.NET;
 /// <remarks>
 /// The mapping is the inverse of <see cref="CopyRotateHelper"/>: a pixel at (x, y) on a display of size width x height is read from the texture at
 /// <list type="bullet">
-/// <item><see cref="Rotation.None"/>: (x, y)</item>
-/// <item><see cref="Rotation.Rotate90"/>: (y, width - 1 - x)</item>
-/// <item><see cref="Rotation.Rotate180"/>: (width - 1 - x, height - 1 - y)</item>
-/// <item><see cref="Rotation.Rotate270"/>: (height - 1 - y, x)</item>
+/// <item><see cref="ImageRotation.None"/>: (x, y)</item>
+/// <item><see cref="ImageRotation.Rotate90"/>: (y, width - 1 - x)</item>
+/// <item><see cref="ImageRotation.Rotate180"/>: (width - 1 - x, height - 1 - y)</item>
+/// <item><see cref="ImageRotation.Rotate270"/>: (height - 1 - y, x)</item>
 /// </list>
 /// </remarks>
 internal static class DX11ZoneLayout
@@ -29,12 +30,12 @@ internal static class DX11ZoneLayout
     /// <param name="unscaledWidth">The width of the zone on the display.</param>
     /// <param name="unscaledHeight">The height of the zone on the display.</param>
     /// <returns>The region in texture coordinates.</returns>
-    internal static SourceBox GetSourceBox(Rotation rotation, int displayWidth, int displayHeight, int x, int y, int unscaledWidth, int unscaledHeight)
+    internal static SourceBox GetSourceBox(ImageRotation rotation, int displayWidth, int displayHeight, int x, int y, int unscaledWidth, int unscaledHeight)
         => rotation switch
         {
-            Rotation.Rotate90 => new SourceBox(y, displayWidth - x - unscaledWidth, unscaledHeight, unscaledWidth),
-            Rotation.Rotate180 => new SourceBox(displayWidth - x - unscaledWidth, displayHeight - y - unscaledHeight, unscaledWidth, unscaledHeight),
-            Rotation.Rotate270 => new SourceBox(displayHeight - y - unscaledHeight, x, unscaledHeight, unscaledWidth),
+            ImageRotation.Rotate90 => new SourceBox(y, displayWidth - x - unscaledWidth, unscaledHeight, unscaledWidth),
+            ImageRotation.Rotate180 => new SourceBox(displayWidth - x - unscaledWidth, displayHeight - y - unscaledHeight, unscaledWidth, unscaledHeight),
+            ImageRotation.Rotate270 => new SourceBox(displayHeight - y - unscaledHeight, x, unscaledHeight, unscaledWidth),
             _ => new SourceBox(x, y, unscaledWidth, unscaledHeight)
         };
 
@@ -45,8 +46,8 @@ internal static class DX11ZoneLayout
     /// <param name="width">The width on the display.</param>
     /// <param name="height">The height on the display.</param>
     /// <returns>The size in texture coordinates.</returns>
-    internal static (int width, int height) GetTextureSize(Rotation rotation, int width, int height)
-        => rotation is Rotation.Rotate90 or Rotation.Rotate270 ? (height, width) : (width, height);
+    internal static (int width, int height) GetTextureSize(ImageRotation rotation, int width, int height)
+        => rotation is ImageRotation.Rotate90 or ImageRotation.Rotate270 ? (height, width) : (width, height);
 
     #endregion
 }
