@@ -11,7 +11,20 @@ public interface ICaptureZone
     /// <summary>
     /// Gets the display this zone is on.
     /// </summary>
+    /// <remarks>
+    /// Follows the <see cref="IScreenCapture.Display"/> of the capture when it changes (see <see cref="IScreenCapture.DisplayChanged"/>).
+    /// </remarks>
     Display Display { get; }
+
+    /// <summary>
+    /// Gets if the <see cref="Region"/> lies within the <see cref="Display"/>, so the zone can be captured.
+    /// </summary>
+    /// <remarks>
+    /// A zone is valid when it's registered. It becomes invalid if the display gets smaller (e.g. a lower resolution or a rotation, see <see cref="IScreenCapture.DisplayChanged"/>)
+    /// so that the region doesn't fit anymore. The region isn't changed: an invalid zone isn't written and keeps its pixels
+    /// until <see cref="IScreenCapture.UpdateCaptureZone"/> gives it a region that fits, or the display gets large enough again.
+    /// </remarks>
+    bool IsValid { get; }
 
     /// <summary>
     /// Gets the color-format used in the buffer of this zone.
@@ -64,6 +77,7 @@ public interface ICaptureZone
     /// Captures without a new frame (<see cref="CaptureResult.NoChange"/>, <see cref="CaptureResult.Timeout"/>) don't write the zone again,
     /// unless it doesn't show the last frame yet: it was registered or changed (<see cref="IScreenCapture.UpdateCaptureZone"/>) since,
     /// or it missed the frame because a frame of the zone was still held (see <see cref="Lock"/>). So it's never left behind on a static screen.
+    /// Invalid zones (see <see cref="IsValid"/>) aren't written.
     /// </remarks>
     bool AutoUpdate { get; set; }
 

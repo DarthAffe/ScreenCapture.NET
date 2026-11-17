@@ -151,6 +151,7 @@ public sealed class CaptureZoneRegistrationTests
     private sealed class ForeignCaptureZone : ICaptureZone
     {
         public Display Display => default;
+        public bool IsValid => true;
         public IColorFormat ColorFormat => ColorBGRA.ColorFormat;
         public CaptureRegion Region => new(0, 0, 1, 1);
         public int Width => 1;

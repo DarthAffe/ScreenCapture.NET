@@ -219,7 +219,7 @@ public sealed class DX11HardwareTests
         DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
         using IDXGIFactory1 _ = factory!;
 
-        // The output doesn't exist, so every restart fails after the device was created.
+        // The display isn't connected, so every restart fails.
         Display display = HardwareTestHelper.CreateMissingDisplay();
         using DX11ScreenCapture screenCapture = new(factory!, display, DX11CaptureOptions.Default);
         AssertNoDirectXObjects(screenCapture);
@@ -274,6 +274,41 @@ public sealed class DX11HardwareTests
         stopwatch.Stop();
 
         Assert.IsInRange(TimeSpan.FromMilliseconds(690), TimeSpan.FromSeconds(3), stopwatch.Elapsed);
+    }
+
+    [TestMethod]
+    public void OutdatedDisplayIsReadAgain()
+    {
+        using DX11ScreenCaptureService service = new();
+        Display display = HardwareTestHelper.GetAllDisplays(service).Last();
+
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        // Indices that don't exist (the capture finds the display by its id), another position and size.
+        Display outdated = display with
+        {
+            Index = 99,
+            X = display.X + 7,
+            Width = display.Width / 2,
+            Height = display.Height / 2,
+            Rotation = display.Rotation == Rotation.None ? Rotation.Rotate90 : Rotation.None,
+            GraphicsCard = display.GraphicsCard with { Index = 99 }
+        };
+
+        HardwareTestHelper.AssertOutdatedDisplayIsReadAgain(display, outdated, d => new DX11ScreenCapture(factory!, d, DX11CaptureOptions.Default));
+    }
+
+    [TestMethod]
+    public void MissingDisplayIsReported()
+    {
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        using DX11ScreenCapture screenCapture = new(factory!, HardwareTestHelper.CreateMissingDisplay(), DX11CaptureOptions.Default);
+
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, "'missing' isn't connected");
     }
 
     [TestMethod]

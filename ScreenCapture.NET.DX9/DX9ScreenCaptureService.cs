@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using Vortice.Direct3D9;
 
 namespace ScreenCapture.NET;
@@ -11,7 +10,7 @@ namespace ScreenCapture.NET;
 /// <remarks>
 /// Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, DX9CaptureOptions)"/>.
 /// </remarks>
-public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
+public sealed class DX9ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
@@ -51,7 +50,7 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
         Dictionary<string, GraphicsCard> graphicsCards = new(StringComparer.Ordinal);
         for (int i = 0; i < _direct3D9.AdapterCount; i++)
         {
-            string id = WindowsDisplayDevices.GetGraphicsCardId(_direct3D9.GetAdapterLuid(i));
+            string id = DX9Devices.GetGraphicsCardId(_direct3D9, i);
             if (graphicsCards.ContainsKey(id)) continue;
 
             AdapterIdentifier adapterIdentifier = _direct3D9.GetAdapterIdentifier(i);
@@ -71,7 +70,7 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
 
         for (int i = 0; i < _direct3D9.AdapterCount; i++)
         {
-            if (!string.Equals(WindowsDisplayDevices.GetGraphicsCardId(_direct3D9.GetAdapterLuid(i)), graphicsCard.Id, StringComparison.Ordinal))
+            if (!string.Equals(DX9Devices.GetGraphicsCardId(_direct3D9, i), graphicsCard.Id, StringComparison.Ordinal))
                 continue;
 
             if (!found)
@@ -80,19 +79,8 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
                 found = true;
             }
 
-            AdapterIdentifier adapterIdentifier = _direct3D9.GetAdapterIdentifier(i);
-            DisplayMode displayMode = _direct3D9.GetAdapterDisplayMode(i);
-            (string id, string friendlyName) = devices.GetMonitor(adapterIdentifier.DeviceName);
-            (int x, int y) = GetPosition(_direct3D9.GetAdapterMonitor(i));
-
-            yield return new Display(id, i, adapterIdentifier.DeviceName, friendlyName, x, y, displayMode.Width, displayMode.Height, Rotation.None, graphicsCard);
+            yield return DX9Devices.CreateDisplay(_direct3D9, i, graphicsCard, devices);
         }
-    }
-
-    private static (int x, int y) GetPosition(nint monitor)
-    {
-        MonitorInfo info = new() { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
-        return GetMonitorInfoW(monitor, ref info) ? (info.MonitorLeft, info.MonitorTop) : (0, 0);
     }
 
     /// <inheritdoc />
@@ -134,29 +122,6 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
         if (!_screenCaptures.DisposeAll()) return;
 
         try { _direct3D9.Dispose(); } catch { /**/ }
-    }
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetMonitorInfoW(nint monitor, ref MonitorInfo info);
-
-    #endregion
-
-    #region Interop types (winuser.h)
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public uint Size;
-        public int MonitorLeft;
-        public int MonitorTop;
-        public int MonitorRight;
-        public int MonitorBottom;
-        public int WorkLeft;
-        public int WorkTop;
-        public int WorkRight;
-        public int WorkBottom;
-        public uint Flags;
     }
 
     #endregion

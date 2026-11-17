@@ -327,6 +327,35 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
+    /// A capture created with an outdated display (e.g. one stored before a mode change) finds it by its id, reads it again when it starts
+    /// and reports the change with its first capture. This is what a restart after a display mode change does, without changing the mode.
+    /// </summary>
+    public static void AssertOutdatedDisplayIsReadAgain(Display current, Display outdated, Func<Display, IScreenCapture> createCapture)
+    {
+        Assert.AreEqual(current.Id, outdated.Id);
+        Assert.AreNotEqual(current, outdated);
+
+        using IScreenCapture screenCapture = createCapture(outdated);
+        Assert.IsNull(screenCapture.LastError, $"The capture didn't start: {screenCapture.LastError}");
+        Assert.AreEqual(current, screenCapture.Display);
+
+        List<ScreenCaptureDisplayChangedEventArgs> changes = [];
+        screenCapture.DisplayChanged += (_, e) => changes.Add(e);
+
+        // Validated against the current display: it doesn't fit the outdated one.
+        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, current.Width, current.Height));
+        CaptureFrame(screenCapture);
+
+        Assert.HasCount(1, changes);
+        Assert.AreEqual(new ScreenCaptureDisplayChangedEventArgs(outdated, current), changes[0]);
+        Assert.AreEqual(current, zone.Display);
+        Assert.IsTrue(zone.IsValid);
+
+        CaptureFrame(screenCapture);
+        Assert.HasCount(1, changes);
+    }
+
+    /// <summary>
     /// Disposes a capture and its service more than once (the service disposes its captures again) and checks that this doesn't throw.
     /// </summary>
     public static void AssertDisposeIsRepeatable(IScreenCaptureService service)

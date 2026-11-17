@@ -12,6 +12,9 @@ namespace ScreenCapture.NET;
 /// Represents a ScreenCapture using DirectX 9.
 /// https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-getfrontbufferdata
 /// </summary>
+/// <remarks>
+/// Every capture checks the display mode: after a change of the resolution it restarts and reads the display again (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
@@ -19,11 +22,12 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private readonly Lock _captureLock = new();
 
-    private readonly IDirect3D9 _direct3D9;
+    private readonly IDirect3D9Ex _direct3D9;
     private IDirect3DDevice9? _device;
     private IDirect3DSurface9? _surface;
-    private byte[]? _buffer;
-    private int _stride;
+
+    // Replaced under _captureLock, but read by zone updates without it: the pixels and their size always belong together.
+    private FrameBuffer? _frame;
 
     private bool _isDisposed;
 
@@ -42,7 +46,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <param name="direct3D9">The D3D9 instance used.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
     /// <param name="options">The options of the capture.</param>
-    internal DX9ScreenCapture(IDirect3D9 direct3D9, Display display, DX9CaptureOptions options)
+    internal DX9ScreenCapture(IDirect3D9Ex direct3D9, Display display, DX9CaptureOptions options)
         : base(display)
     {
         this._direct3D9 = direct3D9;
@@ -63,7 +67,12 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         lock (_captureLock)
         {
-            if ((_device == null) || (_surface == null) || (_buffer == null))
+            FrameBuffer? frame = _frame;
+            if ((_device == null) || (_surface == null) || (frame == null))
+                return RestartCapture();
+
+            // The surface has the size of the display mode the capture started with; GetFrontBufferData needs the current one.
+            if (!IsDisplayModeOf(frame))
                 return RestartCapture();
 
             try
@@ -73,9 +82,9 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 LockedRectangle dr = _surface.LockRect(LockFlags.NoSystemLock | LockFlags.ReadOnly);
 
                 nint ptr = dr.DataPointer;
-                for (int y = 0; y < Display.Height; y++)
+                for (int y = 0; y < frame.Height; y++)
                 {
-                    Marshal.Copy(ptr, _buffer, y * _stride, _stride);
+                    Marshal.Copy(ptr, frame.Data, y * frame.Stride, frame.Stride);
                     ptr += dr.Pitch;
                 }
 
@@ -92,17 +101,32 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
+    private bool IsDisplayModeOf(FrameBuffer frame)
+    {
+        try
+        {
+            DisplayMode displayMode = _direct3D9.GetAdapterDisplayMode(Display.Index);
+            return (displayMode.Width == frame.Width) && (displayMode.Height == frame.Height);
+        }
+        catch (SharpGenException)
+        {
+            // E.g. the adapter is gone: the restart finds out what happened to the display.
+            return false;
+        }
+    }
+
     /// <inheritdoc />
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        if (_buffer == null) return false;
+        FrameBuffer? frame = Volatile.Read(ref _frame);
+        if ((frame == null) || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
         if (captureZone.DownscaleLevel == 0)
-            CopyZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
+            CopyZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
         else
-            DownscaleZone(_buffer, Display.Width, Display.Height, _stride, captureZone, buffer);
+            DownscaleZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
 
         return true;
     }
@@ -142,17 +166,22 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             try
             {
+                // Found by its id and read again: after a mode change the display has another size,
+                // and after displays were added or removed its adapter can have another index.
+                Display display = DX9Devices.FindDisplay(_direct3D9, Display.Id) ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+
                 PresentParameters presentParameters = new()
                 {
-                    BackBufferWidth = Display.Width,
-                    BackBufferHeight = Display.Height,
+                    BackBufferWidth = display.Width,
+                    BackBufferHeight = display.Height,
                     Windowed = true,
                     SwapEffect = SwapEffect.Discard
                 };
-                _device = _direct3D9.CreateDevice(Display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
-                _surface = _device.CreateOffscreenPlainSurface(Display.Width, Display.Height, Format.A8R8G8B8, Pool.Scratch);
-                _stride = Display.Width * ColorBGRA.ColorFormat.BytesPerPixel;
-                _buffer = new byte[Display.Height * _stride];
+                _device = _direct3D9.CreateDevice(display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
+                _surface = _device.CreateOffscreenPlainSurface(display.Width, display.Height, Format.A8R8G8B8, Pool.Scratch);
+                Volatile.Write(ref _frame, new FrameBuffer(display.Width, display.Height));
+
+                SetDisplay(display);
 
                 return true;
             }
@@ -185,7 +214,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             try { _surface?.Dispose(); } catch { /**/}
             try { _device?.Dispose(); } catch { /**/}
-            _buffer = null;
+            Volatile.Write(ref _frame, null);
             _device = null;
             _surface = null;
         }
@@ -193,4 +222,12 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     #endregion
+
+    private sealed class FrameBuffer(int width, int height)
+    {
+        public int Width { get; } = width;
+        public int Height { get; } = height;
+        public int Stride { get; } = width * ColorBGRA.ColorFormat.BytesPerPixel;
+        public byte[] Data { get; } = new byte[height * width * ColorBGRA.ColorFormat.BytesPerPixel];
+    }
 }

@@ -15,6 +15,10 @@ namespace ScreenCapture.NET;
 /// It records errors of this library's connections (a failed capture restarts instead of Xlib terminating the process)
 /// and passes errors of all other connections to the handler that was installed before.
 /// If other code installs its own handler afterwards without passing errors on, X errors of the capture are handled by that code.
+/// <para>
+/// A restart reads the size of the screen again (see <see cref="IScreenCapture.DisplayChanged"/>). A screen that got smaller makes the capture fail and restart on its own;
+/// one that got larger is captured with its previous size until <see cref="IScreenCapture.Restart"/> is called.
+/// </para>
 /// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
@@ -97,7 +101,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         ArgumentNullException.ThrowIfNull(captureZone);
 
         X11ImageHandle? image = Volatile.Read(ref _image);
-        if (image == null) return false;
+        if ((image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
 
         // A concurrent Restart or Dispose closes the handle, but the memory is only freed once this reference is released.
         bool addedRef = false;
@@ -169,9 +173,13 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 nint screen = X11.XScreenOfDisplay(display, Display.Index);
                 CULong drawable = X11.XRootWindowOfScreen(screen);
 
-                image = X11.XGetImage(display, drawable, 0, 0, (uint)Display.Width, (uint)Display.Height, X11.ALL_PLANES, X11.ZPIXMAP);
+                // Read from the new connection: the screen might have another size by now (e.g. after an XRandR mode change).
+                int width = X11.XWidthOfScreen(screen);
+                int height = X11.XHeightOfScreen(screen);
+
+                image = X11.XGetImage(display, drawable, 0, 0, (uint)width, (uint)height, X11.ALL_PLANES, X11.ZPIXMAP);
                 if (image.IsInvalid || (display.LastError != null))
-                    throw new InvalidOperationException($"XGetImage of the {Display.Width}x{Display.Height} screen failed{FormatXError(display.LastError)}.");
+                    throw new InvalidOperationException($"XGetImage of the {width}x{height} screen failed{FormatXError(display.LastError)}.");
 
                 image.ReadDescription();
                 if (!image.IsBGRA) throw new NotSupportedException($"The X server uses an unsupported pixel format ({image.Format}). Only 32 bits per pixel with 8-bit BGR channels is supported.");
@@ -181,6 +189,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 Volatile.Write(ref _image, image);
                 display = null;
                 image = null;
+
+                SetDisplay(Display with { Width = width, Height = height });
 
                 return true;
             }

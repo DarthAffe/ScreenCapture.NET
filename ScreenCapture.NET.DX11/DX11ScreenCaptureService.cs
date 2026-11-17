@@ -54,8 +54,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
             {
                 if (!found) yield break;
 
-                AdapterDescription1 description = adapter.Description1;
-                yield return new GraphicsCard(WindowsDisplayDevices.GetGraphicsCardId(description.Luid), i, description.Description, description.VendorId, description.DeviceId);
+                yield return DX11Devices.CreateGraphicsCard(adapter, i);
             }
         }
     }
@@ -82,14 +81,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
             {
                 if (!found) yield break;
 
-                OutputDescription description = output.Description;
-                (string id, string friendlyName) = devices.GetMonitor(description.DeviceName);
-                int x = description.DesktopCoordinates.Left;
-                int y = description.DesktopCoordinates.Top;
-                int width = description.DesktopCoordinates.Right - x;
-                int height = description.DesktopCoordinates.Bottom - y;
-
-                yield return new Display(id, i, description.DeviceName, friendlyName, x, y, width, height, GetRotation(description.Rotation), graphicsCard);
+                yield return DX11Devices.CreateDisplay(output.Description, i, graphicsCard, devices);
             }
         }
     }
@@ -106,14 +98,6 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
             }
         }
     }
-
-    private static Rotation GetRotation(ModeRotation rotation) => rotation switch
-    {
-        ModeRotation.Rotate90 => Rotation.Rotate90,
-        ModeRotation.Rotate180 => Rotation.Rotate180,
-        ModeRotation.Rotate270 => Rotation.Rotate270,
-        _ => Rotation.None
-    };
 
     /// <inheritdoc />
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);

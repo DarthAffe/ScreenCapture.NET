@@ -63,6 +63,19 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     // Copy-on-write: replaced (never modified) under _captureZonesLock, so a capture can walk it without a lock.
     private CaptureZone<TColor>[] _captureZones = [];
 
+    // Guards the display changes (_display is replaced under it, but read without it), _displayVersion, _appliedDisplayVersion and _pendingDisplayChange.
+    // A leaf lock, so backends can set the display while holding their locks.
+    private readonly Lock _displayLock = new();
+
+    // Boxed, so the display (a large struct) is replaced atomically and read without a lock.
+    private DisplayBox _display;
+
+    // Counts the display changes; the zones follow up to _appliedDisplayVersion.
+    private int _displayVersion;
+    private int _appliedDisplayVersion;
+
+    private ScreenCaptureDisplayChangedEventArgs? _pendingDisplayChange;
+
     /// <summary>
     /// Gets a snapshot of the <see cref="CaptureZone{TColor}"/> registered on this ScreenCapture.
     /// </summary>
@@ -73,7 +86,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     protected IReadOnlyList<CaptureZone<TColor>> CaptureZones => Volatile.Read(ref _captureZones);
 
     /// <inheritdoc />
-    public Display Display { get; }
+    /// <remarks>
+    /// Backends change it with <see cref="SetDisplay"/>.
+    /// </remarks>
+    public Display Display => Volatile.Read(ref _display).Display;
 
     /// <inheritdoc />
     public Exception? LastError => Volatile.Read(ref _lastError);
@@ -88,6 +104,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <inheritdoc />
     public event EventHandler<ScreenCaptureErrorEventArgs>? ErrorOccurred;
 
+    /// <inheritdoc />
+    public event EventHandler<ScreenCaptureDisplayChangedEventArgs>? DisplayChanged;
+
     #endregion
 
     #region Constructors
@@ -98,7 +117,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
     protected AbstractScreenCapture(Display display)
     {
-        this.Display = display;
+        _display = new DisplayBox(display);
     }
 
     #endregion
@@ -125,6 +144,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             result = CaptureResult.Failed;
             timestamp = 0;
         }
+
+        ApplyDisplayChange();
+        RaisePendingDisplayChange();
 
         long frameNumber;
         bool hasFrame;
@@ -197,6 +219,72 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <summary>
+    /// Sets the display the capture duplicates now, e.g. after <see cref="PerformRestart"/> read it again and found it changed (resolution, rotation, position).
+    /// </summary>
+    /// <remarks>
+    /// Call it once the resources of the backend match the new display, e.g. at the end of a successful restart. It can be called while holding any lock.
+    /// The zones follow the new display before the next capture writes them (and before <see cref="Restart"/> returns): zones that don't fit anymore become invalid
+    /// (see <see cref="ICaptureZone.IsValid"/>). <see cref="DisplayChanged"/> is raised by the next <see cref="CaptureScreen"/>.
+    /// Nothing happens if the display didn't change.
+    /// </remarks>
+    /// <param name="display">The current display.</param>
+    /// <exception cref="ArgumentException"><paramref name="display"/> has another <see cref="Display.Id"/>: a capture always duplicates the same display.</exception>
+    protected void SetDisplay(Display display)
+    {
+        lock (_displayLock)
+        {
+            Display current = Display;
+            if (display == current) return;
+
+            if (!string.Equals(display.Id, current.Id, StringComparison.Ordinal))
+                throw new ArgumentException($"The display '{display.Id}' isn't the display '{current.Id}' of this capture.", nameof(display));
+
+            Volatile.Write(ref _display, new DisplayBox(display));
+            _displayVersion++;
+
+            // Changes since the last event are raised as one.
+            Display previous = _pendingDisplayChange?.PreviousDisplay ?? current;
+            _pendingDisplayChange = previous == display ? null : new ScreenCaptureDisplayChangedEventArgs(previous, display);
+        }
+    }
+
+    private void ApplyDisplayChange()
+    {
+        int version;
+        lock (_displayLock)
+        {
+            version = _displayVersion;
+            if (version == _appliedDisplayVersion) return;
+        }
+
+        CaptureZone<TColor>[] captureZones;
+        lock (_captureZonesLock)
+            captureZones = _captureZones;
+
+        foreach (CaptureZone<TColor> captureZone in captureZones)
+            using (captureZone.EnterUpdateScope())
+                lock (_captureZonesLock)
+                    captureZone.SetDisplay(Display);
+
+        lock (_displayLock)
+            if ((version - _appliedDisplayVersion) > 0)
+                _appliedDisplayVersion = version;
+    }
+
+    private void RaisePendingDisplayChange()
+    {
+        ScreenCaptureDisplayChangedEventArgs? args;
+        lock (_displayLock)
+        {
+            args = _pendingDisplayChange;
+            _pendingDisplayChange = null;
+        }
+
+        if (args != null)
+            OnDisplayChanged(args.Value);
+    }
+
+    /// <summary>
     /// Reports an error the capture recovers from (or reports as its result) instead of throwing it.
     /// </summary>
     /// <remarks>
@@ -227,6 +315,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             using (captureZone.EnterUpdateScope())
             {
+                if (!captureZone.IsValid) return false;
+
                 ZoneBuffer? buffer = captureZone.BeginWrite();
                 if (buffer == null) return false;
 
@@ -277,6 +367,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update.
     /// The zone might have been unregistered since the capture started.
     /// <para>
+    /// Only called for valid zones (see <see cref="ICaptureZone.IsValid"/>), whose region lies within <see cref="Display"/>.
+    /// But a <see cref="Restart"/> on another thread can change the display before the zones follow it:
+    /// check that the region lies within the frame the backend holds (see <see cref="CaptureRegion.IsWithin"/>) and return <c>false</c> if it doesn't.
+    /// </para>
+    /// <para>
     /// Called after <see cref="CaptureResult.NewFrame"/>, and after <see cref="CaptureResult.NoChange"/> or <see cref="CaptureResult.Timeout"/>
     /// for zones that requested an update or don't show the last frame yet (e.g. new or changed zones): the backend has to keep the last frame for that.
     /// Not called after other results or after <see cref="Restart"/> until the next <see cref="CaptureResult.NewFrame"/>.
@@ -315,6 +410,19 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             ErrorOccurred?.Invoke(this, args);
         }
         catch { /* Reporting it would raise the event again. */ }
+    }
+
+    /// <summary>
+    /// Raises the <see cref="DisplayChanged"/>-event.
+    /// </summary>
+    /// <param name="args">The display before and after the change.</param>
+    protected virtual void OnDisplayChanged(ScreenCaptureDisplayChangedEventArgs args)
+    {
+        try
+        {
+            DisplayChanged?.Invoke(this, args);
+        }
+        catch { /* Exceptions of handlers aren't errors of the capture. */ }
     }
 
     /// <inheritdoc />
@@ -439,6 +547,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 if (Array.IndexOf(_captureZones, captureZone) < 0)
                     throw new ArgumentException(NOT_REGISTERED_MESSAGE, nameof(captureZone));
 
+                captureZone.SetDisplay(Display);
+
                 CaptureRegion newRegion = region ?? captureZone.Region;
                 int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
 
@@ -455,6 +565,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         TryRestart();
+        ApplyDisplayChange();
     }
 
     /// <summary>
@@ -522,6 +633,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// </summary>
     /// <remarks>
     /// Called by <see cref="Restart"/>, by <see cref="RestartCapture"/> and usually by the constructor of the backend (through <see cref="Restart"/>).
+    /// Find the display by its <see cref="Display.Id"/> (an index can point to another display after displays were added or removed),
+    /// read it again and pass it to <see cref="SetDisplay"/>, so a changed resolution, rotation or position is picked up.
     /// Don't throw: report errors with <see cref="ReportError"/> and return <c>false</c> (exceptions are reported and count as a failed restart).
     /// After a failed restart, <see cref="RestartCapture"/> waits 100 ms before the next attempt, doubling with every further failure up to 2 s.
     /// <para>
@@ -548,4 +661,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     protected virtual void Dispose(bool disposing) => _isDisposed = true;
 
     #endregion
+
+    private sealed class DisplayBox(Display display)
+    {
+        public Display Display { get; } = display;
+    }
 }

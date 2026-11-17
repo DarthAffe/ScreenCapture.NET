@@ -10,6 +10,10 @@ public interface IScreenCapture : IDisposable
     /// <summary>
     /// Gets the <see cref="Display"/> this capture is duplicating.
     /// </summary>
+    /// <remarks>
+    /// The capture reads the display again whenever it (re)starts, e.g. after a change of the resolution, the rotation or the position, and finds it by its <see cref="Display.Id"/>.
+    /// So this can differ from the display the capture was created with; the <see cref="Display.Id"/> stays the same. See <see cref="DisplayChanged"/>.
+    /// </remarks>
     Display Display { get; }
 
     /// <summary>
@@ -47,17 +51,33 @@ public interface IScreenCapture : IDisposable
     event EventHandler<ScreenCaptureErrorEventArgs>? ErrorOccurred;
 
     /// <summary>
+    /// Occurs when the capture found that its <see cref="Display"/> changed (e.g. its resolution, rotation or position).
+    /// </summary>
+    /// <remarks>
+    /// Raised by <see cref="CaptureScreen"/> (on its thread, with no lock of the library held) before the zones are written,
+    /// so a handler can fit the zones to the new display with <see cref="UpdateCaptureZone"/> and the same call writes them.
+    /// Zones that don't lie within the new display anymore are invalid (see <see cref="ICaptureZone.IsValid"/>) and aren't written until they're updated.
+    /// <para>
+    /// Changes found outside of <see cref="CaptureScreen"/> (when the capture starts or in <see cref="Restart"/>) are raised by the next call.
+    /// Several changes between two calls are raised once, from the display before the first change to the current one; if the display changed back, nothing is raised.
+    /// Exceptions thrown by a handler are ignored.
+    /// </para>
+    /// </remarks>
+    event EventHandler<ScreenCaptureDisplayChangedEventArgs>? DisplayChanged;
+
+    /// <summary>
     /// Attempts to capture the current frame shown on the <see cref="Display"/> and updates the zones.
     /// </summary>
     /// <remarks>
     /// After <see cref="CaptureResult.NewFrame"/>, every zone with <see cref="ICaptureZone.AutoUpdate"/> (and every zone that requested an update) is written.
     /// After <see cref="CaptureResult.NoChange"/> and <see cref="CaptureResult.Timeout"/>, the last frame is still current: only zones that requested an update
     /// and zones that don't show it yet (registered or changed since, or skipped because a frame held their buffer) are written from it.
-    /// After other results no zone is written; requested updates stay until the next frame.
+    /// After other results no zone is written; requested updates stay until the next frame. Invalid zones (see <see cref="ICaptureZone.IsValid"/>) are never written.
     /// <para>
     /// While the capture isn't running, every call tries to restart it. After a failed restart, the next attempt waits 100 ms,
     /// doubling with every further failure up to 2 s: the call blocks until then (less if the capture is disposed or <see cref="Restart"/> succeeds meanwhile).
     /// A successful restart resets the delay, so a capture that loses its source (e.g. a display mode change) restarts right away.
+    /// A restart reads the display again and raises <see cref="DisplayChanged"/> if it changed.
     /// </para>
     /// </remarks>
     /// <returns>
@@ -107,7 +127,7 @@ public interface IScreenCapture : IDisposable
     /// </code>
     /// </remarks>
     /// <param name="captureZone">The previously registered <see cref="ICaptureZone"/>.</param>
-    /// <param name="region">The new region of the display to capture (same rules as for <see cref="RegisterCaptureZone"/>).</param>
+    /// <param name="region">The new region of the display to capture (same rules as for <see cref="RegisterCaptureZone"/>). An update with a region that lies within the display makes an invalid zone valid again.</param>
     /// <param name="downscaleLevel">The new level of downscaling applied to the image of this region before copying to local memory (must be &gt;= 0). The calculation is (width and height)/2^downscaleLevel.</param>
     /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException"><paramref name="captureZone"/> isn't registered to this screen capture.</exception>
@@ -120,6 +140,7 @@ public interface IScreenCapture : IDisposable
     /// </summary>
     /// <remarks>
     /// The restart is attempted right away, also while <see cref="CaptureScreen"/> waits for its next attempt.
+    /// It reads the display again (see <see cref="Display"/>); zones that don't fit a changed display are invalid when this returns.
     /// A failed restart doesn't throw: the error is reported with <see cref="LastError"/> (and <see cref="ErrorOccurred"/>),
     /// and <see cref="CaptureScreen"/> tries again after the backoff (see <see cref="CaptureScreen"/>), returning <see cref="CaptureResult.Unavailable"/> while it keeps failing.
     /// </remarks>

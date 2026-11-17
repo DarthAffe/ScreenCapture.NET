@@ -38,7 +38,7 @@ public sealed class WindowsInteropTests
 
     [TestMethod]
     public void MonitorInfoMatchesWinuser()
-        => AssertSize(typeof(DX9ScreenCaptureService), "MonitorInfo", 40);
+        => AssertSize(typeof(DX9Devices), "MonitorInfo", 40);
 
     private static void AssertSize(Type owner, string name, int size)
         => Assert.AreEqual(size, Marshal.SizeOf(GetNestedType(owner, name)), name);

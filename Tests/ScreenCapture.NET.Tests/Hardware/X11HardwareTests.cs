@@ -308,24 +308,15 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
-    public void OversizedDisplayFailsWithoutTerminating()
+    public void OutdatedDisplaySizeIsReadAgain()
     {
         using X11ScreenCaptureService service = new();
-        (_, Display realDisplay) = HardwareTestHelper.GetFirstDisplay(service);
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
 
-        // XGetImage fails with BadMatch because the image would be larger than the screen.
-        Display display = realDisplay with { Width = realDisplay.Width + 16 };
-        using X11ScreenCapture screenCapture = new(display, X11CaptureOptions.Default, null);
-        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
+        // The capture reads the size of the screen when it starts. With the outdated size, XGetImage would fail with BadMatch (see XErrorIsRecordedInsteadOfTerminating).
+        Display outdated = display with { Width = display.Width + 16, Height = display.Height / 2 };
 
-        for (int i = 0; i < 3; i++)
-            Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
-        AssertNoHandles(screenCapture);
-
-        // BadMatch (8) for X_GetImage (73).
-        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
-        StringAssert.Contains(error.Message, "XGetImage");
-        StringAssert.Contains(error.Message, "X error 8 (request 73");
+        HardwareTestHelper.AssertOutdatedDisplayIsReadAgain(display, outdated, d => new X11ScreenCapture(d, X11CaptureOptions.Default, null));
     }
 
     private static void AssertNoHandles(X11ScreenCapture screenCapture)

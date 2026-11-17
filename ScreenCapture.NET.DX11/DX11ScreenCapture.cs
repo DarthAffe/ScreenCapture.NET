@@ -17,6 +17,9 @@ namespace ScreenCapture.NET;
 /// Represents a ScreenCapture using DirectX 11 desktop duplication.
 /// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
 /// </summary>
+/// <remarks>
+/// A display mode change (resolution, rotation) ends the duplication: the next capture restarts it and reads the display again (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
@@ -166,10 +169,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             if ((_device == null) || (_context == null) || (_captureTexture == null)) return false;
 
-            ZoneTextures? textures = GetTextures(captureZone);
+            // Set by the restart under this lock, so it matches the capture texture.
+            Display display = Display;
+            if (!captureZone.Region.IsWithin(display.Width, display.Height)) return false;
+
+            ZoneTextures? textures = GetTextures(captureZone, display);
             if (textures == null) return false;
 
-            Box sourceBox = GetSourceBox(captureZone).ToBox();
+            Box sourceBox = GetSourceBox(captureZone, display).ToBox();
             if (textures.ScalingTexture != null)
             {
                 _context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
@@ -183,7 +190,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             try
             {
                 ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
-                CopyRotateHelper.Copy(Display.Rotation, source, mapSource.RowPitch, captureZone.Width, captureZone.Height, buffer);
+                CopyRotateHelper.Copy(display.Rotation, source, mapSource.RowPitch, captureZone.Width, captureZone.Height, buffer);
             }
             finally
             {
@@ -202,7 +209,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// Creating them here instead of on register/update means a capture never sees a zone without textures or with textures of the wrong size.
     /// </remarks>
     /// <returns>The textures, or <c>null</c> if the zone was unregistered.</returns>
-    private ZoneTextures? GetTextures(CaptureZone<ColorBGRA> captureZone)
+    private ZoneTextures? GetTextures(CaptureZone<ColorBGRA> captureZone, Display display)
     {
         if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
         {
@@ -216,7 +223,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         // the zone (under _texturesLock), so creating them only for registered zones means none are left behind.
         if (!CaptureZones.Contains(captureZone)) return null;
 
-        textures = CreateTextures(captureZone);
+        textures = CreateTextures(captureZone, display);
         _textures.Add(captureZone, textures);
 
         return textures;
@@ -234,15 +241,15 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         return true;
     }
 
-    private SourceBox GetSourceBox(CaptureZone<ColorBGRA> captureZone)
-        => DX11ZoneLayout.GetSourceBox(Display.Rotation, Display.Width, Display.Height,
+    private static SourceBox GetSourceBox(CaptureZone<ColorBGRA> captureZone, Display display)
+        => DX11ZoneLayout.GetSourceBox(display.Rotation, display.Width, display.Height,
                                        captureZone.Region.X, captureZone.Region.Y, captureZone.Region.Width, captureZone.Region.Height);
 
-    private ZoneTextures CreateTextures(CaptureZone<ColorBGRA> captureZone)
+    private ZoneTextures CreateTextures(CaptureZone<ColorBGRA> captureZone, Display display)
     {
-        // Textures only depend on the size, not on the position of the zone.
-        (int unscaledWidth, int unscaledHeight) = DX11ZoneLayout.GetTextureSize(Display.Rotation, captureZone.Region.Width, captureZone.Region.Height);
-        (int width, int height) = DX11ZoneLayout.GetTextureSize(Display.Rotation, captureZone.Width, captureZone.Height);
+        // Textures only depend on the size, not on the position of the zone. A restart disposes them, so they're never left with another rotation.
+        (int unscaledWidth, int unscaledHeight) = DX11ZoneLayout.GetTextureSize(display.Rotation, captureZone.Region.Width, captureZone.Region.Height);
+        (int width, int height) = DX11ZoneLayout.GetTextureSize(display.Rotation, captureZone.Width, captureZone.Height);
 
         Texture2DDescription stagingTextureDesc = new()
         {
@@ -301,17 +308,21 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                     DisposeDX();
 
-                    using IDXGIAdapter1 adapter = _factory.GetAdapter1(Display.GraphicsCard.Index) ?? throw new InvalidOperationException("Couldn't create DirectX-Adapter.");
+                    // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
+                    // and after displays were added or removed the indices can point to another adapter or output.
+                    (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display) = DX11Devices.FindDisplay(_factory, Display.Id)
+                                                                                         ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+                    using IDXGIAdapter1 adapter = foundAdapter;
+                    using IDXGIOutput dxgiOutput = foundOutput;
 
                     D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
                     _context = _device!.ImmediateContext;
 
-                    using IDXGIOutput dxgiOutput = adapter.GetOutput(Display.Index) ?? throw new InvalidOperationException("Couldn't get DirectX-Output.");
                     using IDXGIOutput5 output = dxgiOutput.QueryInterface<IDXGIOutput5>();
 
-                    int width = Display.Width;
-                    int height = Display.Height;
-                    if (Display.Rotation is Rotation.Rotate90 or Rotation.Rotate270)
+                    int width = display.Width;
+                    int height = display.Height;
+                    if (display.Rotation is Rotation.Rotate90 or Rotation.Rotate270)
                         (width, height) = (height, width);
 
                     Texture2DDescription captureTextureDesc = new()
@@ -333,6 +344,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                         _duplicatedOutput = output.DuplicateOutput1(_device, [Format.B8G8R8A8_UNorm]); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
                     else
                         _duplicatedOutput = output.DuplicateOutput(_device);
+
+                    // Under _texturesLock: zone updates read the display there, so they never see it differ from the capture texture.
+                    SetDisplay(display);
 
                     return true;
                 }

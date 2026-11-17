@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Vortice.Direct3D9;
 
 namespace ScreenCapture.NET.Tests.Hardware;
 
@@ -39,6 +40,41 @@ public sealed class DX9HardwareTests
 
         using DX9ScreenCaptureService defaultService = new();
         Assert.AreSame(DX9CaptureOptions.Default, defaultService.Options);
+    }
+
+    [TestMethod]
+    public void OutdatedDisplayIsReadAgain()
+    {
+        using DX9ScreenCaptureService service = new();
+        Display display = HardwareTestHelper.GetAllDisplays(service).Last();
+
+        D3D9.Direct3DCreate9Ex(out IDirect3D9Ex direct3D9).CheckError();
+        using IDirect3D9Ex _ = direct3D9;
+
+        // An adapter index that doesn't exist (the capture finds the display by its id), another position and size.
+        Display outdated = display with
+        {
+            Index = 99,
+            Y = display.Y - 7,
+            Width = display.Width / 2,
+            Height = display.Height / 2,
+            GraphicsCard = display.GraphicsCard with { Index = 99 }
+        };
+
+        HardwareTestHelper.AssertOutdatedDisplayIsReadAgain(display, outdated, d => new DX9ScreenCapture(direct3D9, d, DX9CaptureOptions.Default));
+    }
+
+    [TestMethod]
+    public void MissingDisplayIsReported()
+    {
+        D3D9.Direct3DCreate9Ex(out IDirect3D9Ex direct3D9).CheckError();
+        using IDirect3D9Ex _ = direct3D9;
+
+        using DX9ScreenCapture screenCapture = new(direct3D9, HardwareTestHelper.CreateMissingDisplay(), DX9CaptureOptions.Default);
+
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, "'missing' isn't connected");
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
     }
 
     [TestMethod]

@@ -68,6 +68,16 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// </summary>
     public List<TimeSpan> RestartAttempts { get; } = [];
 
+    /// <summary>
+    /// Gets or sets the display the next successful restarts find, like a backend that reads its display again; <c>null</c> keeps the current one.
+    /// </summary>
+    public Display? NextDisplay { get; set; }
+
+    /// <summary>
+    /// Gets a snapshot of the registered zones.
+    /// </summary>
+    public IReadOnlyList<CaptureZone<ColorARGB>> Zones => CaptureZones;
+
     private readonly long _created = Stopwatch.GetTimestamp();
 
     #endregion
@@ -75,12 +85,18 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     #region Constructors
 
     public TestScreenCapture(Rotation rotation = Rotation.None)
-        : base(new Display("Test", 0, "Test", string.Empty, 0, 0, 1920, 1080, rotation, new GraphicsCard("Test", 0, "Test", 0, 0)))
+        : base(CreateDisplay(1920, 1080, rotation))
     { }
 
     #endregion
 
     #region Methods
+
+    /// <summary>
+    /// Creates the display of the test capture with the given size (the same <see cref="Display.Id"/>).
+    /// </summary>
+    public static Display CreateDisplay(int width, int height, Rotation rotation = Rotation.None)
+        => new("Test", 0, "Test", string.Empty, 0, 0, width, height, rotation, new GraphicsCard("Test", 0, "Test", 0, 0));
 
     protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
@@ -110,6 +126,9 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
             if (RestartException != null) throw RestartException;
 
             IsRunning = RestartSucceeds;
+            if (IsRunning && (NextDisplay is { } display))
+                SetDisplay(display);
+
             return IsRunning;
         }
     }
