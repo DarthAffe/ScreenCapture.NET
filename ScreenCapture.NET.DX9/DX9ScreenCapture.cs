@@ -27,6 +27,11 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private bool _isDisposed;
 
+    /// <summary>
+    /// Gets the options this capture was created with.
+    /// </summary>
+    public DX9CaptureOptions Options { get; }
+
     #endregion
 
     #region Constructors
@@ -36,10 +41,12 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// </summary>
     /// <param name="direct3D9">The D3D9 instance used.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    internal DX9ScreenCapture(IDirect3D9 direct3D9, Display display)
+    /// <param name="options">The options of the capture.</param>
+    internal DX9ScreenCapture(IDirect3D9 direct3D9, Display display, DX9CaptureOptions options)
         : base(display)
     {
         this._direct3D9 = direct3D9;
+        this.Options = options;
 
         Restart();
     }

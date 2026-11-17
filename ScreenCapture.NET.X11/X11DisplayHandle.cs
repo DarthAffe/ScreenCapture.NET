@@ -36,12 +36,13 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     #region Methods
 
     /// <summary>
-    /// Opens a connection to the X server named by $DISPLAY. X errors on it are recorded (<see cref="LastError"/>) instead of terminating the process.
+    /// Opens a connection to an X server. X errors on it are recorded (<see cref="LastError"/>) instead of terminating the process.
     /// </summary>
+    /// <param name="displayName">The name of the X display (e.g. <c>:0</c>); <c>null</c> for the one named by $DISPLAY.</param>
     /// <returns>The connection; invalid if it couldn't be opened.</returns>
-    public static X11DisplayHandle Open()
+    public static X11DisplayHandle Open(string? displayName)
     {
-        X11DisplayHandle display = X11.XOpenDisplay(X11.DISPLAY_NAME);
+        X11DisplayHandle display = X11.XOpenDisplay(displayName);
         if (display.IsInvalid) return display;
 
         try
@@ -59,9 +60,13 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     /// <summary>
     /// Creates the exception for a connection that couldn't be opened (see <see cref="Open"/>).
     /// </summary>
-    public static InvalidOperationException CreateOpenFailedException()
+    /// <param name="displayName">The name of the X display that was opened; <c>null</c> for the one named by $DISPLAY.</param>
+    public static InvalidOperationException CreateOpenFailedException(string? displayName)
     {
-        string? displayName = Environment.GetEnvironmentVariable("DISPLAY");
+        if (displayName != null)
+            return new InvalidOperationException($"Couldn't connect to the X server '{displayName}'. Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");
+
+        displayName = Environment.GetEnvironmentVariable("DISPLAY");
         return new InvalidOperationException(string.IsNullOrEmpty(displayName)
                                                  ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, X11 capturing needs XWayland."
                                                  : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");

@@ -34,6 +34,63 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    public void OptionsAreUsedForCaptures()
+    {
+        X11CaptureOptions options = new();
+        using X11ScreenCaptureService service = new(options);
+        Assert.AreSame(options, service.Options);
+        Assert.IsNull(service.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.AreSame(options, screenCapture.Options);
+
+        // Equal options return the existing capture.
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display, new X11CaptureOptions()));
+        Assert.ThrowsExactly<ArgumentNullException>(() => service.GetScreenCapture(display, null!));
+
+        using X11ScreenCaptureService defaultService = new();
+        Assert.AreSame(X11CaptureOptions.Default, defaultService.Options);
+    }
+
+    [TestMethod]
+    public void ServiceConnectsToTheGivenDisplay()
+    {
+        string displayName = Environment.GetEnvironmentVariable("DISPLAY")!;
+
+        using X11ScreenCaptureService defaultService = new();
+        using X11ScreenCaptureService service = new(displayName: displayName);
+        Assert.AreEqual(displayName, service.DisplayName);
+
+        CollectionAssert.AreEqual(defaultService.GetGraphicsCards().ToList(), service.GetGraphicsCards().ToList());
+        CollectionAssert.AreEqual(HardwareTestHelper.GetAllDisplays(defaultService).ToList(), HardwareTestHelper.GetAllDisplays(service).ToList());
+
+        HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center);
+    }
+
+    [TestMethod]
+    public void UnreachableDisplayIsReported()
+    {
+        const string displayName = ":4711";
+
+        Display display;
+        using (X11ScreenCaptureService defaultService = new())
+            display = HardwareTestHelper.GetFirstDisplay(defaultService).display;
+
+        using X11ScreenCaptureService service = new(displayName: displayName);
+
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(() => service.GetGraphicsCards());
+        StringAssert.Contains(exception.Message, displayName);
+
+        // The captures connect to the display of the service.
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, displayName);
+    }
+
+    [TestMethod]
     public void DisplaysAreFoundById()
     {
         using X11ScreenCaptureService service = new();
@@ -122,7 +179,7 @@ public sealed class X11HardwareTests
     {
         // The screen doesn't exist, so every restart fails after the connection was opened.
         Display display = HardwareTestHelper.CreateMissingDisplay();
-        X11ScreenCapture screenCapture = new(display);
+        X11ScreenCapture screenCapture = new(display, X11CaptureOptions.Default, null);
         AssertNoHandles(screenCapture);
 
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
@@ -198,7 +255,7 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void ImageDescriptionMatchesServer()
     {
-        using X11DisplayHandle display = X11DisplayHandle.Open();
+        using X11DisplayHandle display = X11DisplayHandle.Open(null);
         Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
 
         CULong root = X11.XRootWindowOfScreen(X11.XScreenOfDisplay(display, 0));
@@ -222,7 +279,7 @@ public sealed class X11HardwareTests
         const byte badMatch = 8;
         const byte getImage = 73;
 
-        using X11DisplayHandle display = X11DisplayHandle.Open();
+        using X11DisplayHandle display = X11DisplayHandle.Open(null);
         Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
 
         nint screen = X11.XScreenOfDisplay(display, 0);
@@ -244,7 +301,7 @@ public sealed class X11HardwareTests
 
         // XGetImage fails with BadMatch because the image would be larger than the screen.
         Display display = realDisplay with { Width = realDisplay.Width + 16 };
-        using X11ScreenCapture screenCapture = new(display);
+        using X11ScreenCapture screenCapture = new(display, X11CaptureOptions.Default, null);
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         for (int i = 0; i < 3; i++)
@@ -306,7 +363,7 @@ public sealed class X11NoServerTests
         NativeLibrary.Free(library);
 
         // The capture doesn't throw: it fails and tries to reconnect on every call.
-        using X11ScreenCapture screenCapture = new(HardwareTestHelper.CreateMissingDisplay(index: 0));
+        using X11ScreenCapture screenCapture = new(HardwareTestHelper.CreateMissingDisplay(index: 0), X11CaptureOptions.Default, null);
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());

@@ -97,7 +97,7 @@ public sealed class DX11HardwareTests
         HardwareTestHelper.CaptureFrame(screenCapture);
 
         // Without waiting, most calls find no new frame (unless something renders at a high rate). Neither may count as a failure.
-        screenCapture.Timeout = 0;
+        screenCapture.Timeout = TimeSpan.Zero;
         CaptureResult[] results = [.. Enumerable.Range(0, 50).Select(_ => screenCapture.CaptureScreen())];
 
         CollectionAssert.IsSubsetOf(results.Distinct().ToArray(), new[] { CaptureResult.NewFrame, CaptureResult.NoChange, CaptureResult.Timeout },
@@ -123,7 +123,7 @@ public sealed class DX11HardwareTests
         reference.Updated += (_, _) => referenceWrites++;
 
         HardwareTestHelper.CaptureFrame(screenCapture);
-        screenCapture.Timeout = 0;
+        screenCapture.Timeout = TimeSpan.Zero;
 
         // Something on the screen might render (cursor blinking, clock); try until a capture finds no new frame.
         for (int i = 0; i < 50; i++)
@@ -207,7 +207,7 @@ public sealed class DX11HardwareTests
 
         // The output doesn't exist, so every restart fails after the device was created.
         Display display = HardwareTestHelper.CreateMissingDisplay();
-        using DX11ScreenCapture screenCapture = new(factory!, display);
+        using DX11ScreenCapture screenCapture = new(factory!, display, DX11CaptureOptions.Default);
         AssertNoDirectXObjects(screenCapture);
 
         // Zones can be registered while the capture isn't running; they're filled once it (re)starts.
@@ -226,7 +226,7 @@ public sealed class DX11HardwareTests
         using IDXGIFactory1 _ = factory!;
 
         Display display = HardwareTestHelper.CreateMissingDisplay();
-        using DX11ScreenCapture screenCapture = new(factory!, display);
+        using DX11ScreenCapture screenCapture = new(factory!, display, DX11CaptureOptions.Default);
 
         // The restart in the constructor failed already.
         Exception? constructorError = screenCapture.LastError;
@@ -252,7 +252,7 @@ public sealed class DX11HardwareTests
 
         // The restart in the constructor fails, so the captures wait 100, 200 and 400 ms before their attempts.
         Display display = HardwareTestHelper.CreateMissingDisplay();
-        using DX11ScreenCapture screenCapture = new(factory!, display);
+        using DX11ScreenCapture screenCapture = new(factory!, display, DX11CaptureOptions.Default);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         for (int i = 0; i < 3; i++)
@@ -268,20 +268,118 @@ public sealed class DX11HardwareTests
         // DuplicateOutput1 only works in a per-monitor DPI aware (version 2) process.
         Assert.IsTrue(DPIAwareness.Initialize());
 
-        Display display;
-        using (DX11ScreenCaptureService service = new())
-            display = HardwareTestHelper.GetFirstDisplay(service).display;
+        using DX11ScreenCaptureService service = new(new DX11CaptureOptions { UseDuplicateOutput1 = true });
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
 
-        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
-        using IDXGIFactory1 _ = factory!;
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.IsTrue(screenCapture.Options.UseDuplicateOutput1);
+        Assert.IsNull(screenCapture.LastError, "The duplication failed.");
 
-        using DX11ScreenCapture screenCapture = new(factory!, display, useNewDuplicationAdapter: true);
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
 
         HardwareTestHelper.CaptureFrame(screenCapture);
 
         using CaptureFrame<ColorBGRA> frame = zone.Lock();
         Assert.IsTrue(frame.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
+    }
+
+    [TestMethod]
+    public void ServiceOptionsAreUsedForNewCaptures()
+    {
+        DX11CaptureOptions options = new() { Timeout = TimeSpan.FromMilliseconds(250) };
+        using DX11ScreenCaptureService service = new(options);
+        Assert.AreSame(options, service.Options);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+
+        Assert.AreSame(options, screenCapture.Options);
+        Assert.AreEqual(TimeSpan.FromMilliseconds(250), screenCapture.Timeout);
+    }
+
+    [TestMethod]
+    public void CapturesCanHaveTheirOwnOptions()
+    {
+        using DX11ScreenCaptureService service = new();
+        Assert.AreSame(DX11CaptureOptions.Default, service.Options);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11CaptureOptions options = new() { Timeout = TimeSpan.FromMilliseconds(250) };
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display, options);
+
+        Assert.AreSame(options, screenCapture.Options);
+        Assert.AreEqual(TimeSpan.FromMilliseconds(250), screenCapture.Timeout);
+
+        // Without options, the existing capture is returned with its own options.
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display));
+    }
+
+    [TestMethod]
+    public void ExistingCaptureIsReturnedForEqualOptions()
+    {
+        using DX11ScreenCaptureService service = new();
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display, new DX11CaptureOptions { Timeout = TimeSpan.FromMilliseconds(250) });
+
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display, new DX11CaptureOptions { Timeout = TimeSpan.FromMilliseconds(250) }));
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display with { Width = display.Width / 2 }, screenCapture.Options));
+    }
+
+    [TestMethod]
+    public void OtherOptionsForAnExistingCaptureThrow()
+    {
+        using DX11ScreenCaptureService service = new();
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
+            () => service.GetScreenCapture(display, new DX11CaptureOptions { UseDuplicateOutput1 = true }));
+        StringAssert.Contains(exception.Message, display.Id);
+
+        // Changing the timeout of the capture doesn't change the options it was created with.
+        screenCapture.Timeout = TimeSpan.FromMilliseconds(5);
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display, DX11CaptureOptions.Default));
+        Assert.ThrowsExactly<InvalidOperationException>(() => service.GetScreenCapture(display, new DX11CaptureOptions { Timeout = TimeSpan.FromMilliseconds(5) }));
+
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display));
+        Assert.ThrowsExactly<ArgumentNullException>(() => service.GetScreenCapture(display, null!));
+    }
+
+    [TestMethod]
+    public void TimeoutOfACaptureCanBeChanged()
+    {
+        using DX11ScreenCaptureService service = new();
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.AreEqual(TimeSpan.FromSeconds(1), screenCapture.Timeout);
+
+        // Rounded up to whole milliseconds.
+        screenCapture.Timeout = TimeSpan.FromMilliseconds(1.5);
+        Assert.AreEqual(TimeSpan.FromMilliseconds(2), screenCapture.Timeout);
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => screenCapture.Timeout = Timeout.InfiniteTimeSpan);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => screenCapture.Timeout = DX11CaptureOptions.MaxTimeout + TimeSpan.FromTicks(1));
+        Assert.AreEqual(TimeSpan.FromMilliseconds(2), screenCapture.Timeout);
+
+        Assert.AreSame(DX11CaptureOptions.Default, screenCapture.Options);
+    }
+
+    [TestMethod]
+    public void ZeroTimeoutDoesntWait()
+    {
+        using DX11ScreenCaptureService service = new(new DX11CaptureOptions { Timeout = TimeSpan.Zero });
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
+
+        // Back to back, most captures find no new frame and time out right away. With a 1 s timeout, a static screen makes every capture wait 1 s,
+        // and on a changing screen each capture waits for the next frame instead of timing out.
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        CaptureResult[] results = [.. Enumerable.Range(0, 10).Select(_ => screenCapture.CaptureScreen())];
+        stopwatch.Stop();
+
+        Assert.IsLessThan(TimeSpan.FromSeconds(1), stopwatch.Elapsed);
+        Assert.Contains(CaptureResult.Timeout, results, $"Results: {string.Join(", ", results)}");
     }
 
     private static void AssertNoDirectXObjects(DX11ScreenCapture screenCapture)

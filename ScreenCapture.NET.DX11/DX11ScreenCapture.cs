@@ -37,16 +37,29 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private readonly Lock _captureLock = new();
     private readonly Lock _texturesLock = new();
 
-    private readonly bool _useNewDuplicationAdapter;
-
     private bool _isDisposed;
 
     /// <summary>
-    /// Gets or sets the timeout in ms used for screen-capturing. (default 1000ms)
-    /// This is used in <see cref="PerformScreenCapture"/> https://docs.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgioutputduplication-acquirenextframe
+    /// Gets the options this capture was created with.
     /// </summary>
-    // ReSharper disable once MemberCanBePrivate.Global
-    public int Timeout { get; set; } = 1000;
+    public DX11CaptureOptions Options { get; }
+
+    // In whole milliseconds; an int, so it's read and written atomically.
+    private int _timeout;
+
+    /// <summary>
+    /// Gets or sets how long <see cref="IScreenCapture.CaptureScreen"/> waits for a new frame before it returns <see cref="CaptureResult.Timeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// It starts with <see cref="DX11CaptureOptions.Timeout"/> and can be changed at any time; a running capture keeps the value it started with.
+    /// It's rounded up to whole milliseconds; 0 doesn't wait.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative (including <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>) or greater than <see cref="DX11CaptureOptions.MaxTimeout"/>.</exception>
+    public TimeSpan Timeout
+    {
+        get => TimeSpan.FromMilliseconds(_timeout);
+        set => _timeout = DX11CaptureOptions.ToMilliseconds(DX11CaptureOptions.ValidateTimeout(value));
+    }
 
     private readonly IDXGIFactory1 _factory;
 
@@ -64,17 +77,15 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <summary>
     /// Initializes a new instance of the <see cref="DX11ScreenCapture"/> class.
     /// </summary>
-    /// <remarks>
-    /// Note that setting useNewDuplicationAdapter to true requires a per-monitor DPI aware (version 2) process (see <see cref="DPIAwareness.Initialize"/>) and prevents the capture from running in a WPF-thread.
-    /// </remarks>
     /// <param name="factory">The <see cref="IDXGIFactory1"/> used to create underlying objects.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    /// <param name="useNewDuplicationAdapter">Indicates if the DuplicateOutput1 interface should be used instead of the older DuplicateOutput. Currently there's no real use in setting this to true.</param>
-    internal DX11ScreenCapture(IDXGIFactory1 factory, Display display, bool useNewDuplicationAdapter = false)
+    /// <param name="options">The options of the capture.</param>
+    internal DX11ScreenCapture(IDXGIFactory1 factory, Display display, DX11CaptureOptions options)
         : base(display)
     {
         this._factory = factory;
-        this._useNewDuplicationAdapter = useNewDuplicationAdapter;
+        this.Options = options;
+        this._timeout = DX11CaptureOptions.ToMilliseconds(options.Timeout);
 
         Restart();
     }
@@ -117,7 +128,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         bool acquired = false;
         try
         {
-            Result acquireResult = duplicatedOutput.AcquireNextFrame(Timeout, out OutduplFrameInfo frameInfo, out screenResource);
+            Result acquireResult = duplicatedOutput.AcquireNextFrame(_timeout, out OutduplFrameInfo frameInfo, out screenResource);
             if (acquireResult == ResultCode.WaitTimeout) 
                 return CaptureResult.Timeout;
 
@@ -318,8 +329,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                     };
                     _captureTexture = _device.CreateTexture2D(captureTextureDesc);
 
-                    if (_useNewDuplicationAdapter)
-                        _duplicatedOutput = output.DuplicateOutput1(_device, new[] { Format.B8G8R8A8_UNorm }); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
+                    if (Options.UseDuplicateOutput1)
+                        _duplicatedOutput = output.DuplicateOutput1(_device, [Format.B8G8R8A8_UNorm]); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
                     else
                         _duplicatedOutput = output.DuplicateOutput(_device);
 

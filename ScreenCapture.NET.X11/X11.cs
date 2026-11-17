@@ -7,15 +7,14 @@ namespace ScreenCapture.NET;
 
 internal static partial class X11
 {
-    internal const nint DISPLAY_NAME = 0;
-
     // AllPlanes (~0UL)
     internal static readonly CULong ALL_PLANES = new(nuint.MaxValue);
     internal const int ZPIXMAP = 2;
     internal const int LSB_FIRST = 0;
 
-    [LibraryImport("libX11.so.6")]
-    internal static partial X11DisplayHandle XOpenDisplay(nint displayName);
+    // null opens the display named by $DISPLAY.
+    [LibraryImport("libX11.so.6", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial X11DisplayHandle XOpenDisplay(string? displayName);
 
     [LibraryImport("libX11.so.6")]
     internal static partial int XScreenCount(X11DisplayHandle display);

@@ -7,6 +7,9 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="DX11ScreenCapture"/>.
 /// </summary>
+/// <remarks>
+/// Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, DX11CaptureOptions)"/>.
+/// </remarks>
 public sealed class DX11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
@@ -16,6 +19,11 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
 
     private bool _isDisposed;
 
+    /// <summary>
+    /// Gets the options of captures created without their own options.
+    /// </summary>
+    public DX11CaptureOptions Options { get; }
+
     #endregion
 
     #region Constructors
@@ -23,8 +31,11 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     /// <summary>
     /// Initializes a new instance of the <see cref="DX11ScreenCaptureService"/> class.
     /// </summary>
-    public DX11ScreenCaptureService()
+    /// <param name="options">The options of captures created without their own options; <c>null</c> for <see cref="DX11CaptureOptions.Default"/>.</param>
+    public DX11ScreenCaptureService(DX11CaptureOptions? options = null)
     {
+        Options = options ?? DX11CaptureOptions.Default;
+
         DXGI.CreateDXGIFactory1(out _factory!).CheckError();
     }
 
@@ -109,12 +120,44 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
 
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
+    /// <remarks>
+    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// </remarks>
     public DX11ScreenCapture GetScreenCapture(Display display)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_screenCaptures.TryGetValue(display.Id, out DX11ScreenCapture? screenCapture))
-            _screenCaptures.Add(display.Id, screenCapture = new DX11ScreenCapture(_factory, display));
+            _screenCaptures.Add(display.Id, screenCapture = new DX11ScreenCapture(_factory, display, Options));
+        return screenCapture;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="DX11ScreenCapture"/> with the given options for the given display.
+    /// </summary>
+    /// <remarks>
+    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// An existing capture is only returned if it was created with equal options.
+    /// </remarks>
+    /// <param name="display">The display to duplicate.</param>
+    /// <param name="options">The options of the capture.</param>
+    /// <returns>The <see cref="DX11ScreenCapture"/> for the given display.</returns>
+    /// <exception cref="InvalidOperationException">The capture of the display already exists with other options.</exception>
+    public DX11ScreenCapture GetScreenCapture(Display display, DX11CaptureOptions options)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (_screenCaptures.TryGetValue(display.Id, out DX11ScreenCapture? screenCapture))
+        {
+            if (!screenCapture.Options.Equals(options))
+                throw new InvalidOperationException($"The capture of the display '{display.Id}' already exists with other options ({screenCapture.Options}).");
+
+            return screenCapture;
+        }
+
+        _screenCaptures.Add(display.Id, screenCapture = new DX11ScreenCapture(_factory, display, options));
         return screenCapture;
     }
 

@@ -32,6 +32,14 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private bool _isDisposed;
 
+    // The X display (server) to connect to; null for the one named by $DISPLAY.
+    private readonly string? _displayName;
+
+    /// <summary>
+    /// Gets the options this capture was created with.
+    /// </summary>
+    public X11CaptureOptions Options { get; }
+
     #endregion
 
     #region Constructors
@@ -40,9 +48,14 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// Initializes a new instance of the <see cref="X11ScreenCapture"/> class.
     /// </summary>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    internal X11ScreenCapture(Display display)
+    /// <param name="options">The options of the capture.</param>
+    /// <param name="displayName">The name of the X display (e.g. <c>:0</c>); <c>null</c> for the one named by $DISPLAY.</param>
+    internal X11ScreenCapture(Display display, X11CaptureOptions options, string? displayName)
         : base(display)
     {
+        this.Options = options;
+        this._displayName = displayName;
+
         Restart();
     }
 
@@ -145,8 +158,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             X11ImageHandle? image = null;
             try
             {
-                display = X11DisplayHandle.Open();
-                if (display.IsInvalid) throw X11DisplayHandle.CreateOpenFailedException();
+                display = X11DisplayHandle.Open(_displayName);
+                if (display.IsInvalid) throw X11DisplayHandle.CreateOpenFailedException(_displayName);
 
                 // XScreenOfDisplay doesn't check the index.
                 int screenCount = X11.XScreenCount(display);

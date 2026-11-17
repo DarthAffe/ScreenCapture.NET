@@ -23,6 +23,25 @@ public sealed class DX9HardwareTests
     }
 
     [TestMethod]
+    public void OptionsAreUsedForCaptures()
+    {
+        DX9CaptureOptions options = new();
+        using DX9ScreenCaptureService service = new(options);
+        Assert.AreSame(options, service.Options);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX9ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.AreSame(options, screenCapture.Options);
+
+        // Equal options return the existing capture.
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display, new DX9CaptureOptions()));
+        Assert.ThrowsExactly<ArgumentNullException>(() => service.GetScreenCapture(display, null!));
+
+        using DX9ScreenCaptureService defaultService = new();
+        Assert.AreSame(DX9CaptureOptions.Default, defaultService.Options);
+    }
+
+    [TestMethod]
     public void DisplaysAreFoundById()
     {
         using DX9ScreenCaptureService service = new();

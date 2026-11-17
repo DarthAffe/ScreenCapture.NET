@@ -8,6 +8,9 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="DX9ScreenCapture"/>.
 /// </summary>
+/// <remarks>
+/// Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, DX9CaptureOptions)"/>.
+/// </remarks>
 public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
@@ -17,6 +20,11 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
 
     private bool _isDisposed;
 
+    /// <summary>
+    /// Gets the options of captures created without their own options.
+    /// </summary>
+    public DX9CaptureOptions Options { get; }
+
     #endregion
 
     #region Constructors
@@ -24,8 +32,11 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     /// <summary>
     /// Initializes a new instance of the <see cref="DX9ScreenCaptureService"/> class.
     /// </summary>
-    public DX9ScreenCaptureService()
+    /// <param name="options">The options of captures created without their own options; <c>null</c> for <see cref="DX9CaptureOptions.Default"/>.</param>
+    public DX9ScreenCaptureService(DX9CaptureOptions? options = null)
     {
+        Options = options ?? DX9CaptureOptions.Default;
+
         D3D9.Direct3DCreate9Ex(out _direct3D9).CheckError();
     }
 
@@ -89,12 +100,44 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
 
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
+    /// <remarks>
+    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// </remarks>
     public DX9ScreenCapture GetScreenCapture(Display display)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_screenCaptures.TryGetValue(display.Id, out DX9ScreenCapture? screenCapture))
-            _screenCaptures.Add(display.Id, screenCapture = new DX9ScreenCapture(_direct3D9, display));
+            _screenCaptures.Add(display.Id, screenCapture = new DX9ScreenCapture(_direct3D9, display, Options));
+        return screenCapture;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="DX9ScreenCapture"/> with the given options for the given display.
+    /// </summary>
+    /// <remarks>
+    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// An existing capture is only returned if it was created with equal options.
+    /// </remarks>
+    /// <param name="display">The display to duplicate.</param>
+    /// <param name="options">The options of the capture.</param>
+    /// <returns>The <see cref="DX9ScreenCapture"/> for the given display.</returns>
+    /// <exception cref="InvalidOperationException">The capture of the display already exists with other options.</exception>
+    public DX9ScreenCapture GetScreenCapture(Display display, DX9CaptureOptions options)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (_screenCaptures.TryGetValue(display.Id, out DX9ScreenCapture? screenCapture))
+        {
+            if (!screenCapture.Options.Equals(options))
+                throw new InvalidOperationException($"The capture of the display '{display.Id}' already exists with other options ({screenCapture.Options}).");
+
+            return screenCapture;
+        }
+
+        _screenCaptures.Add(display.Id, screenCapture = new DX9ScreenCapture(_direct3D9, display, options));
         return screenCapture;
     }
 
