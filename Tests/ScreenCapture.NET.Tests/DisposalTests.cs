@@ -31,11 +31,14 @@ public sealed class DisposalTests
     public void DisposeOverrideRunsOnce()
     {
         CountingScreenCapture screenCapture = new();
+        Assert.IsFalse(screenCapture.IsDisposed);
 
         screenCapture.Dispose();
+        Assert.IsTrue(screenCapture.IsDisposed);
         screenCapture.Dispose();
 
         Assert.AreEqual(1, screenCapture.Disposals);
+        Assert.IsTrue(screenCapture.IsDisposed);
         Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.CaptureScreen());
     }
 

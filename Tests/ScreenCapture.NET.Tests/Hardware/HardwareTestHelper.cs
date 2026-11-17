@@ -427,6 +427,48 @@ internal static class HardwareTestHelper
         Assert.AreNotSame(screenCapture, service.GetScreenCapture(display with { Id = "other" }));
     }
 
+    /// <summary>
+    /// Checks that a capture disposed by its user is replaced by a new one that captures, and that disposing the service disposes that one too.
+    /// </summary>
+    public static void AssertDisposedCaptureIsReplaced(IScreenCaptureService service)
+    {
+        (_, Display display) = GetFirstDisplay(service);
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        screenCapture.Dispose();
+
+        IScreenCapture replacement = service.GetScreenCapture(display);
+        Assert.AreNotSame(screenCapture, replacement);
+        Assert.AreSame(replacement, service.GetScreenCapture(display));
+
+        // The old capture released the display, so the new one can capture it.
+        replacement.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
+        CaptureFrame(replacement);
+
+        service.Dispose();
+        Assert.ThrowsExactly<ObjectDisposedException>(() => replacement.CaptureScreen());
+        Assert.ThrowsExactly<ObjectDisposedException>(() => service.GetScreenCapture(display));
+    }
+
+    /// <summary>
+    /// Checks that concurrent requests for the same display get the same capture.
+    /// </summary>
+    public static void AssertConcurrentRequestsGetTheSameCapture(IScreenCaptureService service)
+    {
+        const int threads = 8;
+
+        (_, Display display) = GetFirstDisplay(service);
+
+        using Barrier start = new(threads);
+        Task<IScreenCapture>[] requests = [.. Enumerable.Range(0, threads).Select(_ => Task.Factory.StartNew(() =>
+        {
+            start.SignalAndWait();
+            return service.GetScreenCapture(display);
+        }, TaskCreationOptions.LongRunning))];
+
+        Assert.IsTrue(Task.WaitAll(requests, TimeSpan.FromSeconds(30)), "The requests didn't finish.");
+        Assert.HasCount(1, requests.Select(r => r.Result).Distinct());
+    }
+
     public static (int x, int y, int width, int height) FullScreen(Display display) => (0, 0, display.Width, display.Height);
 
     public static (int x, int y, int width, int height) Center(Display display) => (display.Width / 4, display.Height / 4, display.Width / 2, display.Height / 2);

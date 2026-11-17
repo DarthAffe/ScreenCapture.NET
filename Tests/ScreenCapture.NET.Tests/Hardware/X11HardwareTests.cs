@@ -105,6 +105,20 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    public void DisposedCaptureIsReplaced()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisposedCaptureIsReplaced(service);
+    }
+
+    [TestMethod]
+    public void ConcurrentRequestsGetTheSameCapture()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertConcurrentRequestsGetTheSameCapture(service);
+    }
+
+    [TestMethod]
     public void CapturesAreCachedById()
     {
         using X11ScreenCaptureService service = new();

@@ -6,6 +6,9 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a service that enumerates graphics cards and displays and creates <see cref="IScreenCapture"/> instances for them.
 /// </summary>
+/// <remarks>
+/// The service owns the captures it creates: disposing the service disposes them. <see cref="GetScreenCapture"/> and <see cref="IDisposable.Dispose"/> are thread-safe.
+/// </remarks>
 public interface IScreenCaptureService : IDisposable
 {
     /// <summary>
@@ -30,8 +33,13 @@ public interface IScreenCaptureService : IDisposable
     /// <remarks>
     /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
     /// The capture keeps the values of the display it was created with.
+    /// <para>
+    /// Concurrent calls for the same display get the same capture. A capture that was disposed is replaced by a new one, so disposing a capture
+    /// and asking for it again restarts it from scratch (its zones aren't carried over).
+    /// </para>
     /// </remarks>
     /// <param name="display">The display to duplicate.</param>
-    /// <returns>The <see cref="IScreenCapture"/> for the give display.</returns>
+    /// <returns>The <see cref="IScreenCapture"/> for the given display.</returns>
+    /// <exception cref="ObjectDisposedException">The service is disposed.</exception>
     IScreenCapture GetScreenCapture(Display display);
 }

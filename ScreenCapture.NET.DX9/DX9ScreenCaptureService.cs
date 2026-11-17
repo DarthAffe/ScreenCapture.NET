@@ -16,9 +16,7 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     #region Properties & Fields
 
     private readonly IDirect3D9Ex _direct3D9;
-    private readonly Dictionary<string, DX9ScreenCapture> _screenCaptures = new(StringComparer.Ordinal);
-
-    private bool _isDisposed;
+    private readonly ScreenCaptureCache<DX9ScreenCapture, DX9CaptureOptions> _screenCaptures;
 
     /// <summary>
     /// Gets the options of captures created without their own options.
@@ -38,6 +36,7 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
         Options = options ?? DX9CaptureOptions.Default;
 
         D3D9.Direct3DCreate9Ex(out _direct3D9).CheckError();
+        _screenCaptures = new ScreenCaptureCache<DX9ScreenCapture, DX9CaptureOptions>(this, (display, captureOptions) => new DX9ScreenCapture(_direct3D9, display, captureOptions), capture => capture.Options);
     }
 
     #endregion
@@ -47,7 +46,7 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
         Dictionary<string, GraphicsCard> graphicsCards = new(StringComparer.Ordinal);
         for (int i = 0; i < _direct3D9.AdapterCount; i++)
@@ -65,7 +64,7 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
         bool found = false;
@@ -102,22 +101,17 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     /// <remarks>
     /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A capture that was disposed is replaced by a new one.
     /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
     /// </remarks>
-    public DX9ScreenCapture GetScreenCapture(Display display)
-    {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-
-        if (!_screenCaptures.TryGetValue(display.Id, out DX9ScreenCapture? screenCapture))
-            _screenCaptures.Add(display.Id, screenCapture = new DX9ScreenCapture(_direct3D9, display, Options));
-        return screenCapture;
-    }
+    public DX9ScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
 
     /// <summary>
     /// Creates a <see cref="DX9ScreenCapture"/> with the given options for the given display.
     /// </summary>
     /// <remarks>
     /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A capture that was disposed is replaced by a new one.
     /// An existing capture is only returned if it was created with equal options.
     /// </remarks>
     /// <param name="display">The display to duplicate.</param>
@@ -126,33 +120,20 @@ public sealed partial class DX9ScreenCaptureService : IScreenCaptureService
     /// <exception cref="InvalidOperationException">The capture of the display already exists with other options.</exception>
     public DX9ScreenCapture GetScreenCapture(Display display, DX9CaptureOptions options)
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
         ArgumentNullException.ThrowIfNull(options);
 
-        if (_screenCaptures.TryGetValue(display.Id, out DX9ScreenCapture? screenCapture))
-        {
-            if (!screenCapture.Options.Equals(options))
-                throw new InvalidOperationException($"The capture of the display '{display.Id}' already exists with other options ({screenCapture.Options}).");
-
-            return screenCapture;
-        }
-
-        _screenCaptures.Add(display.Id, screenCapture = new DX9ScreenCapture(_direct3D9, display, options));
-        return screenCapture;
+        return _screenCaptures.GetOrCreate(display, options, requireEqualOptions: true);
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Disposes all captures created by the service. It's thread-safe and can be called more than once.
+    /// </remarks>
     public void Dispose()
     {
-        if (_isDisposed) return;
-
-        foreach (DX9ScreenCapture screenCapture in _screenCaptures.Values)
-            screenCapture.Dispose();
-        _screenCaptures.Clear();
+        if (!_screenCaptures.DisposeAll()) return;
 
         try { _direct3D9.Dispose(); } catch { /**/ }
-
-        _isDisposed = true;
     }
 
     [LibraryImport("user32.dll")]

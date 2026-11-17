@@ -34,6 +34,12 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     private bool _isDisposed;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Set at the start of <see cref="Dispose()"/>, before the backend released its resources.
+    /// </remarks>
+    public bool IsDisposed => Volatile.Read(ref _isDisposed);
+
     private Exception? _lastError;
 
     // Guards _pendingErrors. A leaf lock, so errors can be reported while holding any other lock.

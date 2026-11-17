@@ -56,6 +56,20 @@ public sealed class DX9HardwareTests
     }
 
     [TestMethod]
+    public void DisposedCaptureIsReplaced()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisposedCaptureIsReplaced(service);
+    }
+
+    [TestMethod]
+    public void ConcurrentRequestsGetTheSameCapture()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertConcurrentRequestsGetTheSameCapture(service);
+    }
+
+    [TestMethod]
     public void CapturesAreCachedById()
     {
         using DX9ScreenCaptureService service = new();

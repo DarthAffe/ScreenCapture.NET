@@ -13,6 +13,14 @@ public interface IScreenCapture : IDisposable
     Display Display { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the capture was disposed.
+    /// </summary>
+    /// <remarks>
+    /// Can be read from any thread. A service replaces a disposed capture with a new one (see <see cref="IScreenCaptureService.GetScreenCapture"/> and <see cref="ScreenCaptureCache{TCapture,TOptions}"/>).
+    /// </remarks>
+    bool IsDisposed { get; }
+
+    /// <summary>
     /// Occurs at the end of every <see cref="CaptureScreen"/>, after the zones were updated, whatever the result.
     /// </summary>
     event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated;

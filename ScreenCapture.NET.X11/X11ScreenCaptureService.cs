@@ -18,9 +18,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
-    private readonly Dictionary<string, X11ScreenCapture> _screenCaptures = new(StringComparer.Ordinal);
-
-    private bool _isDisposed;
+    private readonly ScreenCaptureCache<X11ScreenCapture, X11CaptureOptions> _screenCaptures;
 
     /// <summary>
     /// Gets the options of captures created without their own options.
@@ -48,6 +46,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     {
         Options = options ?? X11CaptureOptions.Default;
         DisplayName = displayName;
+        _screenCaptures = new ScreenCaptureCache<X11ScreenCapture, X11CaptureOptions>(this, (display, captureOptions) => new X11ScreenCapture(display, captureOptions, DisplayName), capture => capture.Options);
     }
 
     #endregion
@@ -58,7 +57,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     /// <exception cref="InvalidOperationException">No connection to an X server could be opened.</exception>
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
         using X11DisplayHandle display = OpenDisplay();
 
@@ -70,7 +69,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     /// <exception cref="InvalidOperationException">No connection to an X server could be opened.</exception>
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
         using X11DisplayHandle display = OpenDisplay();
 
@@ -113,22 +112,17 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     /// <remarks>
     /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A capture that was disposed is replaced by a new one.
     /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
     /// </remarks>
-    public X11ScreenCapture GetScreenCapture(Display display)
-    {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-
-        if (!_screenCaptures.TryGetValue(display.Id, out X11ScreenCapture? screenCapture))
-            _screenCaptures.Add(display.Id, screenCapture = new X11ScreenCapture(display, Options, DisplayName));
-        return screenCapture;
-    }
+    public X11ScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
 
     /// <summary>
     /// Creates a <see cref="X11ScreenCapture"/> with the given options for the given display.
     /// </summary>
     /// <remarks>
     /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A capture that was disposed is replaced by a new one.
     /// An existing capture is only returned if it was created with equal options.
     /// </remarks>
     /// <param name="display">The display to duplicate.</param>
@@ -137,32 +131,16 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     /// <exception cref="InvalidOperationException">The capture of the display already exists with other options.</exception>
     public X11ScreenCapture GetScreenCapture(Display display, X11CaptureOptions options)
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
         ArgumentNullException.ThrowIfNull(options);
 
-        if (_screenCaptures.TryGetValue(display.Id, out X11ScreenCapture? screenCapture))
-        {
-            if (!screenCapture.Options.Equals(options))
-                throw new InvalidOperationException($"The capture of the display '{display.Id}' already exists with other options ({screenCapture.Options}).");
-
-            return screenCapture;
-        }
-
-        _screenCaptures.Add(display.Id, screenCapture = new X11ScreenCapture(display, options, DisplayName));
-        return screenCapture;
+        return _screenCaptures.GetOrCreate(display, options, requireEqualOptions: true);
     }
 
     /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_isDisposed) return;
-
-        foreach (X11ScreenCapture screenCapture in _screenCaptures.Values)
-            screenCapture.Dispose();
-        _screenCaptures.Clear();
-
-        _isDisposed = true;
-    }
+    /// <remarks>
+    /// Disposes all captures created by the service. It's thread-safe and can be called more than once.
+    /// </remarks>
+    public void Dispose() => _screenCaptures.DisposeAll();
 
     #endregion
 }
