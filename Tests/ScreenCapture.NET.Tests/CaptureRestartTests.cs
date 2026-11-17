@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// How captures restart with the backoff (see <see cref="RestartBackoffTests"/> for the delays). These wait in real time, so they use the short delays.
+/// How captures restart with the backoff (see <see cref="BackoffTests"/> for the delays). These wait in real time, so they use the short delays.
 /// </summary>
 [TestClass]
 public sealed class CaptureRestartTests

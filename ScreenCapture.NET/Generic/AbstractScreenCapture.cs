@@ -55,7 +55,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     // Guards the restart backoff. A leaf lock: never held while restarting, so it doesn't matter which backend locks the caller holds.
     private readonly Lock _restartLock = new();
-    private readonly RestartBackoff _restartBackoff = new();
+    private readonly Backoff _restartBackoff = new();
 
     // Guards all changes to the zone set and to zone positions/sizes. Acquired after a zone lock, never before.
     private readonly Lock _captureZonesLock = new();

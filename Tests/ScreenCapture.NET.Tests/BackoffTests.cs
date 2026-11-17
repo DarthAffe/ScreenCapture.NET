@@ -3,10 +3,10 @@ using System.Diagnostics;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// The delay sequence, with explicit timestamps (see <see cref="CaptureRestartTests"/> for how captures use it).
+/// The delay sequence, with explicit timestamps (see <see cref="CaptureRestartTests"/> for how captures restart with it and <see cref="CapturePacerTests"/> for how capture loops back off with it).
 /// </summary>
 [TestClass]
-public sealed class RestartBackoffTests
+public sealed class BackoffTests
 {
     // Far from 0, like a real Stopwatch timestamp.
     private static readonly long START = Stopwatch.Frequency * 1000;
@@ -14,7 +14,7 @@ public sealed class RestartBackoffTests
     [TestMethod]
     public void NoWaitBeforeAFailure()
     {
-        RestartBackoff backoff = new();
+        Backoff backoff = new();
 
         AssertRemaining(0, backoff.GetRemaining(START));
     }
@@ -22,7 +22,7 @@ public sealed class RestartBackoffTests
     [TestMethod]
     public void FirstFailureWaitsTheShortestDelay()
     {
-        RestartBackoff backoff = new();
+        Backoff backoff = new();
         backoff.Failed(At(0));
 
         AssertRemaining(100, backoff.GetRemaining(At(0)));
@@ -34,7 +34,7 @@ public sealed class RestartBackoffTests
     [TestMethod]
     public void DelayDoublesUpToTheMaximum()
     {
-        RestartBackoff backoff = new();
+        Backoff backoff = new();
 
         List<double> delays = [];
         double now = 0;
@@ -52,7 +52,7 @@ public sealed class RestartBackoffTests
     [TestMethod]
     public void FailureCountsFromWhenItHappened()
     {
-        RestartBackoff backoff = new();
+        Backoff backoff = new();
         backoff.Failed(At(0));
 
         // A late attempt (e.g. a Restart call long after) still waits the full next delay.
@@ -64,7 +64,7 @@ public sealed class RestartBackoffTests
     [TestMethod]
     public void SuccessResetsTheDelay()
     {
-        RestartBackoff backoff = new();
+        Backoff backoff = new();
         for (int i = 0; i < 4; i++)
             backoff.Failed(At(0));
 

@@ -4,12 +4,12 @@ using System.Diagnostics;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// The delay between restart attempts of a capture: none until a restart fails, then 100 ms, doubling with every further failure up to 2 s.
+/// The delay between attempts of something that can fail (e.g. restarting a capture): none until an attempt fails, then 100 ms, doubling with every further failure up to 2 s.
 /// </summary>
 /// <remarks>
 /// Not thread-safe. Times are <see cref="Stopwatch"/> timestamps.
 /// </remarks>
-internal sealed class RestartBackoff
+internal sealed class Backoff
 {
     #region Constants
 
@@ -29,14 +29,14 @@ internal sealed class RestartBackoff
     #region Methods
 
     /// <summary>
-    /// Records a successful restart: the next attempt (after the capture lost its source again) is due right away.
+    /// Records a successful attempt: the next attempt is due right away.
     /// </summary>
     public void Succeeded() => _failed = false;
 
     /// <summary>
-    /// Records a failed restart: the next attempt waits for the next delay.
+    /// Records a failed attempt: the next attempt waits for the next delay.
     /// </summary>
-    /// <param name="timestamp">When the restart failed.</param>
+    /// <param name="timestamp">When the attempt failed.</param>
     public void Failed(long timestamp)
     {
         _delay = _failed ? TimeSpan.FromTicks(Math.Min(_delay.Ticks * 2, MAX_DELAY.Ticks)) : MIN_DELAY;
@@ -45,7 +45,7 @@ internal sealed class RestartBackoff
     }
 
     /// <summary>
-    /// Gets how long the next restart attempt has to wait.
+    /// Gets how long the next attempt has to wait.
     /// </summary>
     /// <param name="timestamp">The current time.</param>
     /// <returns>The time until the next attempt is due; <see cref="TimeSpan.Zero"/> if it's due now.</returns>
