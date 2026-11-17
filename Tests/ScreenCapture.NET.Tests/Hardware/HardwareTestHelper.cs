@@ -356,6 +356,115 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
+    /// A restart between a capture getting its frame and writing the zones (here: from the <see cref="IScreenCapture.DisplayChanged"/> handler, which runs exactly then;
+    /// in an app: a <see cref="IScreenCapture.Restart"/> on another thread) leaves the backend without a frame: the zones must not be written from its empty resources.
+    /// </summary>
+    /// <returns><c>false</c> if the first capture never had a new frame (only a new frame writes zones), so nothing was checked.</returns>
+    public static bool TryAssertRestartDuringACaptureWritesNoEmptyZone(Display current, Display outdated, Func<Display, IScreenCapture> createCapture)
+    {
+        // The first capture of a new DX11 duplication has no new frame if nothing is presented on the display meanwhile.
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            using IScreenCapture screenCapture = createCapture(outdated);
+            ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, Math.Min(64, current.Width), Math.Min(64, current.Height)));
+
+            int writes = 0;
+            zone.Updated += (_, _) => writes++;
+            screenCapture.DisplayChanged += (_, _) => screenCapture.Restart();
+
+            CaptureResult result = screenCapture.CaptureScreen();
+            if (result != CaptureResult.NewFrame) continue;
+
+            Assert.AreEqual(0, writes, "The zone was written from the resources of the restarted backend, which hold no frame yet.");
+
+            // The next frame writes it.
+            CaptureFrame(screenCapture);
+            Assert.AreEqual(1, writes);
+            Assert.IsTrue(GetPixels(zone).Any(p => !p.Equals(default(ColorBGRA))), "The zone is empty.");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Several threads capture the same display at once while zones are read: no errors, only results of a working capture, and zones with pixels.
+    /// </summary>
+    public static void AssertConcurrentCapturesWork(IScreenCaptureService service)
+    {
+        const int threads = 4;
+        TimeSpan duration = TimeSpan.FromSeconds(2);
+
+        (_, Display display) = GetFirstDisplay(service);
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+
+        ICaptureZone[] zones =
+        [
+            screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height)),
+            screenCapture.RegisterCaptureZone(new CaptureRegion(display.Width / 4, display.Height / 4, display.Width / 2, display.Height / 2), downscaleLevel: 2),
+            screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64), doubleBuffered: false)
+        ];
+
+        System.Collections.Concurrent.ConcurrentQueue<Exception> errors = new();
+        screenCapture.ErrorOccurred += (_, e) => errors.Enqueue(e.Exception);
+        CaptureFrame(screenCapture);
+
+        System.Collections.Concurrent.ConcurrentDictionary<CaptureResult, int> results = new();
+        using CancellationTokenSource cancellation = new(duration);
+        Task[] captures = [.. Enumerable.Range(0, threads).Select(_ => Task.Factory.StartNew(() =>
+        {
+            while (!cancellation.IsCancellationRequested)
+                results.AddOrUpdate(screenCapture.CaptureScreen(), 1, (_, count) => count + 1);
+        }, TaskCreationOptions.LongRunning))];
+
+        while (!cancellation.IsCancellationRequested)
+            foreach (ICaptureZone zone in zones)
+                GetPixels(zone);
+
+        Assert.IsTrue(Task.WaitAll(captures, TimeSpan.FromSeconds(30)), "The captures didn't finish (deadlock?).");
+
+        Assert.IsEmpty(errors, $"Errors: {string.Join(" | ", errors)}");
+        Assert.IsTrue(results.Keys.All(r => r is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout), $"Results: {string.Join(", ", results)}");
+        Assert.IsTrue(results.ContainsKey(CaptureResult.NewFrame), $"No new frame: {string.Join(", ", results)}");
+
+        foreach (ICaptureZone zone in zones)
+            Assert.IsTrue(GetPixels(zone).Any(p => !p.Equals(default(ColorBGRA))), $"The zone {zone.Region} is empty.");
+    }
+
+    /// <summary>
+    /// Disposes services while another thread enumerates their devices: the enumeration either finishes or throws an <see cref="ObjectDisposedException"/>,
+    /// it never uses the released native objects of the service.
+    /// </summary>
+    public static void AssertEnumerationDuringDisposeIsSafe(Func<IScreenCaptureService> createService)
+    {
+        // An enumeration is short (especially on DX9): many rounds with dispose times spread over it to hit one in progress.
+        for (int round = 0; round < 200; round++)
+        {
+            IScreenCaptureService service = createService();
+
+            using Barrier start = new(2);
+            Task enumerate = Task.Factory.StartNew(() =>
+            {
+                start.SignalAndWait();
+                try
+                {
+                    while (true)
+                        foreach (GraphicsCard graphicsCard in service.GetGraphicsCards())
+                            foreach (Display _ in service.GetDisplays(graphicsCard)) { }
+                }
+                catch (ObjectDisposedException) { /* Expected once the service is disposed. */ }
+            }, TaskCreationOptions.LongRunning);
+
+            // Dispose at different points of an enumeration.
+            start.SignalAndWait();
+            Thread.SpinWait((round % 20) * 2000);
+            service.Dispose();
+
+            Assert.IsTrue(enumerate.Wait(TimeSpan.FromSeconds(30)), "The enumeration didn't finish.");
+        }
+    }
+
+    /// <summary>
     /// Disposes a capture and its service more than once (the service disposes its captures again) and checks that this doesn't throw.
     /// </summary>
     public static void AssertDisposeIsRepeatable(IScreenCaptureService service)

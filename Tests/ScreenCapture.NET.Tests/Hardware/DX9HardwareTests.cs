@@ -65,6 +65,35 @@ public sealed class DX9HardwareTests
     }
 
     [TestMethod]
+    public void RestartDuringACaptureWritesNoEmptyZone()
+    {
+        using DX9ScreenCaptureService service = new();
+        List<Display> displays = [.. HardwareTestHelper.GetAllDisplays(service)];
+
+        D3D9.Direct3DCreate9Ex(out IDirect3D9Ex direct3D9).CheckError();
+        using IDirect3D9Ex _ = direct3D9;
+
+        // A display that shows something new gives the first capture a new frame.
+        foreach (Display display in displays)
+            if (HardwareTestHelper.TryAssertRestartDuringACaptureWritesNoEmptyZone(display, display with { Width = display.Width / 2, Height = display.Height / 2 },
+                                                                               d => new DX9ScreenCapture(direct3D9, d, DX9CaptureOptions.Default)))
+                return;
+
+        Assert.Inconclusive("No display had a new frame for the first capture.");
+    }
+
+    [TestMethod]
+    public void ConcurrentCapturesWork()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertConcurrentCapturesWork(service);
+    }
+
+    [TestMethod]
+    public void EnumerationDuringDisposeIsSafe()
+        => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new DX9ScreenCaptureService());
+
+    [TestMethod]
     public void MissingDisplayIsReported()
     {
         D3D9.Direct3DCreate9Ex(out IDirect3D9Ex direct3D9).CheckError();

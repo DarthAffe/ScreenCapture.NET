@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using Vortice.Direct3D9;
 
 namespace ScreenCapture.NET;
@@ -14,6 +15,8 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
+    // Enumerations use the D3D9 instance under this lock and Dispose releases it under it, so it's never released while it's used.
+    private readonly Lock _direct3D9Lock = new();
     private readonly IDirect3D9Ex _direct3D9;
     private readonly ScreenCaptureCache<DX9ScreenCapture, DX9CaptureOptions> _screenCaptures;
 
@@ -45,41 +48,47 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
-
-        Dictionary<string, GraphicsCard> graphicsCards = new(StringComparer.Ordinal);
-        for (int i = 0; i < _direct3D9.AdapterCount; i++)
+        lock (_direct3D9Lock)
         {
-            string id = DX9Devices.GetGraphicsCardId(_direct3D9, i);
-            if (graphicsCards.ContainsKey(id)) continue;
+            ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
-            AdapterIdentifier adapterIdentifier = _direct3D9.GetAdapterIdentifier(i);
-            graphicsCards.Add(id, new GraphicsCard(id, i, adapterIdentifier.Description, adapterIdentifier.VendorId, adapterIdentifier.DeviceId));
+            Dictionary<string, GraphicsCard> graphicsCards = new(StringComparer.Ordinal);
+            for (int i = 0; i < _direct3D9.AdapterCount; i++)
+            {
+                string id = DX9Devices.GetGraphicsCardId(_direct3D9, i);
+                if (graphicsCards.ContainsKey(id)) continue;
+
+                AdapterIdentifier adapterIdentifier = _direct3D9.GetAdapterIdentifier(i);
+                graphicsCards.Add(id, new GraphicsCard(id, i, adapterIdentifier.Description, adapterIdentifier.VendorId, adapterIdentifier.DeviceId));
+            }
+
+            return graphicsCards.Values;
         }
-
-        return graphicsCards.Values;
     }
 
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
-
-        WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
-        bool found = false;
-
-        for (int i = 0; i < _direct3D9.AdapterCount; i++)
+        // Read right away (not while enumerating), so the D3D9 instance isn't used outside the lock.
+        lock (_direct3D9Lock)
         {
-            if (!string.Equals(DX9Devices.GetGraphicsCardId(_direct3D9, i), graphicsCard.Id, StringComparison.Ordinal))
-                continue;
+            ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
-            if (!found)
+            WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
+            List<Display> displays = [];
+
+            for (int i = 0; i < _direct3D9.AdapterCount; i++)
             {
-                graphicsCard = graphicsCard with { Index = i };
-                found = true;
+                if (!string.Equals(DX9Devices.GetGraphicsCardId(_direct3D9, i), graphicsCard.Id, StringComparison.Ordinal))
+                    continue;
+
+                if (displays.Count == 0)
+                    graphicsCard = graphicsCard with { Index = i };
+
+                displays.Add(DX9Devices.CreateDisplay(_direct3D9, i, graphicsCard, devices));
             }
 
-            yield return DX9Devices.CreateDisplay(_direct3D9, i, graphicsCard, devices);
+            return displays;
         }
     }
 
@@ -119,9 +128,11 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
     /// </remarks>
     public void Dispose()
     {
+        // The captures use the D3D9 instance too: they're disposed first.
         if (!_screenCaptures.DisposeAll()) return;
 
-        try { _direct3D9.Dispose(); } catch { /**/ }
+        lock (_direct3D9Lock)
+            try { _direct3D9.Dispose(); } catch { /**/ }
     }
 
     #endregion

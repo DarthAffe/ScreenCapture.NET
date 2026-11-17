@@ -25,13 +25,14 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
     #region Properties & Fields
 
+    // Guards the handles: held by captures, zone updates and restarts.
     private readonly Lock _captureLock = new();
 
     // Only used under _captureLock.
     private X11DisplayHandle? _display;
     private CULong _drawable;
 
-    // Replaced under _captureLock, but read by zone updates without it (they hold a reference on the handle instead).
+    // Only used under _captureLock. A restart reads the whole screen into it, so a new image already holds a frame.
     private X11ImageHandle? _image;
 
     private bool _isDisposed;
@@ -100,14 +101,11 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        X11ImageHandle? image = Volatile.Read(ref _image);
-        if ((image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
-
-        // A concurrent Restart or Dispose closes the handle, but the memory is only freed once this reference is released.
-        bool addedRef = false;
-        try
+        // Another thread can capture, restart or dispose meanwhile: without the lock it could overwrite or free the image while it's copied.
+        lock (_captureLock)
         {
-            image.DangerousAddRef(ref addedRef);
+            X11ImageHandle? image = _image;
+            if ((image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
 
             RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride);
             if (captureZone.DownscaleLevel == 0)
@@ -116,11 +114,6 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 DownscaleZone(source, captureZone, buffer);
 
             return true;
-        }
-        finally
-        {
-            if (addedRef)
-                image.DangerousRelease();
         }
     }
 
@@ -186,7 +179,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                 _display = display;
                 _drawable = drawable;
-                Volatile.Write(ref _image, image);
+                _image = image;
                 display = null;
                 image = null;
 
@@ -222,9 +215,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private void DisposeHandles()
     {
-        X11ImageHandle? image = Volatile.Read(ref _image);
-        Volatile.Write(ref _image, null);
-        image?.Dispose();
+        _image?.Dispose();
+        _image = null;
 
         _display?.Dispose();
         _display = null;

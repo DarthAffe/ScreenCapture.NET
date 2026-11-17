@@ -300,6 +300,36 @@ public sealed class DX11HardwareTests
     }
 
     [TestMethod]
+    public void RestartDuringACaptureWritesNoEmptyZone()
+    {
+        using DX11ScreenCaptureService service = new();
+        List<Display> displays = [.. HardwareTestHelper.GetAllDisplays(service)];
+
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        // A display that shows something new gives the first capture a new frame.
+        foreach (Display display in displays)
+            if (HardwareTestHelper.TryAssertRestartDuringACaptureWritesNoEmptyZone(display, display with { Width = display.Width / 2, Height = display.Height / 2 },
+                                                                               d => new DX11ScreenCapture(factory!, d, DX11CaptureOptions.Default)))
+                return;
+
+        Assert.Inconclusive("No display had a new frame for the first capture.");
+    }
+
+    [TestMethod]
+    public void ConcurrentCapturesWork()
+    {
+        // A short timeout, so the threads take turns often.
+        using DX11ScreenCaptureService service = new(new DX11CaptureOptions { Timeout = TimeSpan.FromMilliseconds(10) });
+        HardwareTestHelper.AssertConcurrentCapturesWork(service);
+    }
+
+    [TestMethod]
+    public void EnumerationDuringDisposeIsSafe()
+        => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new DX11ScreenCaptureService());
+
+    [TestMethod]
     public void MissingDisplayIsReported()
     {
         DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();

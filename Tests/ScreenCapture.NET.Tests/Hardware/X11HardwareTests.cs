@@ -175,6 +175,17 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    public void ConcurrentCapturesWork()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertConcurrentCapturesWork(service);
+    }
+
+    [TestMethod]
+    public void EnumerationDuringDisposeIsSafe()
+        => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new X11ScreenCaptureService());
+
+    [TestMethod]
     public void PartialZonesMatchFullScreen()
     {
         using X11ScreenCaptureService service = new();

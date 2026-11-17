@@ -208,6 +208,121 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
+    /// The region and the display of a zone are structs that other threads read without a lock while they change: every read must give one of the values that were set.
+    /// </summary>
+    [TestMethod]
+    public void ZonePropertiesNeverTear()
+    {
+        Display[] displays = [TestScreenCapture.CreateDisplay(1920, 1080), TestScreenCapture.CreateDisplay(2560, 1440, Rotation.Rotate180)];
+        CaptureRegion[] regions = [new(0, 0, 10, 10), new(100, 200, 300, 400)];
+
+        using TestScreenCapture screenCapture = new();
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(regions[0]);
+
+        using CancellationTokenSource cancellation = new();
+        Task update = Task.Factory.StartNew(() =>
+        {
+            for (int i = 0; !cancellation.IsCancellationRequested; i++)
+                screenCapture.UpdateCaptureZone(zone, regions[i % 2]);
+        }, TaskCreationOptions.LongRunning);
+        Task restart = Task.Factory.StartNew(() =>
+        {
+            // Every restart finds the other display; the zone follows it.
+            for (int i = 1; !cancellation.IsCancellationRequested; i++)
+            {
+                screenCapture.NextDisplay = displays[i % 2];
+                screenCapture.Restart();
+            }
+        }, TaskCreationOptions.LongRunning);
+
+        try
+        {
+            int regionChanges = 0;
+            int displayChanges = 0;
+            (CaptureRegion region, Display display) previous = (zone.Region, zone.Display);
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            for (int i = 0; (i < (ITERATIONS * 100)) || (((regionChanges <= 1) || (displayChanges <= 1)) && (stopwatch.Elapsed < TIMEOUT)); i++)
+            {
+                CaptureRegion region = zone.Region;
+                Display display = zone.Display;
+
+                Assert.Contains(region, regions, "The region is a mix of two regions.");
+                Assert.Contains(display, displays, "The display is a mix of two displays.");
+
+                // Both regions fit both displays.
+                Assert.IsTrue(zone.IsValid);
+
+                if (region != previous.region) regionChanges++;
+                if (display != previous.display) displayChanges++;
+                previous = (region, display);
+            }
+
+            // Makes sure the test actually raced against the changes.
+            Assert.IsGreaterThan(1, regionChanges, "The region never changed.");
+            Assert.IsGreaterThan(1, displayChanges, "The display never changed.");
+        }
+        finally
+        {
+            cancellation.Cancel();
+            Assert.IsTrue(update.Wait(TIMEOUT), "The update thread didn't finish.");
+            Assert.IsTrue(restart.Wait(TIMEOUT), "The restart thread didn't finish.");
+        }
+    }
+
+    /// <summary>
+    /// An update requested while the zone is written (e.g. from another thread) wants a newer frame than the one being written: it must not be cleared by that write.
+    /// </summary>
+    [TestMethod]
+    public void UpdateRequestedDuringTheWriteIsKept()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+        zone.AutoUpdate = false;
+        zone.RequestUpdate();
+
+        int writes = 0;
+        screenCapture.ZoneUpdating = z =>
+        {
+            if (++writes == 1)
+                z.RequestUpdate();
+        };
+
+        screenCapture.CaptureScreen();
+        Assert.IsTrue(zone.IsUpdateRequested, "The request made during the write was cleared.");
+
+        // The kept request is served by the next capture, also without a new frame.
+        screenCapture.Result = CaptureResult.NoChange;
+        screenCapture.CaptureScreen();
+        Assert.AreEqual(2, writes);
+        Assert.IsFalse(zone.IsUpdateRequested);
+    }
+
+    /// <summary>
+    /// A request stays when the zone isn't written (here: the backend had nothing to write), so a later capture serves it.
+    /// </summary>
+    [TestMethod]
+    public void UpdateRequestStaysWhenTheZoneIsntWritten()
+    {
+        using TestScreenCapture screenCapture = new() { WriteZones = false };
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+        zone.AutoUpdate = false;
+        zone.RequestUpdate();
+
+        screenCapture.CaptureScreen();
+        Assert.IsTrue(zone.IsUpdateRequested);
+
+        screenCapture.ZoneUpdating = _ => throw new InvalidOperationException("test");
+        screenCapture.CaptureScreen();
+        Assert.IsTrue(zone.IsUpdateRequested, "A failed write cleared the request.");
+
+        screenCapture.ZoneUpdating = null;
+        screenCapture.WriteZones = true;
+        screenCapture.CaptureScreen();
+        Assert.IsFalse(zone.IsUpdateRequested);
+    }
+
+    /// <summary>
     /// Runs <paramref name="action"/> <see cref="ITERATIONS"/> times on each of <paramref name="threads"/> threads while another thread captures continuously.
     /// Fails if anything throws or doesn't finish within <see cref="TIMEOUT"/> (a deadlock).
     /// </summary>

@@ -37,7 +37,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Properties & Fields
 
+    // Guards the DirectX objects and the immediate context (which isn't thread-safe): held by captures, zone updates and restarts.
     private readonly Lock _captureLock = new();
+
+    // Guards _textures. Acquired after _captureLock; Unregister takes only this one, so it doesn't wait for a capture waiting for a frame.
     private readonly Lock _texturesLock = new();
 
     private bool _isDisposed;
@@ -70,6 +73,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
     private ID3D11Texture2D? _captureTexture;
+
+    // If _captureTexture holds a frame: a new one is empty until the first frame is copied to it. Only used under _captureLock.
+    private bool _captureTextureHasFrame;
 
     private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
 
@@ -143,6 +149,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
             context.CopySubresourceRegion(captureTexture, 0, 0, 0, 0, screenTexture, 0);
+            _captureTextureHasFrame = true;
 
             timestamp = frameInfo.LastPresentTime;
 
@@ -165,38 +172,41 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        lock (_texturesLock)
-        {
-            if ((_device == null) || (_context == null) || (_captureTexture == null)) return false;
-
-            // Set by the restart under this lock, so it matches the capture texture.
-            Display display = Display;
-            if (!captureZone.Region.IsWithin(display.Width, display.Height)) return false;
-
-            ZoneTextures? textures = GetTextures(captureZone, display);
-            if (textures == null) return false;
-
-            Box sourceBox = GetSourceBox(captureZone, display).ToBox();
-            if (textures.ScalingTexture != null)
+        // _captureLock: another thread can capture (or restart) meanwhile, and both use the immediate context.
+        lock (_captureLock)
+            lock (_texturesLock)
             {
-                _context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
-                _context.GenerateMips(textures.ScalingTextureView);
-                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, textures.DownscaleLevel);
-            }
-            else
-                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
+                // E.g. a Restart on another thread replaced the capture texture after this capture got its frame.
+                if ((_device == null) || (_context == null) || (_captureTexture == null) || !_captureTextureHasFrame) return false;
 
-            MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
-            try
-            {
-                ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
-                CopyRotateHelper.Copy(display.Rotation, source, mapSource.RowPitch, captureZone.Width, captureZone.Height, buffer);
+                // Set by the restart under these locks, so it matches the capture texture.
+                Display display = Display;
+                if (!captureZone.Region.IsWithin(display.Width, display.Height)) return false;
+
+                ZoneTextures? textures = GetTextures(captureZone, display);
+                if (textures == null) return false;
+
+                Box sourceBox = GetSourceBox(captureZone, display).ToBox();
+                if (textures.ScalingTexture != null)
+                {
+                    _context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
+                    _context.GenerateMips(textures.ScalingTextureView);
+                    _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, textures.DownscaleLevel);
+                }
+                else
+                    _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, _captureTexture, 0, sourceBox);
+
+                MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
+                try
+                {
+                    ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
+                    CopyRotateHelper.Copy(display.Rotation, source, mapSource.RowPitch, captureZone.Width, captureZone.Height, buffer);
+                }
+                finally
+                {
+                    _context.Unmap(textures.StagingTexture, 0);
+                }
             }
-            finally
-            {
-                _context.Unmap(textures.StagingTexture, 0);
-            }
-        }
 
         return true;
     }
@@ -205,7 +215,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// Gets the textures of a zone and (re)creates them if the zone is new or was resized.
     /// </summary>
     /// <remarks>
-    /// Called under the zone lock (and <see cref="_texturesLock"/>), so the zone doesn't change meanwhile.
+    /// Called under the zone lock (and <see cref="_captureLock"/> and <see cref="_texturesLock"/>), so the zone doesn't change meanwhile.
     /// Creating them here instead of on register/update means a capture never sees a zone without textures or with textures of the wrong size.
     /// </remarks>
     /// <returns>The textures, or <c>null</c> if the zone was unregistered.</returns>
@@ -389,6 +399,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         _duplicatedOutput = null;
         _captureTexture = null;
+        _captureTextureHasFrame = false;
         _context = null;
         _device = null;
     }

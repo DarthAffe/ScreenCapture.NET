@@ -320,6 +320,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 ZoneBuffer? buffer = captureZone.BeginWrite();
                 if (buffer == null) return false;
 
+                bool requested = captureZone.TakeUpdateRequest();
                 bool written = false;
                 try
                 {
@@ -328,14 +329,16 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 finally
                 {
                     captureZone.EndWrite(buffer, written);
+
+                    // Not written: the request stays for the next capture.
+                    if (!written && requested)
+                        captureZone.RequestUpdate();
                 }
 
                 if (!written) return false;
 
                 captureZone.SetWritten(frameNumber);
             }
-
-            captureZone.ResetUpdateRequest();
 
             return true;
         }
@@ -367,9 +370,15 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update.
     /// The zone might have been unregistered since the capture started.
     /// <para>
+    /// <see cref="CaptureScreen"/> can run on several threads at once, and <see cref="Restart"/> on any thread: this can run while <see cref="PerformScreenCapture"/>
+    /// or <see cref="PerformRestart"/> run on other threads. Read the frame under the lock those use, so it isn't overwritten or released meanwhile
+    /// (zone locks are acquired before the backend's locks, never after).
+    /// </para>
+    /// <para>
     /// Only called for valid zones (see <see cref="ICaptureZone.IsValid"/>), whose region lies within <see cref="Display"/>.
-    /// But a <see cref="Restart"/> on another thread can change the display before the zones follow it:
-    /// check that the region lies within the frame the backend holds (see <see cref="CaptureRegion.IsWithin"/>) and return <c>false</c> if it doesn't.
+    /// But a <see cref="Restart"/> on another thread can change the display before the zones follow it, or leave the backend without a frame
+    /// after this capture got one: check that the backend holds a frame and that the region lies within it (see <see cref="CaptureRegion.IsWithin"/>),
+    /// and return <c>false</c> if not.
     /// </para>
     /// <para>
     /// Called after <see cref="CaptureResult.NewFrame"/>, and after <see cref="CaptureResult.NoChange"/> or <see cref="CaptureResult.Timeout"/>

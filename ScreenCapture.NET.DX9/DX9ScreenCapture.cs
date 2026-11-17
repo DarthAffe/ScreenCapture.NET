@@ -27,6 +27,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private IDirect3DSurface9? _surface;
 
     // Replaced under _captureLock, but read by zone updates without it: the pixels and their size always belong together.
+    // The frame read from the surface, replaced by restarts. Only used under _captureLock.
     private FrameBuffer? _frame;
 
     private bool _isDisposed;
@@ -89,6 +90,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 }
 
                 _surface.UnlockRect();
+                frame.HasData = true;
 
                 // GetFrontBufferData has no change detection: every successful read counts as a new frame.
                 return CaptureResult.NewFrame;
@@ -120,15 +122,20 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        FrameBuffer? frame = Volatile.Read(ref _frame);
-        if ((frame == null) || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
+        // Another thread can capture (or restart) meanwhile: without the lock it could overwrite the frame while it's copied.
+        lock (_captureLock)
+        {
+            // HasData: e.g. a Restart on another thread replaced the frame after this capture read it.
+            FrameBuffer? frame = _frame;
+            if ((frame == null) || !frame.HasData || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
-        if (captureZone.DownscaleLevel == 0)
-            CopyZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
-        else
-            DownscaleZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
+            if (captureZone.DownscaleLevel == 0)
+                CopyZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
+            else
+                DownscaleZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
 
-        return true;
+            return true;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -179,7 +186,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 };
                 _device = _direct3D9.CreateDevice(display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
                 _surface = _device.CreateOffscreenPlainSurface(display.Width, display.Height, Format.A8R8G8B8, Pool.Scratch);
-                Volatile.Write(ref _frame, new FrameBuffer(display.Width, display.Height));
+                _frame = new FrameBuffer(display.Width, display.Height);
 
                 SetDisplay(display);
 
@@ -214,7 +221,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         {
             try { _surface?.Dispose(); } catch { /**/}
             try { _device?.Dispose(); } catch { /**/}
-            Volatile.Write(ref _frame, null);
+            _frame = null;
             _device = null;
             _surface = null;
         }
@@ -229,5 +236,8 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         public int Height { get; } = height;
         public int Stride { get; } = width * ColorBGRA.ColorFormat.BytesPerPixel;
         public byte[] Data { get; } = new byte[height * width * ColorBGRA.ColorFormat.BytesPerPixel];
+
+        // False until the first frame was read into Data.
+        public bool HasData { get; set; }
     }
 }

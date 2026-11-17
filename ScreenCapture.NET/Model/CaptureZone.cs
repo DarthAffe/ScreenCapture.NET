@@ -23,13 +23,18 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     private long _writtenFrameNumber;
 
-    /// <inheritdoc />
-    public Display Display { get; private set; }
+    // Everything that describes where the zone is and how large its pixels are, replaced (never modified) under the zone lock.
+    // Read without a lock, so a property never mixes two changes (Display and Region are structs that could tear).
+    private ZoneLayout _layout;
 
-    private bool _isValid = true;
+    // 1 while an update is requested; taken by the capture that writes the zone.
+    private int _updateRequested;
 
     /// <inheritdoc />
-    public bool IsValid => Volatile.Read(ref _isValid);
+    public Display Display => Volatile.Read(ref _layout).Display;
+
+    /// <inheritdoc />
+    public bool IsValid => Volatile.Read(ref _layout).IsValid;
 
     /// <inheritdoc />
     public IColorFormat ColorFormat
@@ -39,13 +44,13 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <inheritdoc />
-    public CaptureRegion Region { get; private set; }
+    public CaptureRegion Region => Volatile.Read(ref _layout).Region;
 
     /// <inheritdoc />
-    public int Width { get; private set; }
+    public int Width => Volatile.Read(ref _layout).Width;
 
     /// <inheritdoc />
-    public int Height { get; private set; }
+    public int Height => Volatile.Read(ref _layout).Height;
 
     /// <inheritdoc />
     public int Stride
@@ -55,16 +60,20 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <inheritdoc />
-    public int DownscaleLevel { get; private set; }
+    public int DownscaleLevel => Volatile.Read(ref _layout).DownscaleLevel;
 
     /// <inheritdoc />
     public bool IsDoubleBuffered { get; }
 
     /// <inheritdoc />
-    public bool AutoUpdate { get; set; } = true;
+    public bool AutoUpdate
+    {
+        get => Volatile.Read(ref field);
+        set => Volatile.Write(ref field, value);
+    } = true;
 
     /// <inheritdoc />
-    public bool IsUpdateRequested { get; private set; }
+    public bool IsUpdateRequested => Volatile.Read(ref _updateRequested) != 0;
 
     #endregion
 
@@ -88,14 +97,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <param name="doubleBuffered">Whether the capture writes a second buffer instead of waiting for frames.</param>
     internal CaptureZone(Display display, CaptureRegion region, int width, int height, int downscaleLevel, bool doubleBuffered)
     {
-        this.Display = display;
-        this.Region = region;
-        this.Width = width;
-        this.Height = height;
-        this.DownscaleLevel = downscaleLevel;
+        this._layout = new ZoneLayout(display, region, width, height, downscaleLevel, true);
         this.IsDoubleBuffered = doubleBuffered;
 
-        _front = new ZoneBuffer(Width, Height, Stride);
+        _front = new ZoneBuffer(width, height, Stride);
     }
 
     #endregion
@@ -172,11 +177,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// <returns>The buffer, or <c>null</c> if the zone has to skip this capture because a frame still reads its back buffer.</returns>
     internal ZoneBuffer? BeginWrite()
     {
+        ZoneLayout layout = _layout;
+        int stride = layout.Width * ColorFormat.BytesPerPixel;
+
         if (!IsDoubleBuffered)
         {
             // Frames hold _lock, so nobody reads the buffer now.
-            if (!_front.Fits(Width, Height, Stride))
-                _front = new ZoneBuffer(Width, Height, Stride);
+            if (!_front.Fits(layout.Width, layout.Height, stride))
+                _front = new ZoneBuffer(layout.Width, layout.Height, stride);
 
             return _front;
         }
@@ -184,8 +192,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         // _back stopped being the front when it was swapped out (under _frontLock), so no frame can start reading it anymore.
         if (_back?.IsInUse == true) return null;
 
-        if ((_back == null) || !_back.Fits(Width, Height, Stride))
-            _back = new ZoneBuffer(Width, Height, Stride);
+        if ((_back == null) || !_back.Fits(layout.Width, layout.Height, stride))
+            _back = new ZoneBuffer(layout.Width, layout.Height, stride);
 
         return _back;
     }
@@ -207,9 +215,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <inheritdoc />
-    public void RequestUpdate() => IsUpdateRequested = true;
+    public void RequestUpdate() => Volatile.Write(ref _updateRequested, 1);
 
-    internal void ResetUpdateRequest() => IsUpdateRequested = false;
+    /// <summary>
+    /// Takes the update request before the zone is written: a request made during the write stays for the next capture.
+    /// Called under <see cref="EnterUpdateScope"/>; if the zone isn't written after all, the capture requests the update again.
+    /// </summary>
+    /// <returns><c>true</c> if an update was requested.</returns>
+    internal bool TakeUpdateRequest() => Interlocked.Exchange(ref _updateRequested, 0) != 0;
 
     /// <summary>
     /// Checks if the capture has to write the zone with the given frame: if it's valid and an update was requested,
@@ -237,14 +250,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// </summary>
     internal void Update(CaptureRegion region, int width, int height, int downscaleLevel)
     {
-        if ((region == Region) && (width == Width) && (height == Height) && (downscaleLevel == DownscaleLevel)) return;
+        ZoneLayout layout = _layout;
+        if ((region == layout.Region) && (width == layout.Width) && (height == layout.Height) && (downscaleLevel == layout.DownscaleLevel)) return;
 
-        Region = region;
-        Width = width;
-        Height = height;
-        DownscaleLevel = downscaleLevel;
-        Volatile.Write(ref _isValid, region.IsWithin(Display.Width, Display.Height));
-
+        Volatile.Write(ref _layout, new ZoneLayout(layout.Display, region, width, height, downscaleLevel, region.IsWithin(layout.Display.Width, layout.Display.Height)));
         Volatile.Write(ref _writtenFrameNumber, 0);
     }
 
@@ -253,13 +262,15 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// </summary>
     internal void SetDisplay(Display display)
     {
-        if (display == Display) return;
+        ZoneLayout layout = _layout;
+        if (display == layout.Display) return;
 
-        Display = display;
-        Volatile.Write(ref _isValid, Region.IsWithin(display.Width, display.Height));
-
+        Volatile.Write(ref _layout, layout with { Display = display, IsValid = layout.Region.IsWithin(display.Width, display.Height) });
         Volatile.Write(ref _writtenFrameNumber, 0);
     }
 
     #endregion
+
+    // Immutable: a zone replaces its layout as a whole.
+    private sealed record ZoneLayout(Display Display, CaptureRegion Region, int Width, int Height, int DownscaleLevel, bool IsValid);
 }
