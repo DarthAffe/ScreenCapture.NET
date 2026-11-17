@@ -182,6 +182,14 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    public void ThreadSafetyContractHolds()
+    {
+        // Disposed by the test while everything runs; disposing it again is harmless.
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertThreadSafetyContract(service);
+    }
+
+    [TestMethod]
     public void EnumerationDuringDisposeIsSafe()
         => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new X11ScreenCaptureService());
 

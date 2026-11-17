@@ -432,6 +432,143 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
+    /// The thread-safety contract on a real backend (see <see cref="ThreadSafetyStressTests"/> for the same with exact pixel checks): captures on several threads
+    /// (also while holding a frame), zone updates (also while holding a frame), restarts, zones registered and unregistered, frames and properties read,
+    /// and the service disposed while all of it runs. Nothing may throw (except <see cref="ObjectDisposedException"/> after the dispose), deadlock or report an error,
+    /// and every frame must have a size the zone had.
+    /// </summary>
+    public static void AssertThreadSafetyContract(IScreenCaptureService service)
+    {
+        TimeSpan duration = TimeSpan.FromSeconds(3);
+        TimeSpan timeout = TimeSpan.FromSeconds(30);
+        int[] levels = [0, 1, 3];
+
+        (_, Display display) = GetFirstDisplay(service);
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        StressRun stress = new(screenCapture, timeout);
+
+        CaptureRegion[] regions =
+        [
+            new(0, 0, display.Width, display.Height),
+            new(display.Width / 4, display.Height / 4, display.Width / 2, display.Height / 2),
+            new(0, 0, 64, 64)
+        ];
+        HashSet<CaptureRegion> regionSet = [.. regions];
+        HashSet<(int Width, int Height)> sizes = [.. regions.SelectMany(r => levels.Select(l => StressRun.ScaledSize(r, l)))];
+
+        ICaptureZone doubleBuffered = screenCapture.RegisterCaptureZone(regions[0]);
+        ICaptureZone singleBuffered = screenCapture.RegisterCaptureZone(regions[1], 1, doubleBuffered: false);
+        ICaptureZone small = screenCapture.RegisterCaptureZone(regions[2], 3);
+        ICaptureZone[] zones = [doubleBuffered, singleBuffered, small];
+
+        System.Collections.Concurrent.ConcurrentQueue<Exception> errors = new();
+        screenCapture.ErrorOccurred += (_, e) => errors.Enqueue(e.Exception);
+
+        System.Collections.Concurrent.ConcurrentDictionary<CaptureResult, int> results = new();
+        screenCapture.Updated += (_, e) => results.AddOrUpdate(e.Result, 1, (_, count) => count + 1);
+        singleBuffered.Updated += (_, _) => stress.Check("zone handler", () => AssertFrameSize(doubleBuffered, sizes));
+
+        CaptureFrame(screenCapture);
+
+        // Not disposed by the test (that would wait for it, also after a deadlock): disposing the capture ends it.
+        ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+
+        stress.Run("capture", i =>
+        {
+            if ((i % 5) == 0)
+                using (singleBuffered.Lock())
+                    screenCapture.CaptureScreen();
+            else
+                screenCapture.CaptureScreen();
+        });
+
+        stress.Run("update", i =>
+        {
+            ICaptureZone zone = (i % 2) == 0 ? doubleBuffered : singleBuffered;
+            CaptureRegion region = regions[i % regions.Length];
+            int level = levels[(i / regions.Length) % levels.Length];
+
+            if ((i % 7) == 0)
+                using (zone.Lock())
+                    screenCapture.UpdateCaptureZone(zone, region, level);
+            else
+                screenCapture.UpdateCaptureZone(zone, region, level);
+
+            Thread.Sleep(1);
+        });
+
+        // A restart creates the backend's resources anew, so it's expensive: not too often.
+        stress.Run("restart", _ =>
+        {
+            Thread.Sleep(100);
+            screenCapture.Restart();
+        });
+
+        stress.Run("register", i =>
+        {
+            ICaptureZone zone = screenCapture.RegisterCaptureZone(regions[i % regions.Length], levels[i % levels.Length], doubleBuffered: (i % 2) == 0);
+            Thread.Sleep(1);
+            screenCapture.UnregisterCaptureZone(zone);
+        });
+
+        for (int reader = 0; reader < 2; reader++)
+            stress.Run($"frames {reader}", _ =>
+            {
+                foreach (ICaptureZone zone in zones)
+                    AssertFrameSize(zone, sizes);
+            });
+
+        stress.Run("properties", i =>
+        {
+            Assert.AreEqual(display, screenCapture.Display);
+
+            foreach (ICaptureZone zone in zones)
+            {
+                Assert.Contains(zone.Region, regionSet);
+                Assert.AreEqual(display, zone.Display);
+                Assert.Contains(zone.DownscaleLevel, levels);
+                Assert.IsTrue(zone.IsValid);
+
+                if ((i % 10) == 0)
+                    zone.RequestUpdate();
+            }
+        });
+
+        Thread.Sleep(duration);
+        KeyValuePair<CaptureResult, int>[] resultsBeforeDispose = [.. results];
+
+        // Disposing the service disposes the capture while everything runs. On another thread, so a deadlock fails the test instead of blocking it.
+        Task dispose = Task.Run(service.Dispose);
+        try
+        {
+            Assert.IsTrue(dispose.Wait(timeout), "Disposing the service didn't finish (deadlock?).");
+            Thread.Sleep(200);
+        }
+        finally
+        {
+            stress.StopAndAssert();
+        }
+
+        Assert.IsTrue(loop.Completion.Wait(timeout), "The capture loop didn't end after the capture was disposed.");
+        Assert.IsTrue(loop.Completion.IsCompletedSuccessfully);
+        Assert.IsEmpty(errors, $"Errors: {string.Join(" | ", errors)}");
+
+        // Restarts make a capture return Restarting; anything else means it broke.
+        Assert.IsTrue(resultsBeforeDispose.All(r => r.Key is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout or CaptureResult.Restarting),
+                      $"Results: {string.Join(", ", resultsBeforeDispose)}");
+    }
+
+    private static void AssertFrameSize(ICaptureZone zone, HashSet<(int Width, int Height)> sizes)
+    {
+        using CaptureFrame frame = zone.Lock();
+
+        Assert.Contains((frame.Width, frame.Height), sizes, "The frame has a size the zone never had.");
+        Assert.AreEqual(frame.Width * frame.ColorFormat.BytesPerPixel, frame.Stride);
+        Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);
+    }
+
+    /// <summary>
     /// Disposes services while another thread enumerates their devices: the enumeration either finishes or throws an <see cref="ObjectDisposedException"/>,
     /// it never uses the released native objects of the service.
     /// </summary>

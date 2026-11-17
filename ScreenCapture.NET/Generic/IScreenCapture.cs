@@ -5,6 +5,34 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents the duplication of a single display.
 /// </summary>
+/// <remarks>
+/// <b>Thread safety:</b> all members can be used from any thread, also at the same time.
+/// <list type="bullet">
+/// <item><description>
+/// <see cref="CaptureScreen"/> can run on several threads at once: the calls wait for each other where they use the same resources of the backend.
+/// Usually a single thread captures, e.g. a <see cref="ScreenCaptureLoop"/>.
+/// </description></item>
+/// <item><description>
+/// Zones can be registered, unregistered and changed while a capture runs. A capture writes a changed zone with its new region (and size) as soon as it's changed.
+/// A capture that started before a zone was unregistered may still write it and raise its <see cref="ICaptureZone.Updated"/>.
+/// </description></item>
+/// <item><description>
+/// <see cref="Restart"/> can be called while a capture runs: that capture doesn't write its zones from the restarted backend's resources before they hold a frame.
+/// </description></item>
+/// <item><description>
+/// The events of the capture and its zones are raised by <see cref="CaptureScreen"/>, on its thread and with no lock of the library held.
+/// Handlers can use the capture and its zones (e.g. update a zone, lock its frame or register another one).
+/// </description></item>
+/// <item><description>
+/// Any member can be called while holding a frame of a zone (see <see cref="ICaptureZone.Lock"/>), including <see cref="CaptureScreen"/>.
+/// A frame of a single-buffered zone makes captures on other threads wait for it, so release frames quickly.
+/// </description></item>
+/// <item><description>
+/// <see cref="IDisposable.Dispose"/> can be called while other calls run: they finish, and the methods called afterwards throw an <see cref="ObjectDisposedException"/>
+/// (the properties and <see cref="ICaptureZone.Lock"/> keep working). Dispose waits until a running capture stopped using the backend's resources.
+/// </description></item>
+/// </list>
+/// </remarks>
 public interface IScreenCapture : IDisposable
 {
     /// <summary>

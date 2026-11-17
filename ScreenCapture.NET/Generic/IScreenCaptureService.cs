@@ -7,7 +7,12 @@ namespace ScreenCapture.NET;
 /// Represents a service that enumerates graphics cards and displays and creates <see cref="IScreenCapture"/> instances for them.
 /// </summary>
 /// <remarks>
-/// The service owns the captures it creates: disposing the service disposes them. <see cref="GetScreenCapture"/> and <see cref="IDisposable.Dispose"/> are thread-safe.
+/// The service owns the captures it creates: disposing the service disposes them.
+/// <para>
+/// <b>Thread safety:</b> all members can be used from any thread, also at the same time. <see cref="GetGraphicsCards"/> and <see cref="GetDisplays"/> read the devices
+/// when they're called, so the results don't change while they're enumerated. <see cref="IDisposable.Dispose"/> can be called while other calls run:
+/// they finish, and the methods called afterwards throw an <see cref="ObjectDisposedException"/>.
+/// </para>
 /// </remarks>
 public interface IScreenCaptureService : IDisposable
 {

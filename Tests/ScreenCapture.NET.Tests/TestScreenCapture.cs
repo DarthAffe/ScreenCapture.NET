@@ -133,20 +133,25 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
         }
     }
 
+    // Under CaptureLock like a real backend (see the contract of PerformCaptureZoneUpdate): captures on other threads don't run meanwhile.
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
     {
-        ZoneUpdating?.Invoke(captureZone);
-        if (!WriteZones) return false;
+        lock (CaptureLock)
+        {
+            ZoneUpdating?.Invoke(captureZone);
+            if (!WriteZones) return false;
 
-        Func<int, int, ColorARGB> pattern = Pattern;
+            Func<int, int, ColorARGB> pattern = Pattern;
 
-        Span<ColorARGB> pixels = MemoryMarshal.Cast<byte, ColorARGB>(buffer);
+            Span<ColorARGB> pixels = MemoryMarshal.Cast<byte, ColorARGB>(buffer);
 
-        for (int y = 0; y < captureZone.Height; y++)
-            for (int x = 0; x < captureZone.Width; x++)
-                pixels[(y * captureZone.Width) + x] = pattern(x, y);
+            int width = captureZone.Width;
+            for (int y = 0; y < captureZone.Height; y++)
+                for (int x = 0; x < width; x++)
+                    pixels[(y * width) + x] = pattern(x, y);
 
-        return true;
+            return true;
+        }
     }
 
     public static ColorARGB GetColorFromLocation(int x, int y)

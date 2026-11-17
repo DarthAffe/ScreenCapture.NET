@@ -326,6 +326,15 @@ public sealed class DX11HardwareTests
     }
 
     [TestMethod]
+    public void ThreadSafetyContractHolds()
+    {
+        // A short timeout, so the capturing threads take turns often.
+        // Disposed by the test while everything runs; disposing it again is harmless.
+        using DX11ScreenCaptureService service = new(new DX11CaptureOptions { Timeout = TimeSpan.FromMilliseconds(10) });
+        HardwareTestHelper.AssertThreadSafetyContract(service);
+    }
+
+    [TestMethod]
     public void EnumerationDuringDisposeIsSafe()
         => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new DX11ScreenCaptureService());
 

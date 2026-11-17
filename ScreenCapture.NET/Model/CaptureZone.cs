@@ -10,6 +10,9 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a duplicated region on the screen.
 /// </summary>
+/// <remarks>
+/// All members can be used from any thread; see <see cref="ICaptureZone"/> for what that means for the properties, frames and events.
+/// </remarks>
 public sealed class CaptureZone<TColor> : ICaptureZone
     where TColor : unmanaged, IColor<TColor>
 {

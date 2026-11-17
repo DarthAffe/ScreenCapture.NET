@@ -90,6 +90,14 @@ public sealed class DX9HardwareTests
     }
 
     [TestMethod]
+    public void ThreadSafetyContractHolds()
+    {
+        // Disposed by the test while everything runs; disposing it again is harmless.
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertThreadSafetyContract(service);
+    }
+
+    [TestMethod]
     public void EnumerationDuringDisposeIsSafe()
         => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new DX9ScreenCaptureService());
 

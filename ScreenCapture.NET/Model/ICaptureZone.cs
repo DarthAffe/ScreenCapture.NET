@@ -6,6 +6,26 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a zone on the screen to be captured.
 /// </summary>
+/// <remarks>
+/// <b>Thread safety:</b> all members can be used from any thread, also while the zone is captured or changed (see <see cref="IScreenCapture"/>).
+/// <list type="bullet">
+/// <item><description>
+/// Every property returns a value the zone actually had: e.g. <see cref="Region"/> and <see cref="Display"/> never mix two changes.
+/// But properties read one after another can belong to different changes if another thread changes the zone meanwhile (e.g. <see cref="Region"/> and <see cref="Width"/>).
+/// The size of the pixels is reliable on a frame (see <see cref="Lock"/>), which keeps it while it's held.
+/// </description></item>
+/// <item><description>
+/// A frame is used and disposed on the thread that locked it. Frames of a double-buffered zone can be held by any number of threads at once;
+/// a frame of a single-buffered zone holds the zone's lock, so other threads wait for it to lock the zone.
+/// </description></item>
+/// <item><description>
+/// <see cref="Updated"/> is raised on the thread of the capture that wrote the zone, with no lock of the library held.
+/// </description></item>
+/// <item><description>
+/// <see cref="RequestUpdate"/> can be called at any time: a request made while the zone is written is kept for the next capture.
+/// </description></item>
+/// </list>
+/// </remarks>
 public interface ICaptureZone
 {
     /// <summary>

@@ -9,9 +9,13 @@ namespace ScreenCapture.NET;
 
 /// <inheritdoc />
 /// <remarks>
+/// All members can be used from any thread (see <see cref="IScreenCapture"/>); backends guard their resources as described on
+/// <see cref="PerformScreenCapture"/>, <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>.
+/// <para>
 /// Lock order: a zone lock (held while a zone is written or changed, and by frames of single-buffered zones, see <see cref="CaptureZone{TColor}.Lock"/>)
 /// is always acquired before any lock of the screen capture, and the library never acquires a zone lock while holding one of its own locks.
 /// It's therefore safe to call any method of the screen capture while holding a frame.
+/// </para>
 /// </remarks>
 public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     where TColor : unmanaged, IColor<TColor>
@@ -355,6 +359,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <remarks>
     /// Exceptions are reported (see <see cref="ReportError"/>) and returned as <see cref="CaptureResult.Failed"/>.
     /// Errors the capture recovers from (e.g. by restarting) aren't thrown, but should be reported with <see cref="ReportError"/>.
+    /// <para>
+    /// It can run on several threads at once (<see cref="CaptureScreen"/> can) and while <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>
+    /// run on other threads: guard the backend's resources with a lock that all three use, and don't acquire a zone lock while holding it.
+    /// </para>
     /// </remarks>
     /// <param name="timestamp">
     /// For <see cref="CaptureResult.NewFrame"/>: when the frame was shown, as a <see cref="Stopwatch"/> timestamp,
