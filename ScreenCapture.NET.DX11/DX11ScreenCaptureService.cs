@@ -12,7 +12,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     #region Properties & Fields
 
     private readonly IDXGIFactory1 _factory;
-    private readonly Dictionary<Display, DX11ScreenCapture> _screenCaptures = new();
+    private readonly Dictionary<string, DX11ScreenCapture> _screenCaptures = new(StringComparer.Ordinal);
 
     private bool _isDisposed;
 
@@ -45,7 +45,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
                 if (!found) yield break;
 
                 AdapterDescription1 description = adapter.Description1;
-                yield return new GraphicsCard(i, description.Description, description.VendorId, description.DeviceId);
+                yield return new GraphicsCard(WindowsDisplayDevices.GetGraphicsCardId(description.Luid), i, description.Description, description.VendorId, description.DeviceId);
             }
         }
     }
@@ -55,7 +55,15 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        using IDXGIAdapter1? adapter = _factory.GetAdapter1(graphicsCard.Index);
+        // The card is found by its id: its index can point to another adapter by now (e.g. after an adapter was added or removed).
+        int index = FindAdapterIndex(graphicsCard.Id);
+        if (index < 0) yield break;
+
+        // The capture opens the adapter by its index.
+        graphicsCard = graphicsCard with { Index = index };
+        WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
+
+        using IDXGIAdapter1 adapter = _factory.GetAdapter1(index);
 
         for (int i = 0; ; i++)
         {
@@ -65,9 +73,26 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
                 if (!found) yield break;
 
                 OutputDescription description = output.Description;
-                int width = description.DesktopCoordinates.Right - description.DesktopCoordinates.Left;
-                int height = description.DesktopCoordinates.Bottom - description.DesktopCoordinates.Top;
-                yield return new Display(i, description.DeviceName, width, height, GetRotation(description.Rotation), graphicsCard);
+                (string id, string friendlyName) = devices.GetMonitor(description.DeviceName);
+                int x = description.DesktopCoordinates.Left;
+                int y = description.DesktopCoordinates.Top;
+                int width = description.DesktopCoordinates.Right - x;
+                int height = description.DesktopCoordinates.Bottom - y;
+
+                yield return new Display(id, i, description.DeviceName, friendlyName, x, y, width, height, GetRotation(description.Rotation), graphicsCard);
+            }
+        }
+    }
+
+    private int FindAdapterIndex(string id)
+    {
+        for (int i = 0; ; i++)
+        {
+            bool found = _factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
+            using (adapter)
+            {
+                if (!found) return -1;
+                if (string.Equals(WindowsDisplayDevices.GetGraphicsCardId(adapter.Description1.Luid), id, StringComparison.Ordinal)) return i;
             }
         }
     }
@@ -88,8 +113,8 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_screenCaptures.TryGetValue(display, out DX11ScreenCapture? screenCapture))
-            _screenCaptures.Add(display, screenCapture = new DX11ScreenCapture(_factory, display));
+        if (!_screenCaptures.TryGetValue(display.Id, out DX11ScreenCapture? screenCapture))
+            _screenCaptures.Add(display.Id, screenCapture = new DX11ScreenCapture(_factory, display));
         return screenCapture;
     }
 

@@ -27,6 +27,34 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    public void DevicesHaveStableIds()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDevicesHaveStableIds(service);
+    }
+
+    [TestMethod]
+    public void DisplaysAreFoundById()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisplaysAreFoundById(service);
+    }
+
+    [TestMethod]
+    public void DevicesAreLookedUpById()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDevicesAreLookedUpById(service);
+    }
+
+    [TestMethod]
+    public void CapturesAreCachedById()
+    {
+        using X11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertCapturesAreCachedById(service);
+    }
+
+    [TestMethod]
     public void CapturesFullScreenZone()
     {
         using X11ScreenCaptureService service = new();
@@ -93,7 +121,7 @@ public sealed class X11HardwareTests
     public void FailedRestartLeavesNoHandles()
     {
         // The screen doesn't exist, so every restart fails after the connection was opened.
-        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        Display display = HardwareTestHelper.CreateMissingDisplay();
         X11ScreenCapture screenCapture = new(display);
         AssertNoHandles(screenCapture);
 
@@ -212,10 +240,10 @@ public sealed class X11HardwareTests
     public void OversizedDisplayFailsWithoutTerminating()
     {
         using X11ScreenCaptureService service = new();
-        (GraphicsCard graphicsCard, Display realDisplay) = HardwareTestHelper.GetFirstDisplay(service);
+        (_, Display realDisplay) = HardwareTestHelper.GetFirstDisplay(service);
 
         // XGetImage fails with BadMatch because the image would be larger than the screen.
-        Display display = new(realDisplay.Index, realDisplay.DeviceName, realDisplay.Width + 16, realDisplay.Height, Rotation.None, graphicsCard);
+        Display display = realDisplay with { Width = realDisplay.Width + 16 };
         using X11ScreenCapture screenCapture = new(display);
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
@@ -264,7 +292,7 @@ public sealed class X11NoServerTests
         InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(() => service.GetGraphicsCards());
         StringAssert.Contains(exception.Message, "$DISPLAY");
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => service.GetDisplays(new GraphicsCard(0, "first", 0, 0)));
+        Assert.ThrowsExactly<InvalidOperationException>(() => service.GetDisplays(HardwareTestHelper.CreateMissingDisplay().GraphicsCard));
     }
 
     [TestMethod]
@@ -278,7 +306,7 @@ public sealed class X11NoServerTests
         NativeLibrary.Free(library);
 
         // The capture doesn't throw: it fails and tries to reconnect on every call.
-        using X11ScreenCapture screenCapture = new(new Display(0, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0)));
+        using X11ScreenCapture screenCapture = new(HardwareTestHelper.CreateMissingDisplay(index: 0));
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
         Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());

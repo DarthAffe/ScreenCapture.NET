@@ -11,6 +11,12 @@ internal static class HardwareTestHelper
 
     private const int CAPTURE_ATTEMPTS = 20;
 
+    /// <summary>
+    /// A display that doesn't exist (by default: its index is out of range on every backend), so every restart of a capture fails.
+    /// </summary>
+    public static Display CreateMissingDisplay(int index = 99)
+        => new("missing", index, "missing", string.Empty, 0, 0, 640, 480, Rotation.None, new GraphicsCard("first", 0, "first", 0, 0));
+
     public static (GraphicsCard graphicsCard, Display display) GetFirstDisplay(IScreenCaptureService service)
     {
         foreach (GraphicsCard graphicsCard in service.GetGraphicsCards())
@@ -280,7 +286,7 @@ internal static class HardwareTestHelper
         return sum / grid.Length;
     }
 
-    private static IEnumerable<Display> GetAllDisplays(IScreenCaptureService service)
+    public static IEnumerable<Display> GetAllDisplays(IScreenCaptureService service)
         => service.GetGraphicsCards().SelectMany(service.GetDisplays);
 
     private static ColorBGRA[] CaptureFullScreen(IScreenCaptureService service, Display display)
@@ -337,6 +343,88 @@ internal static class HardwareTestHelper
         service.Dispose();
         service.Dispose();
         Assert.ThrowsExactly<ObjectDisposedException>(() => service.GetGraphicsCards().ToList());
+    }
+
+    /// <summary>
+    /// Checks that every graphics card and display has a unique id and that enumerating again gives the same values.
+    /// </summary>
+    public static void AssertDevicesHaveStableIds(IScreenCaptureService service)
+    {
+        List<GraphicsCard> graphicsCards = [.. service.GetGraphicsCards()];
+        List<Display> displays = [.. GetAllDisplays(service)];
+        Assert.IsNotEmpty(displays, "No display found.");
+
+        AssertUniqueIds(graphicsCards.Select(c => c.Id));
+        AssertUniqueIds(displays.Select(d => d.Id));
+
+        foreach (GraphicsCard graphicsCard in graphicsCards)
+            foreach (Display display in service.GetDisplays(graphicsCard))
+                Assert.AreEqual(graphicsCard, display.GraphicsCard, $"{display.Id}: graphics card");
+
+        // Enumerating again gives the same values.
+        CollectionAssert.AreEqual(graphicsCards, service.GetGraphicsCards().ToList());
+        CollectionAssert.AreEqual(displays, GetAllDisplays(service).ToList());
+    }
+
+    private static void AssertUniqueIds(IEnumerable<string> ids)
+    {
+        List<string> list = [.. ids];
+        Assert.IsTrue(list.TrueForAll(id => !string.IsNullOrEmpty(id)), "Empty id.");
+        Assert.HasCount(list.Count, list.Distinct(StringComparer.Ordinal), $"Duplicate ids: {string.Join(", ", list)}");
+    }
+
+    /// <summary>
+    /// Checks that <see cref="IScreenCaptureService.GetDisplays"/> finds the graphics card by its id, not by its index.
+    /// </summary>
+    public static void AssertDisplaysAreFoundById(IScreenCaptureService service)
+    {
+        (GraphicsCard graphicsCard, _) = GetFirstDisplay(service);
+        List<Display> displays = [.. service.GetDisplays(graphicsCard)];
+
+        // The displays carry the card's current index, which the capture needs, not the one passed in.
+        CollectionAssert.AreEqual(displays, service.GetDisplays(graphicsCard with { Index = 99 }).ToList());
+
+        Assert.IsEmpty(service.GetDisplays(graphicsCard with { Id = "unknown" }));
+    }
+
+    /// <summary>
+    /// Checks that every enumerated graphics card and display is found again by its id alone, like an id stored in settings.
+    /// </summary>
+    public static void AssertDevicesAreLookedUpById(IScreenCaptureService service)
+    {
+        List<GraphicsCard> graphicsCards = [.. service.GetGraphicsCards()];
+        List<Display> displays = [.. GetAllDisplays(service)];
+        Assert.IsNotEmpty(displays, "No display found.");
+
+        foreach (GraphicsCard graphicsCard in graphicsCards)
+        {
+            Assert.IsTrue(service.TryGetGraphicsCard(graphicsCard.Id, out GraphicsCard found), $"{graphicsCard.Id}: not found");
+            Assert.AreEqual(graphicsCard, found);
+        }
+
+        foreach (Display display in displays)
+        {
+            Assert.IsTrue(service.TryGetDisplay(display.Id, out Display found), $"{display.Id}: not found");
+            Assert.AreEqual(display, found);
+        }
+
+        Assert.IsFalse(service.TryGetGraphicsCard("unknown", out _));
+        Assert.IsFalse(service.TryGetDisplay("unknown", out _));
+    }
+
+    /// <summary>
+    /// Checks that the service returns the same capture for displays with the same id, also if their other values changed (e.g. the resolution).
+    /// </summary>
+    public static void AssertCapturesAreCachedById(IScreenCaptureService service)
+    {
+        (_, Display display) = GetFirstDisplay(service);
+
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display with { Width = display.Width / 2, Height = display.Height / 2 }));
+        Assert.AreSame(screenCapture, service.GetScreenCapture(display with { Index = 99 }));
+        Assert.AreEqual(display, screenCapture.Display);
+
+        Assert.AreNotSame(screenCapture, service.GetScreenCapture(display with { Id = "other" }));
     }
 
     public static (int x, int y, int width, int height) FullScreen(Display display) => (0, 0, display.Width, display.Height);

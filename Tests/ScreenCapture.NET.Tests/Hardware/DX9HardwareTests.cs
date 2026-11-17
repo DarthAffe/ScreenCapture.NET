@@ -16,6 +16,34 @@ public sealed class DX9HardwareTests
     }
 
     [TestMethod]
+    public void DevicesHaveStableIds()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDevicesHaveStableIds(service);
+    }
+
+    [TestMethod]
+    public void DisplaysAreFoundById()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisplaysAreFoundById(service);
+    }
+
+    [TestMethod]
+    public void DevicesAreLookedUpById()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDevicesAreLookedUpById(service);
+    }
+
+    [TestMethod]
+    public void CapturesAreCachedById()
+    {
+        using DX9ScreenCaptureService service = new();
+        HardwareTestHelper.AssertCapturesAreCachedById(service);
+    }
+
+    [TestMethod]
     public void CapturesFullScreenZone()
     {
         using DX9ScreenCaptureService service = new();

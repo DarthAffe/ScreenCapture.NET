@@ -21,6 +21,34 @@ public sealed class DX11HardwareTests
     }
 
     [TestMethod]
+    public void DevicesHaveStableIds()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDevicesHaveStableIds(service);
+    }
+
+    [TestMethod]
+    public void DisplaysAreFoundById()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDisplaysAreFoundById(service);
+    }
+
+    [TestMethod]
+    public void DevicesAreLookedUpById()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertDevicesAreLookedUpById(service);
+    }
+
+    [TestMethod]
+    public void CapturesAreCachedById()
+    {
+        using DX11ScreenCaptureService service = new();
+        HardwareTestHelper.AssertCapturesAreCachedById(service);
+    }
+
+    [TestMethod]
     public void CapturesFullScreenZone()
     {
         using DX11ScreenCaptureService service = new();
@@ -178,7 +206,7 @@ public sealed class DX11HardwareTests
         using IDXGIFactory1 _ = factory!;
 
         // The output doesn't exist, so every restart fails after the device was created.
-        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        Display display = HardwareTestHelper.CreateMissingDisplay();
         using DX11ScreenCapture screenCapture = new(factory!, display);
         AssertNoDirectXObjects(screenCapture);
 
@@ -197,7 +225,7 @@ public sealed class DX11HardwareTests
         DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
         using IDXGIFactory1 _ = factory!;
 
-        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        Display display = HardwareTestHelper.CreateMissingDisplay();
         using DX11ScreenCapture screenCapture = new(factory!, display);
 
         // The restart in the constructor failed already.
@@ -223,7 +251,7 @@ public sealed class DX11HardwareTests
         using IDXGIFactory1 _ = factory!;
 
         // The restart in the constructor fails, so the captures wait 100, 200 and 400 ms before their attempts.
-        Display display = new(99, "missing", 640, 480, Rotation.None, new GraphicsCard(0, "first", 0, 0));
+        Display display = HardwareTestHelper.CreateMissingDisplay();
         using DX11ScreenCapture screenCapture = new(factory!, display);
 
         Stopwatch stopwatch = Stopwatch.StartNew();

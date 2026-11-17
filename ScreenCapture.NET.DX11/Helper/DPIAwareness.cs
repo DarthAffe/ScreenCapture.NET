@@ -3,8 +3,6 @@
 using System;
 using System.Runtime.InteropServices;
 
-// user32.dll is a system library; never load it from anywhere else.
-[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
 namespace ScreenCapture.NET;
 

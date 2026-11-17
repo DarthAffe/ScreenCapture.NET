@@ -75,7 +75,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     #region Constructors
 
     public TestScreenCapture(Rotation rotation = Rotation.None)
-        : base(new Display(0, "Test", 1920, 1080, rotation, new GraphicsCard(0, "Test", 0, 0)))
+        : base(new Display("Test", 0, "Test", string.Empty, 0, 0, 1920, 1080, rotation, new GraphicsCard("Test", 0, "Test", 0, 0)))
     { }
 
     #endregion

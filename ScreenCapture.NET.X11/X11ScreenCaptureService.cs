@@ -17,7 +17,7 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
-    private readonly Dictionary<Display, X11ScreenCapture> _screenCaptures = new();
+    private readonly Dictionary<string, X11ScreenCapture> _screenCaptures = new(StringComparer.Ordinal);
 
     private bool _isDisposed;
 
@@ -43,8 +43,8 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
 
         using X11DisplayHandle display = OpenDisplay();
 
-        string name = Marshal.PtrToStringAnsi(X11.XDisplayString(display)) ?? string.Empty;
-        return [new GraphicsCard(0, name, 0, 0)];
+        string name = GetDisplayName(display);
+        return [new GraphicsCard(name, 0, name, 0, 0)];
     }
 
     /// <inheritdoc />
@@ -55,6 +55,11 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
 
         using X11DisplayHandle display = OpenDisplay();
 
+        string name = GetDisplayName(display);
+        if (!string.Equals(graphicsCard.Id, name, StringComparison.Ordinal)) return [];
+
+        graphicsCard = graphicsCard with { Index = 0 };
+
         int screenCount = X11.XScreenCount(display);
         List<Display> displays = new(screenCount);
         for (int screenNumber = 0; screenNumber < screenCount; screenNumber++)
@@ -64,11 +69,13 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
             int screenHeight = X11.XHeightOfScreen(screen);
 
             // DarthAffe 10.09.2023: Emulate DX-Displaynames for no real reason ¯\(°_o)/¯
-            displays.Add(new Display(screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", screenWidth, screenHeight, Rotation.None, graphicsCard));
+            displays.Add(new Display($"{name}/{screenNumber}", screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", string.Empty, 0, 0, screenWidth, screenHeight, Rotation.None, graphicsCard));
         }
 
         return displays;
     }
+
+    private static string GetDisplayName(X11DisplayHandle display) => Marshal.PtrToStringAnsi(X11.XDisplayString(display)) ?? string.Empty;
 
     // The enumeration is eager, so the connection is closed before the caller sees the results and a missing X server throws right away.
     private static X11DisplayHandle OpenDisplay()
@@ -89,8 +96,8 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_screenCaptures.TryGetValue(display, out X11ScreenCapture? screenCapture))
-            _screenCaptures.Add(display, screenCapture = new X11ScreenCapture(display));
+        if (!_screenCaptures.TryGetValue(display.Id, out X11ScreenCapture? screenCapture))
+            _screenCaptures.Add(display.Id, screenCapture = new X11ScreenCapture(display));
         return screenCapture;
     }
 
