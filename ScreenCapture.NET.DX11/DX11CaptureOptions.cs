@@ -47,6 +47,17 @@ public sealed record DX11CaptureOptions
     /// </remarks>
     public bool UseDuplicateOutput1 { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the mouse pointer is drawn into the zones. (default <c>false</c>)
+    /// </summary>
+    /// <remarks>
+    /// Desktop Duplication delivers the pointer separately from the frame; it's blended into the zones it overlaps when they're written,
+    /// averaged over the blocks of downscaled zones.
+    /// A pointer that moves, changes its shape, appears or disappears counts as a new frame (<see cref="CaptureResult.NewFrame"/>), also if nothing else changed,
+    /// so zones show it at its new place.
+    /// </remarks>
+    public bool DrawCursor { get; init; }
+
     #endregion
 
     #region Methods

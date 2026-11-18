@@ -17,6 +17,7 @@ public sealed class CaptureOptionsTests
 
         Assert.AreEqual(TimeSpan.FromSeconds(1), options.Timeout);
         Assert.IsFalse(options.UseDuplicateOutput1);
+        Assert.IsFalse(options.DrawCursor);
         Assert.AreEqual(DX11CaptureOptions.Default, options);
     }
 
@@ -61,6 +62,7 @@ public sealed class CaptureOptionsTests
         Assert.AreEqual(options, new DX11CaptureOptions { Timeout = TimeSpan.FromMilliseconds(250), UseDuplicateOutput1 = true });
         Assert.AreNotEqual(options, options with { Timeout = TimeSpan.FromMilliseconds(251) });
         Assert.AreNotEqual(options, options with { UseDuplicateOutput1 = false });
+        Assert.AreNotEqual(options, options with { DrawCursor = true });
     }
 
     [TestMethod]

@@ -82,6 +82,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
 
+    // The mouse pointer (only with DrawCursor), from the frames of the duplication; drawn into the zones when they're written.
+    // _cursorX/_cursorY: the top left of the shape on the display. Only used under _captureLock.
+    private CursorShape? _cursorShape;
+    private bool _cursorVisible;
+    private int _cursorX;
+    private int _cursorY;
+    private byte[] _cursorShapeBuffer = [];
+
     #endregion
 
     #region Constructors
@@ -151,8 +159,21 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             acquireResult.CheckError();
             acquired = true;
 
+            // Read before the frame is released: the shape is only available until then.
+            bool cursorChanged = Options.DrawCursor && UpdateCursor(duplicatedOutput, frameInfo);
+
             // No present since the last frame (e.g. only the mouse cursor moved): the image didn't change.
-            if ((screenResource == null) || (frameInfo.LastPresentTime == 0)) return CaptureResult.NoChange;
+            if ((screenResource == null) || (frameInfo.LastPresentTime == 0))
+            {
+                // A pointer drawn into the zones changed: they're written again from the last frame, with the pointer as it is now.
+                if (cursorChanged && _captureTextureHasFrame)
+                {
+                    timestamp = frameInfo.LastMouseUpdateTime;
+                    return CaptureResult.NewFrame;
+                }
+
+                return CaptureResult.NoChange;
+            }
 
             using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
             context.CopySubresourceRegion(captureTexture, 0, 0, 0, 0, screenTexture, 0);
@@ -172,6 +193,59 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                     duplicatedOutput.ReleaseFrame();
             }
             catch (Exception ex) { ReportError(ex); }
+        }
+    }
+
+    /// <summary>
+    /// Takes the position, visibility and (if it changed) the shape of the mouse pointer from an acquired frame. Called under <see cref="_captureLock"/>.
+    /// </summary>
+    /// <returns><c>true</c> if the pointer drawn into the zones changed (moved, changed its shape, appeared or disappeared).</returns>
+    private bool UpdateCursor(IDXGIOutputDuplication duplicatedOutput, in OutduplFrameInfo frameInfo)
+    {
+        // Neither the position nor the shape changed since the last frame (the position is always supplied with an update).
+        if (frameInfo.LastMouseUpdateTime == 0) return false;
+
+        bool wasDrawn = _cursorVisible && (_cursorShape != null);
+        bool changed = false;
+
+        if (frameInfo.PointerShapeBufferSize > 0)
+        {
+            _cursorShape = ReadCursorShape(duplicatedOutput, frameInfo.PointerShapeBufferSize);
+            changed = true;
+        }
+
+        bool visible = frameInfo.PointerPosition.Visible;
+        int x = frameInfo.PointerPosition.Position.X;
+        int y = frameInfo.PointerPosition.Position.Y;
+        changed |= (visible != _cursorVisible) || (x != _cursorX) || (y != _cursorY);
+
+        _cursorVisible = visible;
+        _cursorX = x;
+        _cursorY = y;
+
+        bool isDrawn = _cursorVisible && (_cursorShape != null);
+        return changed && (wasDrawn || isDrawn);
+    }
+
+    private unsafe CursorShape? ReadCursorShape(IDXGIOutputDuplication duplicatedOutput, int size)
+    {
+        if (_cursorShapeBuffer.Length < size)
+            _cursorShapeBuffer = new byte[size];
+
+        int requiredSize;
+        OutduplPointerShapeInfo shapeInfo;
+        fixed (byte* buffer = _cursorShapeBuffer)
+            duplicatedOutput.GetFramePointerShape(_cursorShapeBuffer.Length, (IntPtr)buffer, out requiredSize, out shapeInfo).CheckError();
+
+        try
+        {
+            return CursorShape.Create((PointerShapeType)shapeInfo.Type, shapeInfo.Width, shapeInfo.Height, shapeInfo.Pitch, _cursorShapeBuffer.AsSpan(0, Math.Min(requiredSize, _cursorShapeBuffer.Length)));
+        }
+        catch (ArgumentException ex)
+        {
+            // A shape this can't draw (e.g. an unknown type): the pointer isn't drawn until the next shape.
+            ReportError(ex);
+            return null;
         }
     }
 
@@ -212,6 +286,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 {
                     _context.Unmap(textures.StagingTexture, 0);
                 }
+
+                // Into the zone's pixels, not the staging texture: that keeps the frame for writes with the pointer somewhere else.
+                if (_cursorVisible && (_cursorShape != null))
+                    _cursorShape.Draw(buffer, region, captureZone.Width, captureZone.Height, textures.DownscaleLevel, _cursorX, _cursorY);
             }
 
         return true;
@@ -476,6 +554,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         _captureTextureHasFrame = false;
         _context = null;
         _device = null;
+
+        // Unknown until the new duplication delivers the next pointer update.
+        _cursorShape = null;
+        _cursorVisible = false;
     }
 
     #endregion

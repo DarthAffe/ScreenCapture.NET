@@ -3,11 +3,16 @@ using HPPH;
 namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
-/// Shared checks for backend smoke tests. These need a real GPU/display and are excluded from CI via TestCategory "Hardware".
+/// Shared checks for backend smoke tests. These need a real GPU/display and are excluded from CI via TestCategory "Hardware" (and "Interactive", see <see cref="INTERACTIVE_CATEGORY"/>).
 /// </summary>
 internal static class HardwareTestHelper
 {
     public const string CATEGORY = "Hardware";
+
+    /// <summary>
+    /// Tests that take over the desktop (e.g. move the mouse pointer): only run on request, not with <see cref="CATEGORY"/> and never in CI.
+    /// </summary>
+    public const string INTERACTIVE_CATEGORY = "Interactive";
 
     private const int CAPTURE_ATTEMPTS = 20;
 

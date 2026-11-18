@@ -36,7 +36,7 @@ jobs:
       run: dotnet build --no-restore --configuration Release /p:Version=${{ github.event.inputs.version }}
 
     - name: Test
-      run: dotnet test --no-build --verbosity normal --configuration Release --filter "TestCategory!=Hardware"
+      run: dotnet test --no-build --verbosity normal --configuration Release --filter "TestCategory!=Hardware&TestCategory!=Interactive"
 
     - name: List files
       run: tree
