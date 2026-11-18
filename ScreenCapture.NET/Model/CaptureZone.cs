@@ -21,8 +21,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     private readonly Lock _lock = new();
     private readonly Lock _frontLock = new();
 
-    private ZoneBuffer _front;
-    private ZoneBuffer? _back;
+    private ZoneBuffer<TColor> _front;
+    private ZoneBuffer<TColor>? _back;
 
     private long _writtenFrameNumber;
 
@@ -103,7 +103,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         this._layout = new ZoneLayout(display, region, width, height, downscaleLevel, true);
         this.IsDoubleBuffered = doubleBuffered;
 
-        _front = new ZoneBuffer(width, height, Stride);
+        _front = new ZoneBuffer<TColor>(width, height);
     }
 
     #endregion
@@ -157,7 +157,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         return new CaptureFrame(ColorDispatcher<TColor>.Instance, _front, scope);
     }
 
-    private ZoneBuffer AddFrontReader()
+    private ZoneBuffer<TColor> AddFrontReader()
     {
         lock (_frontLock)
         {
@@ -178,16 +178,15 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// Called under <see cref="EnterUpdateScope"/>. Every call is followed by <see cref="EndWrite"/>.
     /// </remarks>
     /// <returns>The buffer, or <c>null</c> if the zone has to skip this capture because a frame still reads its back buffer.</returns>
-    internal ZoneBuffer? BeginWrite()
+    internal ZoneBuffer<TColor>? BeginWrite()
     {
         ZoneLayout layout = _layout;
-        int stride = layout.Width * ColorFormat.BytesPerPixel;
 
         if (!IsDoubleBuffered)
         {
             // Frames hold _lock, so nobody reads the buffer now.
-            if (!_front.Fits(layout.Width, layout.Height, stride))
-                _front = new ZoneBuffer(layout.Width, layout.Height, stride);
+            if (!_front.Fits(layout.Width, layout.Height))
+                _front = new ZoneBuffer<TColor>(layout.Width, layout.Height);
 
             return _front;
         }
@@ -195,8 +194,8 @@ public sealed class CaptureZone<TColor> : ICaptureZone
         // _back stopped being the front when it was swapped out (under _frontLock), so no frame can start reading it anymore.
         if (_back?.IsInUse == true) return null;
 
-        if ((_back == null) || !_back.Fits(layout.Width, layout.Height, stride))
-            _back = new ZoneBuffer(layout.Width, layout.Height, stride);
+        if ((_back == null) || !_back.Fits(layout.Width, layout.Height))
+            _back = new ZoneBuffer<TColor>(layout.Width, layout.Height);
 
         return _back;
     }
@@ -206,7 +205,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// </summary>
     /// <param name="buffer">The buffer returned by <see cref="BeginWrite"/>.</param>
     /// <param name="written"><c>true</c> if the buffer was filled; otherwise the zone keeps showing its previous pixels (double-buffered only).</param>
-    internal void EndWrite(ZoneBuffer buffer, bool written)
+    internal void EndWrite(ZoneBuffer<TColor> buffer, bool written)
     {
         if (!IsDoubleBuffered || !written) return;
 

@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests;
@@ -134,7 +133,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     }
 
     // Under CaptureLock like a real backend (see the contract of PerformCaptureZoneUpdate): captures on other threads don't run meanwhile.
-    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer)
     {
         lock (CaptureLock)
         {
@@ -143,12 +142,10 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 
             Func<int, int, ColorARGB> pattern = Pattern;
 
-            Span<ColorARGB> pixels = MemoryMarshal.Cast<byte, ColorARGB>(buffer);
-
             int width = captureZone.Width;
             for (int y = 0; y < captureZone.Height; y++)
                 for (int x = 0; x < width; x++)
-                    pixels[(y * width) + x] = pattern(x, y);
+                    buffer[(y * width) + x] = pattern(x, y);
 
             return true;
         }
@@ -157,19 +154,19 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     /// <summary>
     /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZone"/>.
     /// </summary>
-    public static void Write(RefImage<ColorARGB> frame, CaptureZone<ColorARGB> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    public static void Write(RefImage<ColorARGB> frame, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)
         => WriteCaptureZone(frame, captureZone, buffer, rotation);
 
     /// <summary>
     /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromRegion"/>.
     /// </summary>
-    public static void WriteFromRegion(RefImage<ColorARGB> region, CaptureZone<ColorARGB> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    public static void WriteFromRegion(RefImage<ColorARGB> region, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)
         => WriteCaptureZoneFromRegion(region, captureZone, buffer, rotation);
 
     /// <summary>
     /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromScaled"/>.
     /// </summary>
-    public static void WriteFromScaled(RefImage<ColorARGB> scaled, CaptureZone<ColorARGB> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    public static void WriteFromScaled(RefImage<ColorARGB> scaled, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)
         => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
 
     /// <summary>

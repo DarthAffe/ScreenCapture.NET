@@ -25,7 +25,7 @@ public ref struct CaptureFrame<TColor>
 
     private Lock.Scope _scope;
     private ZoneBuffer? _reader;
-    private readonly ReadOnlySpan<byte> _buffer;
+    private readonly ReadOnlySpan<TColor> _pixels;
 
     /// <summary>
     /// Gets the color format of the pixels.
@@ -50,17 +50,17 @@ public ref struct CaptureFrame<TColor>
     /// <summary>
     /// Gets the bytes of the frame.
     /// </summary>
-    public readonly ReadOnlySpan<byte> RawBuffer => _buffer;
+    public readonly ReadOnlySpan<byte> RawBuffer => MemoryMarshal.AsBytes(_pixels);
 
     /// <summary>
     /// Gets the pixels of the frame, row after row.
     /// </summary>
-    public readonly ReadOnlySpan<TColor> Pixels => MemoryMarshal.Cast<byte, TColor>(_buffer);
+    public readonly ReadOnlySpan<TColor> Pixels => _pixels;
 
     /// <summary>
     /// Gets a <see cref="Image{TColor}"/> of the frame.
     /// </summary>
-    public readonly RefImage<TColor> Image => RefImage<TColor>.Wrap(_buffer, Width, Height, Stride);
+    public readonly RefImage<TColor> Image => RefImage<TColor>.Wrap(_pixels, Width, Height);
 
     #endregion
 
@@ -69,22 +69,22 @@ public ref struct CaptureFrame<TColor>
     /// <summary>
     /// Creates a frame of a single-buffered zone that holds the zone lock.
     /// </summary>
-    internal CaptureFrame(ZoneBuffer buffer, Lock.Scope scope)
+    internal CaptureFrame(ZoneBuffer<TColor> buffer, Lock.Scope scope)
         : this(buffer, scope, null)
     { }
 
     /// <summary>
     /// Creates a frame of a double-buffered zone that holds a reader of <paramref name="buffer"/> (already added by the caller).
     /// </summary>
-    internal CaptureFrame(ZoneBuffer buffer)
+    internal CaptureFrame(ZoneBuffer<TColor> buffer)
         : this(buffer, default, buffer)
     { }
 
-    private CaptureFrame(ZoneBuffer buffer, Lock.Scope scope, ZoneBuffer? reader)
+    private CaptureFrame(ZoneBuffer<TColor> buffer, Lock.Scope scope, ZoneBuffer? reader)
     {
         this._scope = scope;
         this._reader = reader;
-        this._buffer = buffer.Data;
+        this._pixels = buffer.Data;
         this.Width = buffer.Width;
         this.Height = buffer.Height;
         this.Stride = buffer.Stride;

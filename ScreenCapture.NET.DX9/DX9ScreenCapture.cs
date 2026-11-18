@@ -115,7 +115,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <inheritdoc />
-    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
@@ -126,7 +126,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
             FrameBuffer? frame = _frame;
             if ((frame == null) || !frame.HasData || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
-            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(frame.Data, frame.Width, frame.Height, frame.Stride), captureZone, buffer);
+            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(frame.Data, frame.Width, frame.Height), captureZone, buffer);
 
             return true;
         }
@@ -135,8 +135,8 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     // The rows of the surface are Pitch bytes apart; the last one may end without padding.
     private static unsafe void CopySurface(LockedRectangle surface, FrameBuffer frame)
     {
-        ReadOnlySpan<byte> data = new((void*)surface.DataPointer, (surface.Pitch * (frame.Height - 1)) + frame.Stride);
-        RefImage<ColorBGRA>.Wrap(data, frame.Width, frame.Height, surface.Pitch).CopyTo(frame.Data, frame.Stride);
+        ReadOnlySpan<byte> data = new((void*)surface.DataPointer, (surface.Pitch * (frame.Height - 1)) + (frame.Width * ColorBGRA.ColorFormat.BytesPerPixel));
+        RefImage<ColorBGRA>.Wrap(data, frame.Width, frame.Height, surface.Pitch).CopyTo(frame.Data);
     }
 
     /// <inheritdoc />
@@ -212,8 +212,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         public int Width { get; } = width;
         public int Height { get; } = height;
-        public int Stride { get; } = width * ColorBGRA.ColorFormat.BytesPerPixel;
-        public byte[] Data { get; } = new byte[height * width * ColorBGRA.ColorFormat.BytesPerPixel];
+        public ColorBGRA[] Data { get; } = new ColorBGRA[width * height];
 
         // False until the first frame was read into Data.
         public bool HasData { get; set; }

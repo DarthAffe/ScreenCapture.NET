@@ -321,7 +321,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             {
                 if (!captureZone.IsValid) return false;
 
-                ZoneBuffer? buffer = captureZone.BeginWrite();
+                ZoneBuffer<TColor>? buffer = captureZone.BeginWrite();
                 if (buffer == null) return false;
 
                 bool requested = captureZone.TakeUpdateRequest();
@@ -394,14 +394,14 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Not called after other results or after <see cref="Restart"/> until the next <see cref="CaptureResult.NewFrame"/>.
     /// </para>
     /// <para>
-    /// <paramref name="buffer"/> has the zone's current size (<see cref="CaptureZone{TColor}.Stride"/> * <see cref="CaptureZone{TColor}.Height"/>).
+    /// <paramref name="buffer"/> has the zone's current size (<see cref="CaptureZone{TColor}.Width"/> * <see cref="CaptureZone{TColor}.Height"/> pixels, row after row without padding).
     /// For a double-buffered zone it's the back buffer, which contains an older frame (or zeros) and is only shown if this returns <c>true</c>.
     /// </para>
     /// </remarks>
     /// <param name="captureZone">The capture zone to update.</param>
     /// <param name="buffer">The buffer to write the pixels of the capture zone to.</param>
     /// <returns><c>true</c> if <paramref name="buffer"/> was filled; <c>false</c> if there was nothing to write (e.g. no captured frame yet), so the zone keeps its pixels.</returns>
-    protected abstract bool PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<byte> buffer);
+    protected abstract bool PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<TColor> buffer);
 
     /// <summary>
     /// Writes the pixels of a zone from a captured frame into its buffer: the zone's region, downscaled by its level and rotated into the orientation of the display.
@@ -427,7 +427,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <exception cref="ArgumentOutOfRangeException">The region of <paramref name="captureZone"/> doesn't lie within <paramref name="frame"/> (rotated by <paramref name="rotation"/>).</exception>
     /// <exception cref="ArgumentException"><paramref name="buffer"/> is too small for the zone.</exception>
     /// <exception cref="InvalidOperationException">The size of the zone isn't the one of the default <see cref="CalculateScaledSize"/> (it was overridden).</exception>
-    protected static void WriteCaptureZone(RefImage<TColor> frame, CaptureZone<TColor> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    protected static void WriteCaptureZone(RefImage<TColor> frame, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
@@ -456,7 +456,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <paramref name="region"/> (rotated by <paramref name="rotation"/>) doesn't have the size of the zone's region, or <paramref name="buffer"/> is too small for the zone.
     /// </exception>
     /// <exception cref="InvalidOperationException">The size of the zone isn't the one of the default <see cref="CalculateScaledSize"/> (it was overridden).</exception>
-    protected static void WriteCaptureZoneFromRegion(RefImage<TColor> region, CaptureZone<TColor> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    protected static void WriteCaptureZoneFromRegion(RefImage<TColor> region, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
@@ -482,7 +482,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <exception cref="ArgumentException">
     /// <paramref name="scaled"/> (rotated by <paramref name="rotation"/>) doesn't have the size of the zone, or <paramref name="buffer"/> is too small for the zone.
     /// </exception>
-    protected static void WriteCaptureZoneFromScaled(RefImage<TColor> scaled, CaptureZone<TColor> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    protected static void WriteCaptureZoneFromScaled(RefImage<TColor> scaled, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
@@ -490,7 +490,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         if ((width != captureZone.Width) || (height != captureZone.Height))
             throw new ArgumentException($"The image has a size of {width}x{height} (in the orientation of the display), but the zone has {captureZone.Width}x{captureZone.Height}.", nameof(scaled));
 
-        scaled.Rotate(rotation, buffer, captureZone.Stride);
+        scaled.Rotate(rotation, buffer);
     }
 
     /// <summary>
@@ -518,7 +518,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         };
 
     // source is the region of the zone before the rotation; width x height is its size after it (the size of the zone's region).
-    private static void WriteRegion(RefImage<TColor> source, int width, int height, CaptureZone<TColor> captureZone, Span<byte> buffer, ImageRotation rotation)
+    private static void WriteRegion(RefImage<TColor> source, int width, int height, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation)
     {
         int factor = 1 << captureZone.DownscaleLevel;
         (int scaledWidth, int scaledHeight) = PixelHelper.GetDownscaledSize(width, height, factor);
@@ -528,20 +528,20 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         if (rotation == ImageRotation.None)
         {
             if (factor == 1)
-                source.CopyTo(buffer, captureZone.Stride);
+                source.CopyTo(buffer);
             else
-                source.Downscale(factor, buffer, captureZone.Stride);
+                source.Downscale(factor, buffer);
         }
         else if (factor == 1)
-            source.Rotate(rotation, buffer, captureZone.Stride);
+            source.Rotate(rotation, buffer);
         else
-            DownscaleAndRotate(source, width, height, factor, scaledWidth, scaledHeight, captureZone, buffer, rotation);
+            DownscaleAndRotate(source, width, height, factor, scaledWidth, scaledHeight, buffer, rotation);
     }
 
     // Downscales before rotating, so only the smaller image is rotated.
     // The blocks are the ones of the display: the region is cut to whole blocks there (dropping its right and bottom), which is another side before the rotation.
     private static void DownscaleAndRotate(RefImage<TColor> source, int width, int height, int factor, int scaledWidth, int scaledHeight,
-                                           CaptureZone<TColor> captureZone, Span<byte> buffer, ImageRotation rotation)
+                                           Span<TColor> buffer, ImageRotation rotation)
     {
         // Like HPPH: a region smaller than a block is one block.
         int blockWidth = Math.Min(factor, width);
@@ -552,18 +552,18 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         (int factorX, int factorY) = swapped ? (blockHeight, blockWidth) : (blockWidth, blockHeight);
 
         (int unrotatedWidth, int unrotatedHeight) = PixelHelper.GetRotatedSize(scaledWidth, scaledHeight, rotation);
-        int stride = unrotatedWidth * TColor.ColorFormat.BytesPerPixel;
-        int length = stride * unrotatedHeight;
+        int length = unrotatedWidth * unrotatedHeight;
 
-        byte[] scaled = ArrayPool<byte>.Shared.Rent(length);
+        TColor[] scaled = ArrayPool<TColor>.Shared.Rent(length);
         try
         {
-            source[blocks.X, blocks.Y, blocks.Width, blocks.Height].Downscale(factorX, factorY, scaled, stride);
-            RefImage<TColor>.Wrap(scaled.AsSpan(0, length), unrotatedWidth, unrotatedHeight, stride).Rotate(rotation, buffer, captureZone.Stride);
+            Span<TColor> pixels = scaled.AsSpan(0, length);
+            source[blocks.X, blocks.Y, blocks.Width, blocks.Height].Downscale(factorX, factorY, pixels);
+            RefImage<TColor>.Wrap(pixels, unrotatedWidth, unrotatedHeight).Rotate(rotation, buffer);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(scaled);
+            ArrayPool<TColor>.Shared.Return(scaled);
         }
     }
 

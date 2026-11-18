@@ -47,11 +47,11 @@ public sealed class RotatedCaptureZoneTests
         return pixels;
     }
 
-    private static ColorARGB[] Write(CaptureZone<ColorARGB> zone, Action<byte[]> write)
+    private static ColorARGB[] Write(CaptureZone<ColorARGB> zone, Action<ColorARGB[]> write)
     {
-        byte[] buffer = new byte[zone.Stride * zone.Height];
+        ColorARGB[] buffer = new ColorARGB[zone.Width * zone.Height];
         write(buffer);
-        return MemoryMarshal.Cast<byte, ColorARGB>(buffer).ToArray();
+        return buffer;
     }
 
     // Copies a region out of an image, so it's an image of its own (with row padding, like a mapped texture).

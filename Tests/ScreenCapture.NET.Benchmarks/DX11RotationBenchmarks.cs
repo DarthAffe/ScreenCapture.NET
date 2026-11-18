@@ -38,7 +38,7 @@ public class DX11RotationBenchmarks
     private int _sourceHeight;
     private int _sourceStride;
     private byte[] _source = [];
-    private byte[] _target = [];
+    private ColorBGRA[] _target = [];
 
     private BenchmarkScreenCapture? _capture;
     private CaptureZone<ColorBGRA>? _zone;
@@ -67,7 +67,7 @@ public class DX11RotationBenchmarks
 
         _capture = new BenchmarkScreenCapture(width, height);
         _zone = _capture.RegisterCaptureZone(new CaptureRegion(0, 0, width, height));
-        _target = new byte[_zone.Stride * _zone.Height];
+        _target = new ColorBGRA[_zone.Width * _zone.Height];
     }
 
     [GlobalCleanup]

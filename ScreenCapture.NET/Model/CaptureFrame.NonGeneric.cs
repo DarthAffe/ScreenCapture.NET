@@ -77,7 +77,7 @@ public ref struct CaptureFrame
         this._scope = scope;
         this._dispatcher = dispatcher;
         this._reader = reader;
-        this._buffer = buffer.Data;
+        this._buffer = buffer.RawData;
         this.Width = buffer.Width;
         this.Height = buffer.Height;
         this.Stride = buffer.Stride;

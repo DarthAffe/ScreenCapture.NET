@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests;
@@ -27,10 +26,10 @@ public sealed class WriteCaptureZoneTests
 
     private static ColorARGB[] Write(RefImage<ColorARGB> frame, CaptureZone<ColorARGB> zone)
     {
-        byte[] buffer = new byte[zone.Stride * zone.Height];
+        ColorARGB[] buffer = new ColorARGB[zone.Width * zone.Height];
         TestScreenCapture.Write(frame, zone, buffer);
 
-        return MemoryMarshal.Cast<byte, ColorARGB>(buffer).ToArray();
+        return buffer;
     }
 
     [TestMethod]
@@ -111,7 +110,7 @@ public sealed class WriteCaptureZoneTests
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4));
         RefImage<ColorARGB> frame = RefImage<ColorARGB>.Wrap(CreateFrame(6, 6, blockSize: 1), 6, 6);
 
-        byte[] buffer = new byte[(zone.Stride * zone.Height) - 1];
+        ColorARGB[] buffer = new ColorARGB[(zone.Width * zone.Height) - 1];
         try
         {
             TestScreenCapture.Write(frame, zone, buffer);
@@ -140,7 +139,7 @@ public sealed class WriteCaptureZoneTests
     public void NullZoneThrows()
     {
         RefImage<ColorARGB> frame = RefImage<ColorARGB>.Wrap(CreateFrame(6, 6, blockSize: 1), 6, 6);
-        byte[] buffer = new byte[16];
+        ColorARGB[] buffer = new ColorARGB[16];
 
         try
         {

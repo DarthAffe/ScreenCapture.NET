@@ -96,7 +96,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private static string FormatXError(X11Error? error) => error == null ? string.Empty : $" with {error}";
 
     /// <inheritdoc />
-    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 

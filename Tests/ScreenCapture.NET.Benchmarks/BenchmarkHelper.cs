@@ -53,18 +53,18 @@ internal sealed class BenchmarkScreenCapture(int width, int height)
         return CaptureResult.NewFrame;
     }
 
-    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer) => true;
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer) => true;
 
     /// <summary>
     /// The zone write of the CPU backends (DX9, X11), and of backends with frames in the native orientation of the output.
     /// </summary>
-    public static void Write(RefImage<ColorBGRA> frame, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+    public static void Write(RefImage<ColorBGRA> frame, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation = ImageRotation.None)
         => WriteCaptureZone(frame, captureZone, buffer, rotation);
 
     /// <summary>
     /// The CPU part of the DX11 zone write: the rotation of the mapped staging texture.
     /// </summary>
-    public static void WriteFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer, ImageRotation rotation)
+    public static void WriteFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation)
         => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
 
     protected override bool PerformRestart() => true;

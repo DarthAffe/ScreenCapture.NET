@@ -30,7 +30,7 @@ public class CpuZoneBenchmarks
     private int _frameHeight;
     private int _stride;
     private byte[] _frame = [];
-    private byte[] _buffer = [];
+    private ColorBGRA[] _buffer = [];
 
     private BenchmarkScreenCapture? _capture;
     private CaptureZone<ColorBGRA>? _zone;
@@ -49,7 +49,7 @@ public class CpuZoneBenchmarks
 
         _capture = new BenchmarkScreenCapture(_width, _height);
         _zone = _capture.RegisterCaptureZone(new CaptureRegion(0, 0, _width, _height), DownscaleLevel);
-        _buffer = new byte[_zone.Stride * _zone.Height];
+        _buffer = new ColorBGRA[_zone.Width * _zone.Height];
     }
 
     [GlobalCleanup]
