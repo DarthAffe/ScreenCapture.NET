@@ -406,7 +406,8 @@ internal static class HardwareTestHelper
         Assert.AreEqual(current, zone.Display);
         Assert.IsTrue(zone.IsValid);
 
-        CaptureFrame(screenCapture);
+        // Any result will do: a static display gives no second new frame, and the display change is applied after every capture.
+        screenCapture.CaptureScreen();
         Assert.HasCount(1, changes);
     }
 
