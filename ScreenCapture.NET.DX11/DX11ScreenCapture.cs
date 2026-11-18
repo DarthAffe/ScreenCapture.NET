@@ -204,8 +204,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
                 try
                 {
+                    // The staging texture is the downscaled region in the native orientation of the output; only the rotation is left.
                     ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
-                    CopyRotateHelper.Copy(display.Rotation, source, mapSource.RowPitch, captureZone.Width, captureZone.Height, buffer);
+                    WriteCaptureZoneFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, mapSource.RowPitch), captureZone, buffer, display.Rotation);
                 }
                 finally
                 {
@@ -269,7 +270,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// </summary>
     private void CopyToStaging(ID3D11DeviceContext context, ID3D11Texture2D captureTexture, ZoneTextures textures, CaptureRegion region, Display display)
     {
-        Box sourceBox = DX11ZoneLayout.GetSourceBox(display.Rotation, display.Width, display.Height, region.X, region.Y, region.Width, region.Height).ToBox();
+        CaptureRegion source = GetSourceRegion(region, display);
+        Box sourceBox = new(source.X, source.Y, 0, source.X + source.Width, source.Y + source.Height, 1);
         if (textures.ScalingTexture != null)
         {
             context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, captureTexture, 0, sourceBox);
@@ -331,8 +333,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private ZoneTextures CreateTextures(Display display, CaptureRegion region, int scaledWidth, int scaledHeight, int downscaleLevel)
     {
         // Textures only depend on the size, not on the position of the zone. A restart disposes them, so they're never left with another rotation.
-        (int unscaledWidth, int unscaledHeight) = DX11ZoneLayout.GetTextureSize(display.Rotation, region.Width, region.Height);
-        (int width, int height) = DX11ZoneLayout.GetTextureSize(display.Rotation, scaledWidth, scaledHeight);
+        (int unscaledWidth, int unscaledHeight) = PixelHelper.GetRotatedSize(region.Width, region.Height, display.Rotation);
+        (int width, int height) = PixelHelper.GetRotatedSize(scaledWidth, scaledHeight, display.Rotation);
 
         Texture2DDescription stagingTextureDesc = new()
         {
@@ -370,7 +372,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
         }
 
-        return new ZoneTextures(region.Width, region.Height, downscaleLevel, height, stagingTexture, scalingTexture, scalingTextureView);
+        return new ZoneTextures(region.Width, region.Height, downscaleLevel, width, height, stagingTexture, scalingTexture, scalingTextureView);
     }
 
     /// <inheritdoc />
@@ -487,9 +489,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         public int UnscaledHeight { get; }
         public int DownscaleLevel { get; }
 
-        /// <summary>
-        /// The height of the staging texture (texture orientation).
-        /// </summary>
+        // The size of the staging texture (native orientation of the output).
+        public int StagingWidth { get; }
         public int StagingHeight { get; }
 
         public ID3D11Texture2D StagingTexture { get; }
@@ -504,12 +505,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         #region Constructors
 
-        public ZoneTextures(int unscaledWidth, int unscaledHeight, int downscaleLevel, int stagingHeight,
+        public ZoneTextures(int unscaledWidth, int unscaledHeight, int downscaleLevel, int stagingWidth, int stagingHeight,
                             ID3D11Texture2D stagingTexture, ID3D11Texture2D? scalingTexture, ID3D11ShaderResourceView? scalingTextureView)
         {
             this.UnscaledWidth = unscaledWidth;
             this.UnscaledHeight = unscaledHeight;
             this.DownscaleLevel = downscaleLevel;
+            this.StagingWidth = stagingWidth;
             this.StagingHeight = stagingHeight;
             this.StagingTexture = stagingTexture;
             this.ScalingTexture = scalingTexture;

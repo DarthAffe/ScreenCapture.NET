@@ -193,6 +193,19 @@ public sealed class DX9HardwareTests
         HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
     }
 
+    /// <summary>
+    /// DX9 downscales on the CPU, DX11 with the mip chain on the GPU: the results only differ by rounding.
+    /// </summary>
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(3)]
+    public void DownscaledZonesMatchDX11(int downscaleLevel)
+    {
+        using DX9ScreenCaptureService service = new();
+        using DX11ScreenCaptureService reference = new();
+        HardwareTestHelper.AssertDownscaledZonesMatchReference(service, reference, downscaleLevel);
+    }
+
     [TestMethod]
     public void ZoneShowsTheLatestFrame()
     {

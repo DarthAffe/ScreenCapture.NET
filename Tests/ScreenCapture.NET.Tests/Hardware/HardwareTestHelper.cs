@@ -222,6 +222,56 @@ internal static class HardwareTestHelper
     /// brightness of a coarse grid, and requires the image to be much closer to the reference than the same image rotated by 180°
     /// (which is what mixing up 90° and 270° would produce).
     /// </remarks>
+    /// <summary>
+    /// Downscaled zones of two backends nearly match: e.g. the CPU downscaling (one average per 2^level block) and DX11's mip chain (2x2 per level on the GPU, rounded per level).
+    /// </summary>
+    /// <remarks>
+    /// The two captures are taken one after the other: unscaled zones of the same region show if the screen changed between them (then nothing can be compared).
+    /// </remarks>
+    public static void AssertDownscaledZonesMatchReference(IScreenCaptureService service, IScreenCaptureService reference, int downscaleLevel)
+    {
+        // Average difference per color channel (0-255). Rounding the averages differently gives far below 1 (measured: 0.01 at level 1, 0.03 at level 3).
+        const double tolerance = 1.0;
+        const double maxUnscaledDifference = 0.1;
+
+        (_, Display display) = GetFirstDisplay(service);
+        Display referenceDisplay = GetAllDisplays(reference).FirstOrDefault(d => d.DeviceName == display.DeviceName);
+        if (referenceDisplay.DeviceName == null) Assert.Inconclusive($"The reference has no display {display.DeviceName}.");
+
+        const int size = 512;
+        CaptureRegion region = new((display.Width - size) / 2, (display.Height - size) / 2, size, size);
+
+        IScreenCapture screenCapture = service.GetScreenCapture(display);
+        IScreenCapture referenceCapture = reference.GetScreenCapture(referenceDisplay);
+        ICaptureZone unscaled = screenCapture.RegisterCaptureZone(region);
+        ICaptureZone downscaled = screenCapture.RegisterCaptureZone(region, downscaleLevel);
+        ICaptureZone referenceUnscaled = referenceCapture.RegisterCaptureZone(region);
+        ICaptureZone referenceDownscaled = referenceCapture.RegisterCaptureZone(region, downscaleLevel);
+
+        CaptureFrame(screenCapture);
+        CaptureFrame(referenceCapture);
+
+        double unscaledDifference = AverageDifference(GetPixels(unscaled), GetPixels(referenceUnscaled));
+        if (unscaledDifference > maxUnscaledDifference)
+            Assert.Inconclusive($"The screen changed between the two captures (unscaled difference {unscaledDifference:F2}).");
+
+        Assert.AreEqual((referenceDownscaled.Width, referenceDownscaled.Height), (downscaled.Width, downscaled.Height));
+        double difference = AverageDifference(GetPixels(downscaled), GetPixels(referenceDownscaled));
+        Assert.IsLessThan(tolerance, difference, $"Level {downscaleLevel}: the downscaled zones differ by {difference:F2} on average (unscaled: {unscaledDifference:F2}).");
+    }
+
+    // Average absolute difference of the color channels (not alpha: DX9 and DX11 may leave it differently).
+    private static double AverageDifference(ColorBGRA[] pixels, ColorBGRA[] reference)
+    {
+        Assert.HasCount(reference.Length, pixels);
+
+        long sum = 0;
+        for (int i = 0; i < pixels.Length; i++)
+            sum += Math.Abs(pixels[i].B - reference[i].B) + Math.Abs(pixels[i].G - reference[i].G) + Math.Abs(pixels[i].R - reference[i].R);
+
+        return sum / (pixels.Length * 3.0);
+    }
+
     public static void AssertMatchesReferenceOrientation(IScreenCaptureService service, IScreenCaptureService reference)
     {
         // Below this (average brightness difference, 0-255) the screen looks too much like itself rotated by 180° to tell the difference.

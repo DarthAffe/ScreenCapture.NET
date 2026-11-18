@@ -154,6 +154,29 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
         }
     }
 
+    /// <summary>
+    /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZone"/>.
+    /// </summary>
+    public static void Write(RefImage<ColorARGB> frame, CaptureZone<ColorARGB> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+        => WriteCaptureZone(frame, captureZone, buffer, rotation);
+
+    /// <summary>
+    /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromRegion"/>.
+    /// </summary>
+    public static void WriteFromRegion(RefImage<ColorARGB> region, CaptureZone<ColorARGB> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+        => WriteCaptureZoneFromRegion(region, captureZone, buffer, rotation);
+
+    /// <summary>
+    /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromScaled"/>.
+    /// </summary>
+    public static void WriteFromScaled(RefImage<ColorARGB> scaled, CaptureZone<ColorARGB> captureZone, Span<byte> buffer, ImageRotation rotation = ImageRotation.None)
+        => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
+
+    /// <summary>
+    /// Calls <see cref="AbstractScreenCapture{TColor}.GetSourceRegion"/>.
+    /// </summary>
+    public static CaptureRegion SourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
+
     public static ColorARGB GetColorFromLocation(int x, int y)
     {
         byte[] xBytes = BitConverter.GetBytes((short)x);

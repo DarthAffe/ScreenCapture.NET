@@ -34,11 +34,14 @@ public class DX11RotationBenchmarks
     [Params(ImageRotation.None, ImageRotation.Rotate90, ImageRotation.Rotate180, ImageRotation.Rotate270)]
     public ImageRotation Rotation { get; set; }
 
-    private int _width;
-    private int _height;
+    private int _sourceWidth;
+    private int _sourceHeight;
     private int _sourceStride;
     private byte[] _source = [];
     private byte[] _target = [];
+
+    private BenchmarkScreenCapture? _capture;
+    private CaptureZone<ColorBGRA>? _zone;
 
     #endregion
 
@@ -47,7 +50,7 @@ public class DX11RotationBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        (_width, _height) = Size switch
+        (int width, int height) = Size switch
         {
             ZoneSize.FullHD => (1920, 1080),
             ZoneSize.SuperUltraWide => (5120, 1440),
@@ -55,19 +58,23 @@ public class DX11RotationBenchmarks
             _ => throw new ArgumentOutOfRangeException(nameof(Size))
         };
 
-        // For 90/270 the texture is in the native orientation: one row per zone column.
-        bool swapped = Rotation is ImageRotation.Rotate90 or ImageRotation.Rotate270;
-        int sourceRows = swapped ? _width : _height;
-        int sourceRowPixels = swapped ? _height : _width;
+        // The texture is in the native orientation: for 90/270 one row per zone column.
+        (_sourceWidth, _sourceHeight) = PixelHelper.GetRotatedSize(width, height, Rotation);
 
         // Staging textures have a padded row pitch; 256 bytes is a typical alignment.
-        _sourceStride = BenchmarkHelper.Align(sourceRowPixels * 4, 256);
-        _source = BenchmarkHelper.CreateFrame(sourceRowPixels, sourceRows, _sourceStride);
-        _target = new byte[_width * _height * 4];
+        _sourceStride = BenchmarkHelper.Align(_sourceWidth * 4, 256);
+        _source = BenchmarkHelper.CreateFrame(_sourceWidth, _sourceHeight, _sourceStride);
+
+        _capture = new BenchmarkScreenCapture(width, height);
+        _zone = _capture.RegisterCaptureZone(new CaptureRegion(0, 0, width, height));
+        _target = new byte[_zone.Stride * _zone.Height];
     }
 
+    [GlobalCleanup]
+    public void Cleanup() => _capture?.Dispose();
+
     [Benchmark]
-    public void CopyRotate() => CopyRotateHelper.Copy(Rotation, _source, _sourceStride, _width, _height, _target);
+    public void CopyRotate() => BenchmarkScreenCapture.WriteFromScaled(RefImage<ColorBGRA>.Wrap(_source, _sourceWidth, _sourceHeight, _sourceStride), _zone!, _target, Rotation);
 
     #endregion
 }

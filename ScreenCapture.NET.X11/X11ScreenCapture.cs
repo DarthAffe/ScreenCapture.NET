@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using HPPH;
@@ -107,37 +106,10 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             X11ImageHandle? image = _image;
             if ((image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
 
-            RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride);
-            if (captureZone.DownscaleLevel == 0)
-                CopyZone(source, captureZone, buffer);
-            else
-                DownscaleZone(source, captureZone, buffer);
+            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride), captureZone, buffer);
 
             return true;
         }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyZone(RefImage<ColorBGRA> image, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
-    {
-        image[captureZone.Region.X, captureZone.Region.Y, captureZone.Width, captureZone.Height]
-            .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void DownscaleZone(RefImage<ColorBGRA> image, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
-    {
-        RefImage<ColorBGRA> source = image[captureZone.Region.X, captureZone.Region.Y, captureZone.Region.Width, captureZone.Region.Height];
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
-
-        int blockSize = 1 << captureZone.DownscaleLevel;
-
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                target[(y * width) + x] = source[x * blockSize, y * blockSize, blockSize, blockSize].Average();
     }
 
     /// <inheritdoc />

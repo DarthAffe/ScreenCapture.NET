@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 using HPPH;
 using SharpGen.Runtime;
@@ -81,15 +79,14 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 _device.GetFrontBufferData(0, _surface);
 
                 LockedRectangle dr = _surface.LockRect(LockFlags.NoSystemLock | LockFlags.ReadOnly);
-
-                nint ptr = dr.DataPointer;
-                for (int y = 0; y < frame.Height; y++)
+                try
                 {
-                    Marshal.Copy(ptr, frame.Data, y * frame.Stride, frame.Stride);
-                    ptr += dr.Pitch;
+                    CopySurface(dr, frame);
                 }
-
-                _surface.UnlockRect();
+                finally
+                {
+                    _surface.UnlockRect();
+                }
                 frame.HasData = true;
 
                 // GetFrontBufferData has no change detection: every successful read counts as a new frame.
@@ -129,36 +126,17 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
             FrameBuffer? frame = _frame;
             if ((frame == null) || !frame.HasData || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
-            if (captureZone.DownscaleLevel == 0)
-                CopyZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
-            else
-                DownscaleZone(frame.Data, frame.Width, frame.Height, frame.Stride, captureZone, buffer);
+            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(frame.Data, frame.Width, frame.Height, frame.Stride), captureZone, buffer);
 
             return true;
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static void CopyZone(ReadOnlySpan<byte> frame, int frameWidth, int frameHeight, int frameStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    // The rows of the surface are Pitch bytes apart; the last one may end without padding.
+    private static unsafe void CopySurface(LockedRectangle surface, FrameBuffer frame)
     {
-        RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.Region.X, captureZone.Region.Y, captureZone.Width, captureZone.Height]
-                           .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static void DownscaleZone(ReadOnlySpan<byte> frame, int frameWidth, int frameHeight, int frameStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
-    {
-        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(frame, frameWidth, frameHeight, frameStride)[captureZone.Region.X, captureZone.Region.Y, captureZone.Region.Width, captureZone.Region.Height];
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
-
-        int blockSize = 1 << captureZone.DownscaleLevel;
-
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                target[(y * width) + x] = source[x * blockSize, y * blockSize, blockSize, blockSize].Average();
+        ReadOnlySpan<byte> data = new((void*)surface.DataPointer, (surface.Pitch * (frame.Height - 1)) + frame.Stride);
+        RefImage<ColorBGRA>.Wrap(data, frame.Width, frame.Height, surface.Pitch).CopyTo(frame.Data, frame.Stride);
     }
 
     /// <inheritdoc />
