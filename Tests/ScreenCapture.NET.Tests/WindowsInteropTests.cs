@@ -1,3 +1,4 @@
+extern alias WGC;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -11,8 +12,13 @@ namespace ScreenCapture.NET.Tests;
 [SupportedOSPlatform("windows")] // The Windows assemblies are marked windows-only, but only their types are inspected.
 public sealed class WindowsInteropTests
 {
-    // The DX11 and the DX9 assembly each compile their own copy of the shared helper.
-    public static IEnumerable<object[]> Assemblies => [[typeof(DX11ScreenCaptureService).Assembly], [typeof(DX9ScreenCaptureService).Assembly]];
+    // The DX11, the DX9 and the WGC assembly each compile their own copy of the shared helper.
+    public static IEnumerable<object[]> Assemblies =>
+    [
+        [typeof(DX11ScreenCaptureService).Assembly],
+        [typeof(DX9ScreenCaptureService).Assembly],
+        [typeof(WGC::ScreenCapture.NET.WGCScreenCaptureService).Assembly]
+    ];
 
     [TestMethod]
     [DynamicData(nameof(Assemblies))]

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Title>ScreenCapture.NET.WGC</Title>
+    <AssemblyName>ScreenCapture.NET.WGC</AssemblyName>
+    <AssemblyTitle>ScreenCapture.NET.WGC</AssemblyTitle>
+    <PackageId>ScreenCapture.NET.WGC</PackageId>
+    <Description>Windows.Graphics.Capture based Screen-Capturing</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Windows.Graphics.Capture is called through COM (Helper/WGCInterop.cs), not through a WinRT projection: no Windows SDK version in the target framework.
+         It needs Windows 10 1903 or later, checked at run time (WGCScreenCaptureService.IsSupported). -->
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Windows\*.cs" Link="Shared\Windows\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\D3D11\*.cs" Link="Shared\D3D11\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Precompiled with Shared/D3D11/Shaders/Compile.cmd (see the DX11 project). -->
+    <EmbeddedResource Include="..\Shared\D3D11\Shaders\*.cso" Link="Shared\D3D11\Shaders\%(Filename)%(Extension)" LogicalName="ScreenCapture.NET.Shaders.%(Filename)%(Extension)" WithCulture="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="3.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+  </ItemGroup>
+
+</Project>

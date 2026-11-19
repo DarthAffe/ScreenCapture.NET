@@ -17,6 +17,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.X11", "Sc
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.Benchmarks", "Tests\ScreenCapture.NET.Benchmarks\ScreenCapture.NET.Benchmarks.csproj", "{C61A80F0-47F9-4C94-B429-08E4E631E274}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.WGC", "ScreenCapture.NET.WGC\ScreenCapture.NET.WGC.csproj", "{2060E255-C22A-48C5-8D26-53366DFB430E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -47,6 +49,10 @@ Global
 		{C61A80F0-47F9-4C94-B429-08E4E631E274}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C61A80F0-47F9-4C94-B429-08E4E631E274}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C61A80F0-47F9-4C94-B429-08E4E631E274}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2060E255-C22A-48C5-8D26-53366DFB430E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2060E255-C22A-48C5-8D26-53366DFB430E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2060E255-C22A-48C5-8D26-53366DFB430E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2060E255-C22A-48C5-8D26-53366DFB430E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

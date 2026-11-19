@@ -38,6 +38,7 @@ internal sealed class D3D11ZonePipeline
     private ID3D11DeviceContext? _context;
 
     private ID3D11Texture2D? _captureTexture;
+    private Box _captureTextureBox;
 
     // The display shown by the capture texture, the rotation that turns the capture texture into its orientation,
     // and the display with that rotation (what GetSourceRegion expects).
@@ -110,6 +111,7 @@ internal sealed class D3D11ZonePipeline
             Usage = ResourceUsage.Default
         };
         _captureTexture = device.CreateTexture2D(captureTextureDesc);
+        _captureTextureBox = new Box(0, 0, 0, width, height, 1);
 
         _device = device;
         _context = context;
@@ -144,13 +146,14 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Copies a frame (<c>B8G8R8A8_UNorm</c>, the size of the capture texture) to the capture texture. Only queues the work on the GPU.
+    /// Copies a frame (<c>B8G8R8A8_UNorm</c>) to the capture texture. Only queues the work on the GPU.
     /// </summary>
+    /// <param name="frame">The frame: at least the size of the capture texture, its top left part is copied (e.g. the content of a larger texture of a frame pool).</param>
     public void CopyFrame(ID3D11Texture2D frame)
     {
         ID3D11DeviceContext context = _context ?? throw CreateNotInitializedException();
 
-        context.CopySubresourceRegion(_captureTexture!, 0, 0, 0, 0, frame, 0);
+        context.CopySubresourceRegion(_captureTexture!, 0, 0, 0, 0, frame, 0, _captureTextureBox);
         SetFrame();
     }
 

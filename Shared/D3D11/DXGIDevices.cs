@@ -46,7 +46,8 @@ internal static class DXGIDevices
         graphicsCard = graphicsCard with { Index = index };
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
 
-        using IDXGIAdapter1 adapter = factory.GetAdapter1(index);
+        factory.EnumAdapters1(index, out IDXGIAdapter1 adapter).CheckError();
+        using IDXGIAdapter1 _ = adapter;
 
         for (int i = 0; ; i++)
         {

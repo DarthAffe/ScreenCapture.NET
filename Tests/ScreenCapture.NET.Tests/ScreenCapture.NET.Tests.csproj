@@ -26,6 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Aliased: WGC compiles the same shared internal types as DX11 (Shared/), the unaliased ones are DX11's. -->
+    <ProjectReference Include="..\..\ScreenCapture.NET.WGC\ScreenCapture.NET.WGC.csproj" Aliases="WGC" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- HdrToneMappingTests compiles it and compares the result with the embedded bytecode. -->
     <None Include="..\..\Shared\D3D11\Shaders\HdrToneMapping.hlsl" Link="Shaders\HdrToneMapping.hlsl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

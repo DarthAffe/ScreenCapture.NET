@@ -462,7 +462,7 @@ public sealed class DX11HardwareTests
     }
 
     // Every value in every channel: ramps of gray, red, green and blue, then mixed colors.
-    private static ColorBGRA[] CreateSdrPattern(int width, int height)
+    internal static ColorBGRA[] CreateSdrPattern(int width, int height)
     {
         ColorBGRA[] pattern = new ColorBGRA[width * height];
         for (int y = 0; y < height; y++)
@@ -482,7 +482,7 @@ public sealed class DX11HardwareTests
         return pattern;
     }
 
-    private static (int MaxDifference, int DifferentPixels) Compare(ColorBGRA[] expected, ColorBGRA[] actual)
+    internal static (int MaxDifference, int DifferentPixels) Compare(ColorBGRA[] expected, ColorBGRA[] actual)
     {
         int maxDifference = 0;
         int differentPixels = 0;
@@ -497,7 +497,7 @@ public sealed class DX11HardwareTests
     }
 
     // The color space of the output: HDR (ST.2084, BT.2020) or SDR (sRGB).
-    private static bool IsShowingHdr(Display display)
+    internal static bool IsShowingHdr(Display display)
     {
         DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
         using IDXGIFactory1 _ = factory!;
@@ -619,9 +619,16 @@ public sealed class DX11HardwareTests
     {
         // The factory belongs to the service.
         AssertNoDirectXFields(screenCapture, 3, "_factory");
+        AssertZonePipelineReleased(screenCapture);
+    }
 
+    /// <summary>
+    /// The zone pipeline of a capture (DX11, WGC) holds no DirectX objects.
+    /// </summary>
+    internal static void AssertZonePipelineReleased(object screenCapture)
+    {
         // The zone pipeline holds the capture texture, the HDR resources and the zone textures (and borrows the device and the context).
-        object zonePipeline = typeof(DX11ScreenCapture).GetField("_zonePipeline", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(screenCapture)
+        object zonePipeline = screenCapture.GetType().GetField("_zonePipeline", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(screenCapture)
                               ?? throw new InvalidOperationException("_zonePipeline not found.");
         AssertNoDirectXFields(zonePipeline, 3);
 
@@ -631,7 +638,7 @@ public sealed class DX11HardwareTests
                         "Zone textures were left.");
     }
 
-    private static void AssertNoDirectXFields(object owner, int minimumCount, params string[] ignored)
+    internal static void AssertNoDirectXFields(object owner, int minimumCount, params string[] ignored)
     {
         List<FieldInfo> fields = [.. owner.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
                                           .Where(f => typeof(CppObject).IsAssignableFrom(f.FieldType) && !ignored.Contains(f.Name))];
