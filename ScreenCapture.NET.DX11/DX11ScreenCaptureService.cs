@@ -53,17 +53,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
-            List<GraphicsCard> graphicsCards = [];
-            for (int i = 0; ; i++)
-            {
-                bool found = _factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
-                using (adapter)
-                {
-                    if (!found) return graphicsCards;
-
-                    graphicsCards.Add(DX11Devices.CreateGraphicsCard(adapter, i));
-                }
-            }
+            return DXGIDevices.GetGraphicsCards(_factory);
         }
     }
 
@@ -75,41 +65,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
-            List<Display> displays = [];
-
-            // The card is found by its id: its index can point to another adapter by now (e.g. after an adapter was added or removed).
-            int index = FindAdapterIndex(graphicsCard.Id);
-            if (index < 0) return displays;
-
-            // The capture opens the adapter by its index.
-            graphicsCard = graphicsCard with { Index = index };
-            WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
-
-            using IDXGIAdapter1 adapter = _factory.GetAdapter1(index);
-
-            for (int i = 0; ; i++)
-            {
-                bool found = adapter.EnumOutputs(i, out IDXGIOutput output).Success;
-                using (output)
-                {
-                    if (!found) return displays;
-
-                    displays.Add(DX11Devices.CreateDisplay(output.Description, i, graphicsCard, devices));
-                }
-            }
-        }
-    }
-
-    private int FindAdapterIndex(string id)
-    {
-        for (int i = 0; ; i++)
-        {
-            bool found = _factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
-            using (adapter)
-            {
-                if (!found) return -1;
-                if (string.Equals(WindowsDisplayDevices.GetGraphicsCardId(adapter.Description1.Luid), id, StringComparison.Ordinal)) return i;
-            }
+            return DXGIDevices.GetDisplays(_factory, graphicsCard);
         }
     }
 

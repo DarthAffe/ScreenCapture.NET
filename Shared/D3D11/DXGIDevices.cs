@@ -1,15 +1,77 @@
 using System;
+using System.Collections.Generic;
 using HPPH;
 using Vortice.DXGI;
 
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Creates <see cref="GraphicsCard"/>s and <see cref="Display"/>s from DXGI adapters and outputs, for the service and for captures that read their display again.
+/// Enumerates the DXGI adapters and outputs as <see cref="GraphicsCard"/>s and <see cref="Display"/>s, for the services and for captures that read their display again.
 /// </summary>
-internal static class DX11Devices
+internal static class DXGIDevices
 {
     #region Methods
+
+    /// <summary>
+    /// Reads all adapters of the factory.
+    /// </summary>
+    public static List<GraphicsCard> GetGraphicsCards(IDXGIFactory1 factory)
+    {
+        List<GraphicsCard> graphicsCards = [];
+        for (int i = 0; ; i++)
+        {
+            bool found = factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
+            using (adapter)
+            {
+                if (!found) return graphicsCards;
+
+                graphicsCards.Add(CreateGraphicsCard(adapter, i));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads all outputs of the adapter with the id of <paramref name="graphicsCard"/>.
+    /// </summary>
+    /// <returns>The displays, with the card as it is now (its index can have changed); empty if the card isn't there anymore.</returns>
+    public static List<Display> GetDisplays(IDXGIFactory1 factory, GraphicsCard graphicsCard)
+    {
+        List<Display> displays = [];
+
+        // The card is found by its id: its index can point to another adapter by now (e.g. after an adapter was added or removed).
+        int index = FindAdapterIndex(factory, graphicsCard.Id);
+        if (index < 0) return displays;
+
+        // The captures open the adapter by its index.
+        graphicsCard = graphicsCard with { Index = index };
+        WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
+
+        using IDXGIAdapter1 adapter = factory.GetAdapter1(index);
+
+        for (int i = 0; ; i++)
+        {
+            bool found = adapter.EnumOutputs(i, out IDXGIOutput output).Success;
+            using (output)
+            {
+                if (!found) return displays;
+
+                displays.Add(CreateDisplay(output.Description, i, graphicsCard, devices));
+            }
+        }
+    }
+
+    private static int FindAdapterIndex(IDXGIFactory1 factory, string id)
+    {
+        for (int i = 0; ; i++)
+        {
+            bool found = factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
+            using (adapter)
+            {
+                if (!found) return -1;
+                if (string.Equals(WindowsDisplayDevices.GetGraphicsCardId(adapter.Description1.Luid), id, StringComparison.Ordinal)) return i;
+            }
+        }
+    }
 
     public static GraphicsCard CreateGraphicsCard(IDXGIAdapter1 adapter, int index)
     {

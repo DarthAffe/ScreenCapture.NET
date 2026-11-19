@@ -289,7 +289,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11
 
                 // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
                 // and after displays were added or removed the indices can point to another adapter or output.
-                (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DX11Devices.FindDisplay(_factory, Display.Id)
+                (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DXGIDevices.FindDisplay(_factory, Display.Id)
                                                                                                      ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
                 using IDXGIAdapter1 adapter = foundAdapter;
                 using IDXGIOutput dxgiOutput = foundOutput;
