@@ -17,10 +17,16 @@ internal sealed class TestPatternWindow : IDisposable
     #region Constants
 
     private const uint WS_POPUP = 0x80000000;
+    private const uint WS_OVERLAPPEDWINDOW = 0x00CF0000;
     private const uint WS_EX_TOPMOST = 0x00000008;
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
     private const uint WS_EX_NOACTIVATE = 0x08000000;
     private const int SW_SHOWNOACTIVATE = 4;
+    private const int SW_SHOWMINNOACTIVE = 7;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
     private const uint WM_PAINT = 0x000F;
     private const uint PM_REMOVE = 0x0001;
     private const uint DIB_RGB_COLORS = 0;
@@ -45,6 +51,14 @@ internal sealed class TestPatternWindow : IDisposable
     private readonly ColorBGRA[] _pixels;
     private readonly int _width;
     private readonly int _height;
+    private readonly string _title;
+    private readonly bool _framed;
+    private readonly bool _capturable;
+
+    /// <summary>
+    /// Gets the handle (<c>HWND</c>) of the window.
+    /// </summary>
+    public nint Handle { get; private set; }
 
     #endregion
 
@@ -53,17 +67,31 @@ internal sealed class TestPatternWindow : IDisposable
     /// <summary>
     /// Shows the image (row by row, alpha ignored) at the given position on the desktop (physical pixels).
     /// </summary>
+    /// <param name="x">The x-position of the window on the desktop.</param>
+    /// <param name="y">The y-position of the window on the desktop.</param>
+    /// <param name="width">The width of the image (and of the window without a frame).</param>
+    /// <param name="height">The height of the image (and of the window without a frame).</param>
+    /// <param name="pixels">The image.</param>
+    /// <param name="title">The title of the window.</param>
+    /// <param name="framed"><c>true</c> for a window with a frame (title bar and borders, in the given size), the image in its client area; <c>false</c> for a window that's only the image.</param>
+    /// <param name="capturable">
+    /// <c>true</c> for a normal window (with a taskbar button) that Windows.Graphics.Capture can capture as a window;
+    /// <c>false</c> for a tool window that can't be activated, which it refuses (it's still part of the captures of displays).
+    /// </param>
     /// <remarks>
     /// Only one test pattern window is shown at a time, also across processes (the test processes of both TFMs run at the same time and show their windows at the same places):
     /// it waits until the window of another process is gone. Dispose it on the thread that created it.
     /// </remarks>
-    public TestPatternWindow(int x, int y, int width, int height, ColorBGRA[] pixels)
+    public TestPatternWindow(int x, int y, int width, int height, ColorBGRA[] pixels, string title = "", bool framed = false, bool capturable = false)
     {
         if (pixels.Length != (width * height)) throw new ArgumentException("The image doesn't have the size of the window.", nameof(pixels));
 
         _pixels = pixels;
         _width = width;
         _height = height;
+        _title = title;
+        _framed = framed;
+        _capturable = capturable;
 
         _otherWindows = new Mutex(false, "ScreenCapture.NET.Tests.TestPatternWindow");
         try
@@ -113,10 +141,12 @@ internal sealed class TestPatternWindow : IDisposable
             };
             if (RegisterClassExW(ref windowClass) == 0) throw new InvalidOperationException($"RegisterClassEx failed ({Marshal.GetLastPInvokeError()}).");
 
-            window = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, _className, "", WS_POPUP, x, y, _width, _height, 0, 0, instance, 0);
+            uint exStyle = _capturable ? WS_EX_TOPMOST : WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+            window = CreateWindowExW(exStyle, _className, _title, _framed ? WS_OVERLAPPEDWINDOW : WS_POPUP, x, y, _width, _height, 0, 0, instance, 0);
             if (window == 0) throw new InvalidOperationException($"CreateWindowEx failed ({Marshal.GetLastPInvokeError()}).");
 
             ShowWindow(window, SW_SHOWNOACTIVATE);
+            Handle = window;
             _shown.Set();
 
             while (!_stop)
@@ -163,6 +193,31 @@ internal sealed class TestPatternWindow : IDisposable
 
         EndPaint(window, ref paint);
         return 0;
+    }
+
+    /// <summary>
+    /// Changes the size of the window (the image stays at the top left; the rest of a larger window isn't painted).
+    /// </summary>
+    public void Resize(int width, int height) => Check(SetWindowPos(Handle, 0, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE), nameof(SetWindowPos));
+
+    /// <summary>
+    /// Moves the window to the given position on the desktop (physical pixels).
+    /// </summary>
+    public void Move(int x, int y) => Check(SetWindowPos(Handle, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE), nameof(SetWindowPos));
+
+    /// <summary>
+    /// Minimizes the window.
+    /// </summary>
+    public void Minimize() => ShowWindow(Handle, SW_SHOWMINNOACTIVE);
+
+    /// <summary>
+    /// Shows a minimized window again, as it was before.
+    /// </summary>
+    public void Restore() => ShowWindow(Handle, SW_SHOWNOACTIVATE);
+
+    private static void Check(bool success, string function)
+    {
+        if (!success) throw new InvalidOperationException($"{function} failed ({Marshal.GetLastPInvokeError()}).");
     }
 
     public void Dispose()
@@ -266,6 +321,9 @@ internal sealed class TestPatternWindow : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool DestroyWindow(nint window);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool PeekMessageW(out MSG message, nint window, uint filterMin, uint filterMax, uint remove);

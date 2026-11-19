@@ -99,6 +99,17 @@ internal static class DXGIDevices
     /// <c>null</c> if the display isn't connected.
     /// </returns>
     public static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory, string id)
+        => FindDisplay(factory, (description, devices) => string.Equals(devices.GetMonitor(description.DeviceName).Id, id, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Finds the output showing the monitor with the given handle (<c>HMONITOR</c>), on any adapter.
+    /// </summary>
+    /// <returns>See <see cref="FindDisplay(IDXGIFactory1, string)"/>; <c>null</c> if no output shows the monitor.</returns>
+    public static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory, nint monitor)
+        => FindDisplay(factory, (description, _) => description.Monitor == monitor);
+
+    private static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory,
+                                                                                                                                         Func<OutputDescription, WindowsDisplayDevices, bool> matches)
     {
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
 
@@ -117,7 +128,7 @@ internal static class DXGIDevices
                         if (!adapter.EnumOutputs(outputIndex, out output).Success) break;
 
                         OutputDescription description = output.Description;
-                        if (!string.Equals(devices.GetMonitor(description.DeviceName).Id, id, StringComparison.Ordinal)) continue;
+                        if (!matches(description, devices)) continue;
 
                         (IDXGIAdapter1, IDXGIOutput, Display, WindowsDisplayDevices.MonitorTarget?) result
                             = (adapter, output, CreateDisplay(description, outputIndex, CreateGraphicsCard(adapter, adapterIndex), devices), devices.GetTarget(description.DeviceName));

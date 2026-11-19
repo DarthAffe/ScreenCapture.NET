@@ -616,7 +616,7 @@ public sealed class WGCHardwareTests
     public void EnumerationDuringDisposeIsSafe()
         => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new WGCScreenCaptureService());
 
-    private static void AssertNoObjects(WGCScreenCapture screenCapture)
+    internal static void AssertNoObjects(WGCScreenCapture screenCapture)
     {
         // The factory belongs to the service.
         DX11HardwareTests.AssertNoDirectXFields(screenCapture, 2, "_factory");

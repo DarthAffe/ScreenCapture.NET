@@ -108,6 +108,27 @@ internal static unsafe partial class WGCInterop
     }
 
     /// <summary>
+    /// Creates the capture item (<c>IGraphicsCaptureItem</c>) of a top-level window.
+    /// </summary>
+    /// <param name="window">The <c>HWND</c> of the window.</param>
+    public static WinRTHandle CreateItemForWindow(nint window)
+    {
+        nint interop = GetActivationFactory(GRAPHICS_CAPTURE_ITEM, IID_IGraphicsCaptureItemInterop);
+        try
+        {
+            nint item;
+            Guid iid = IID_IGraphicsCaptureItem;
+            // IGraphicsCaptureItemInterop: CreateForWindow, CreateForMonitor.
+            Check(((delegate* unmanaged[Stdcall]<nint, nint, Guid*, nint*, int>)VTable(interop)[COM])(interop, window, &iid, &item));
+            return new WinRTHandle(item, close: false);
+        }
+        finally
+        {
+            Marshal.Release(interop);
+        }
+    }
+
+    /// <summary>
     /// Gets the size of a capture item (<c>IGraphicsCaptureItem.Size</c>).
     /// </summary>
     public static SizeInt32 GetSize(WinRTHandle item)
@@ -174,6 +195,12 @@ internal static unsafe partial class WGCInterop
             Marshal.Release(statics);
         }
     }
+
+    /// <summary>
+    /// Gives a frame pool new buffers (<c>IDirect3D11CaptureFramePool.Recreate</c>), e.g. of another size. Its session and event handlers stay.
+    /// </summary>
+    public static void RecreateFramePool(WinRTHandle framePool, WinRTHandle device, int pixelFormat, int numberOfBuffers, SizeInt32 size)
+        => Check(((delegate* unmanaged[Stdcall]<nint, nint, int, int, SizeInt32, int>)VTable(framePool.Pointer)[WINRT])(framePool.Pointer, device.Pointer, pixelFormat, numberOfBuffers, size));
 
     /// <summary>
     /// Takes the next frame (<c>IDirect3D11CaptureFrame</c>) out of a frame pool (<c>IDirect3D11CaptureFramePool.TryGetNextFrame</c>).

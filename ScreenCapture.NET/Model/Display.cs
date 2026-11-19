@@ -16,7 +16,10 @@ namespace ScreenCapture.NET;
 /// <para>
 /// On Windows it's the device interface path of the monitor (<c>\\?\DISPLAY#IVM6114#...</c>). It contains the model and the port, so two identical monitors have different ids;
 /// connecting the monitor to another port changes it. Displays Windows has no path for use their <paramref name="DeviceName"/>, which can change when displays are added or removed.
-/// The DirectX 11 and the DirectX 9 backend report the same ids.
+/// The DirectX 11, the DirectX 9 and the Windows.Graphics.Capture backend report the same ids.
+/// </para>
+/// <para>
+/// A window captured by the Windows.Graphics.Capture backend has the id <c>window:0x</c> followed by its handle; it's only valid while the window exists.
 /// </para>
 /// <para>On X11 it's the name of the X display and the screen number (e.g. <c>:0/0</c>).</para>
 /// </param>

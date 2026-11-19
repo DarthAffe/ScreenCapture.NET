@@ -11,6 +11,7 @@ namespace ScreenCapture.NET;
 /// <remarks>
 /// The graphics cards and displays are the same as the ones of the DX11 backend (same <see cref="Display.Id"/>s).
 /// Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, WGCCaptureOptions)"/>.
+/// Besides displays it can capture windows (<see cref="GetWindowCapture(nint)"/>).
 /// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class WGCScreenCaptureService : IScreenCaptureService
@@ -111,6 +112,53 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
         ArgumentNullException.ThrowIfNull(options);
 
         return _screenCaptures.GetOrCreate(display, options, requireEqualOptions: true);
+    }
+
+    /// <summary>
+    /// Gets the capture of a window.
+    /// </summary>
+    /// <remarks>
+    /// The window is captured as it's shown, also while other windows cover it. Its <see cref="IScreenCapture.Display"/> describes the window (see <see cref="WGCScreenCapture"/>);
+    /// its <see cref="Display.Id"/> is only valid while the window exists. A resize restarts the capture with the new size (<see cref="IScreenCapture.DisplayChanged"/>).
+    /// <para>
+    /// Windows.Graphics.Capture refuses some windows (e.g. tool windows and ones that can't be activated, like the taskbar): their capture is <see cref="CaptureResult.Unavailable"/>
+    /// and <see cref="IScreenCapture.LastError"/> tells why.
+    /// </para>
+    /// <para>
+    /// The service creates one capture per window and returns it again for the same handle. A capture that was disposed is replaced by a new one.
+    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// </para>
+    /// </remarks>
+    /// <param name="window">The handle (<c>HWND</c>) of a top-level window (e.g. <c>Process.MainWindowHandle</c>).</param>
+    /// <returns>The <see cref="WGCScreenCapture"/> of the window.</returns>
+    /// <exception cref="ArgumentException"><paramref name="window"/> isn't the handle of an existing top-level window.</exception>
+    public WGCScreenCapture GetWindowCapture(nint window) => GetWindowCapture(window, Options, requireEqualOptions: false);
+
+    /// <summary>
+    /// Creates a <see cref="WGCScreenCapture"/> with the given options for a window.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="GetWindowCapture(nint)"/>. An existing capture is only returned if it was created with equal options.
+    /// </remarks>
+    /// <param name="window">The handle (<c>HWND</c>) of a top-level window (e.g. <c>Process.MainWindowHandle</c>).</param>
+    /// <param name="options">The options of the capture.</param>
+    /// <returns>The <see cref="WGCScreenCapture"/> of the window.</returns>
+    /// <exception cref="ArgumentException"><paramref name="window"/> isn't the handle of an existing top-level window.</exception>
+    /// <exception cref="InvalidOperationException">The capture of the window already exists with other options.</exception>
+    public WGCScreenCapture GetWindowCapture(nint window, WGCCaptureOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return GetWindowCapture(window, options, requireEqualOptions: true);
+    }
+
+    private WGCScreenCapture GetWindowCapture(nint window, WGCCaptureOptions options, bool requireEqualOptions)
+    {
+        if (!WindowInterop.IsTopLevelWindow(window))
+            throw new ArgumentException($"0x{(long)window:X} isn't the handle of an existing top-level window.", nameof(window));
+
+        // Cached with the displays: the capture reads the window from the id.
+        return _screenCaptures.GetOrCreate(WindowInterop.CreateUnknownDisplay(window), options, requireEqualOptions);
     }
 
     /// <inheritdoc />
