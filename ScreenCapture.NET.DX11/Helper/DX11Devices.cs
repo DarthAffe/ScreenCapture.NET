@@ -31,8 +31,11 @@ internal static class DX11Devices
     /// <summary>
     /// Finds the output showing the display with the given id, on any adapter.
     /// </summary>
-    /// <returns>The adapter and the output (the caller disposes them) and the current state of the display; <c>null</c> if the display isn't connected.</returns>
-    public static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display)? FindDisplay(IDXGIFactory1 factory, string id)
+    /// <returns>
+    /// The adapter and the output (the caller disposes them), the current state of the display and the target of its monitor (<c>null</c> if unknown);
+    /// <c>null</c> if the display isn't connected.
+    /// </returns>
+    public static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory, string id)
     {
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
 
@@ -53,7 +56,8 @@ internal static class DX11Devices
                         OutputDescription description = output.Description;
                         if (!string.Equals(devices.GetMonitor(description.DeviceName).Id, id, StringComparison.Ordinal)) continue;
 
-                        (IDXGIAdapter1, IDXGIOutput, Display) result = (adapter, output, CreateDisplay(description, outputIndex, CreateGraphicsCard(adapter, adapterIndex), devices));
+                        (IDXGIAdapter1, IDXGIOutput, Display, WindowsDisplayDevices.MonitorTarget?) result
+                            = (adapter, output, CreateDisplay(description, outputIndex, CreateGraphicsCard(adapter, adapterIndex), devices), devices.GetTarget(description.DeviceName));
 
                         // Owned by the caller now.
                         adapter = null;

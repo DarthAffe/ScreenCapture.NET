@@ -38,14 +38,19 @@ public sealed record DX11CaptureOptions
     } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Gets a value indicating whether the capture uses <c>IDXGIOutput5::DuplicateOutput1</c> instead of <c>IDXGIOutput1::DuplicateOutput</c>. (default <c>false</c>)
+    /// Gets a value indicating whether a display showing HDR is captured in HDR and tone mapped to the 8-bit zones. (default <c>false</c>)
     /// </summary>
     /// <remarks>
-    /// <c>DuplicateOutput1</c> needs a per-monitor DPI aware (version 2) process (see <see cref="DPIAwareness.Initialize"/>) and doesn't work on a WPF thread.
-    /// If it fails, the capture reports the error (<see cref="IScreenCapture.LastError"/>) and returns <see cref="CaptureResult.Unavailable"/>.
-    /// It currently captures the same 8-bit image as <c>DuplicateOutput</c>; it's the base for HDR capturing.
+    /// Without it, Windows converts the HDR image of the display to 8 bits itself, and the capture is far too bright and washed out (SDR white isn't mapped to white).
+    /// With it, the capture gets the 16-bit image and maps it on the GPU: colors up to SDR white (the "SDR content brightness" setting of the display)
+    /// get the values they have on an SDR display, brighter colors are scaled down as a whole (keeping their hue), and colors outside of the sRGB gamut are clamped to it.
+    /// A display that doesn't show HDR is captured as without it.
+    /// <para>
+    /// It uses <c>IDXGIOutput5::DuplicateOutput1</c>, which needs a per-monitor DPI aware (version 2) process (see <see cref="DPIAwareness.Initialize"/>) and doesn't work on a WPF thread.
+    /// If that fails, the capture reports the error (<see cref="IScreenCapture.LastError"/>) and returns <see cref="CaptureResult.Unavailable"/>.
+    /// </para>
     /// </remarks>
-    public bool UseDuplicateOutput1 { get; init; }
+    public bool CaptureHdr { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether the mouse pointer is drawn into the zones. (default <c>false</c>)

@@ -82,6 +82,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
 
+    // Only with CaptureHdr: created on the first HDR frame of a duplication, tone maps the frames into _captureTexture. Only used under _captureLock.
+    private HdrFrame? _hdrFrame;
+
+    // The monitor of the display, to read its SDR white level for the tone mapping (null if unknown). Only used under _captureLock.
+    private WindowsDisplayDevices.MonitorTarget? _monitorTarget;
+
     // The mouse pointer (only with DrawCursor), from the frames of the duplication; drawn into the zones when they're written.
     // _cursorX/_cursorY: the top left of the shape on the display. Only used under _captureLock.
     private CursorShape? _cursorShape;
@@ -176,7 +182,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
 
             using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
-            context.CopySubresourceRegion(captureTexture, 0, 0, 0, 0, screenTexture, 0);
+            if (Options.CaptureHdr && (screenTexture.Description.Format == Format.R16G16B16A16_Float))
+                ToneMap(context, screenTexture, captureTexture);
+            else
+                context.CopySubresourceRegion(captureTexture, 0, 0, 0, 0, screenTexture, 0);
             _captureTextureHasFrame = true;
             _captureTextureVersion++;
 
@@ -194,6 +203,22 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
             catch (Exception ex) { ReportError(ex); }
         }
+    }
+
+    /// <summary>
+    /// Tone maps an HDR frame of the duplication into the capture texture (only queues the work on the GPU). Called under <see cref="_captureLock"/>.
+    /// </summary>
+    private void ToneMap(ID3D11DeviceContext context, ID3D11Texture2D screenTexture, ID3D11Texture2D captureTexture)
+    {
+        // The frame of the duplication can't be bound to a shader: it's copied to a texture that can.
+        _hdrFrame ??= HdrFrame.Create(_device!, captureTexture);
+        context.CopySubresourceRegion(_hdrFrame.Texture, 0, 0, 0, 0, screenTexture, 0);
+
+        // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
+        if ((_monitorTarget is { } monitorTarget) && monitorTarget.TryGetSdrWhiteLevel(out float sdrWhiteLevel))
+            _hdrFrame.WhiteScale = HdrToneMapper.GetWhiteScale(sdrWhiteLevel);
+
+        _hdrFrame.ToneMapper.Draw(context, _hdrFrame.TextureView, _hdrFrame.CaptureTextureTarget, _hdrFrame.Width, _hdrFrame.Height, _hdrFrame.WhiteScale);
     }
 
     /// <summary>
@@ -472,8 +497,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                     // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
                     // and after displays were added or removed the indices can point to another adapter or output.
-                    (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display) = DX11Devices.FindDisplay(_factory, Display.Id)
-                                                                                         ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+                    (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DX11Devices.FindDisplay(_factory, Display.Id)
+                                                                                                         ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
                     using IDXGIAdapter1 adapter = foundAdapter;
                     using IDXGIOutput dxgiOutput = foundOutput;
 
@@ -502,8 +527,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                     };
                     _captureTexture = _device.CreateTexture2D(captureTextureDesc);
 
-                    if (Options.UseDuplicateOutput1)
-                        _duplicatedOutput = output.DuplicateOutput1(_device, [Format.B8G8R8A8_UNorm]); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
+                    // While the display shows HDR, DuplicateOutput1 delivers 16-bit frames (tone mapped by the capture), otherwise 8-bit ones.
+                    // DuplicateOutput always delivers 8-bit frames, converted by Windows.
+                    if (Options.CaptureHdr)
+                        _duplicatedOutput = output.DuplicateOutput1(_device, [Format.R16G16B16A16_Float, Format.B8G8R8A8_UNorm]);
                     else
                         _duplicatedOutput = output.DuplicateOutput(_device);
 
@@ -545,11 +572,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private void DisposeDX()
     {
         try { _duplicatedOutput?.Dispose(); } catch { /**/ }
+        try { _hdrFrame?.Dispose(); } catch { /**/ }
         try { _captureTexture?.Dispose(); } catch { /**/ }
         try { _context?.Dispose(); } catch { /**/ }
         try { _device?.Dispose(); } catch { /**/ }
 
         _duplicatedOutput = null;
+        _hdrFrame = null;
         _captureTexture = null;
         _captureTextureHasFrame = false;
         _context = null;
@@ -561,6 +590,92 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     #endregion
+
+    /// <summary>
+    /// The resources tone mapping the HDR frames of a duplication into its capture texture.
+    /// </summary>
+    private sealed class HdrFrame : IDisposable
+    {
+        #region Properties & Fields
+
+        public int Width { get; }
+        public int Height { get; }
+
+        // The HDR frame, readable by the shader.
+        public ID3D11Texture2D Texture { get; }
+        public ID3D11ShaderResourceView TextureView { get; }
+
+        public ID3D11RenderTargetView CaptureTextureTarget { get; }
+        public HdrToneMapper ToneMapper { get; }
+
+        // The last SDR white level read (see HdrToneMapper.GetWhiteScale); no scaling until one was read.
+        public float WhiteScale { get; set; } = 1;
+
+        #endregion
+
+        #region Constructors
+
+        private HdrFrame(int width, int height, ID3D11Texture2D texture, ID3D11ShaderResourceView textureView, ID3D11RenderTargetView captureTextureTarget, HdrToneMapper toneMapper)
+        {
+            this.Width = width;
+            this.Height = height;
+            this.Texture = texture;
+            this.TextureView = textureView;
+            this.CaptureTextureTarget = captureTextureTarget;
+            this.ToneMapper = toneMapper;
+        }
+
+        #endregion
+
+        #region Methods
+
+        public static HdrFrame Create(ID3D11Device device, ID3D11Texture2D captureTexture)
+        {
+            Texture2DDescription captureTextureDesc = captureTexture.Description;
+
+            ID3D11Texture2D? texture = null;
+            ID3D11ShaderResourceView? textureView = null;
+            ID3D11RenderTargetView? captureTextureTarget = null;
+            try
+            {
+                Texture2DDescription textureDesc = new()
+                {
+                    CPUAccessFlags = CpuAccessFlags.None,
+                    BindFlags = BindFlags.ShaderResource,
+                    Format = Format.R16G16B16A16_Float,
+                    Width = captureTextureDesc.Width,
+                    Height = captureTextureDesc.Height,
+                    MiscFlags = ResourceOptionFlags.None,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    SampleDescription = { Count = 1, Quality = 0 },
+                    Usage = ResourceUsage.Default
+                };
+                texture = device.CreateTexture2D(textureDesc);
+                textureView = device.CreateShaderResourceView(texture);
+                captureTextureTarget = device.CreateRenderTargetView(captureTexture);
+
+                return new HdrFrame(captureTextureDesc.Width, captureTextureDesc.Height, texture, textureView, captureTextureTarget, new HdrToneMapper(device));
+            }
+            catch
+            {
+                captureTextureTarget?.Dispose();
+                textureView?.Dispose();
+                texture?.Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            ToneMapper.Dispose();
+            CaptureTextureTarget.Dispose();
+            TextureView.Dispose();
+            Texture.Dispose();
+        }
+
+        #endregion
+    }
 
     private sealed class ZoneTextures : IDisposable
     {

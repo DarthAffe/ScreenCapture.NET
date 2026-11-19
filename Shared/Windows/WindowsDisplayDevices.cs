@@ -30,18 +30,22 @@ internal sealed unsafe partial class WindowsDisplayDevices
     private const uint DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1;
     private const uint DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME = 2;
     private const uint DISPLAYCONFIG_DEVICE_INFO_GET_ADAPTER_NAME = 4;
+    private const uint DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL = 11;
+
+    // DISPLAYCONFIG_SDR_WHITE_LEVEL.SDRWhiteLevel: 1000 is 80 nits.
+    private const float SDR_WHITE_LEVEL_UNIT_NITS = 80f / 1000f;
 
     #endregion
 
     #region Properties & Fields
 
-    private readonly Dictionary<string, (string Id, string FriendlyName)> _monitors;
+    private readonly Dictionary<string, Monitor> _monitors;
 
     #endregion
 
     #region Constructors
 
-    private WindowsDisplayDevices(Dictionary<string, (string Id, string FriendlyName)> monitors)
+    private WindowsDisplayDevices(Dictionary<string, Monitor> monitors)
     {
         this._monitors = monitors;
     }
@@ -55,7 +59,7 @@ internal sealed unsafe partial class WindowsDisplayDevices
     /// </summary>
     public static WindowsDisplayDevices Query()
     {
-        Dictionary<string, (string Id, string FriendlyName)> monitors = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, Monitor> monitors = new(StringComparer.OrdinalIgnoreCase);
 
         for (int attempt = 0; attempt < QUERY_ATTEMPTS; attempt++)
         {
@@ -80,7 +84,7 @@ internal sealed unsafe partial class WindowsDisplayDevices
                 if (string.IsNullOrEmpty(deviceName) || monitors.ContainsKey(deviceName)) continue;
 
                 (string devicePath, string friendlyName) = GetTargetName(path.TargetAdapterId, path.TargetId);
-                monitors.Add(deviceName, (string.IsNullOrEmpty(devicePath) ? deviceName : devicePath, friendlyName));
+                monitors.Add(deviceName, new Monitor(string.IsNullOrEmpty(devicePath) ? deviceName : devicePath, friendlyName, new MonitorTarget(path.TargetAdapterId, path.TargetId)));
             }
 
             break;
@@ -105,7 +109,14 @@ internal sealed unsafe partial class WindowsDisplayDevices
     /// </summary>
     /// <returns>The device interface path of the monitor (the device name if Windows has none) and its name (empty if unknown).</returns>
     public (string Id, string FriendlyName) GetMonitor(string deviceName)
-        => _monitors.TryGetValue(deviceName, out (string Id, string FriendlyName) monitor) ? monitor : (deviceName, string.Empty);
+        => _monitors.TryGetValue(deviceName, out Monitor? monitor) ? (monitor.Id, monitor.FriendlyName) : (deviceName, string.Empty);
+
+    /// <summary>
+    /// Gets the target (the monitor's connection) of the display with the given GDI device name, to read values of the monitor later without querying all displays.
+    /// </summary>
+    /// <returns>The target, or <c>null</c> if the display isn't known.</returns>
+    public MonitorTarget? GetTarget(string deviceName)
+        => _monitors.TryGetValue(deviceName, out Monitor? monitor) ? monitor.Target : null;
 
     private static string? GetSourceName(Luid adapterId, uint id)
     {
@@ -142,10 +153,45 @@ internal sealed unsafe partial class WindowsDisplayDevices
 
     #endregion
 
+    #region Types
+
+    private sealed record Monitor(string Id, string FriendlyName, MonitorTarget Target);
+
+    /// <summary>
+    /// The connection of a monitor to its adapter (a path target of <c>QueryDisplayConfig</c>). It stays the same until the display configuration changes.
+    /// </summary>
+    public readonly struct MonitorTarget
+    {
+        private readonly Luid _adapterId;
+        private readonly uint _id;
+
+        internal MonitorTarget(Luid adapterId, uint id)
+        {
+            this._adapterId = adapterId;
+            this._id = id;
+        }
+
+        /// <summary>
+        /// Reads the luminance SDR content has on the monitor while it shows HDR (the "SDR content brightness" setting). Takes a few microseconds.
+        /// </summary>
+        /// <param name="nits">The luminance of SDR white, in nits (80 if the monitor doesn't show HDR).</param>
+        /// <returns><c>false</c> if Windows doesn't know the target anymore (e.g. after a display change).</returns>
+        public bool TryGetSdrWhiteLevel(out float nits)
+        {
+            SdrWhiteLevel request = new() { Header = CreateHeader(DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL, sizeof(SdrWhiteLevel), _adapterId, _id) };
+            bool success = (DisplayConfigGetDeviceInfo(&request.Header) == ERROR_SUCCESS) && (request.SDRWhiteLevel > 0);
+
+            nits = success ? request.SDRWhiteLevel * SDR_WHITE_LEVEL_UNIT_NITS : 0;
+            return success;
+        }
+    }
+
+    #endregion
+
     #region Interop types (wingdi.h)
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct Luid
+    internal struct Luid
     {
         public uint LowPart;
         public int HighPart;
@@ -213,6 +259,13 @@ internal sealed unsafe partial class WindowsDisplayDevices
     {
         public DeviceInfoHeader Header;
         public fixed char AdapterDevicePath[128];
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SdrWhiteLevel
+    {
+        public DeviceInfoHeader Header;
+        public uint SDRWhiteLevel;
     }
 
     #endregion

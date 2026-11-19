@@ -21,7 +21,7 @@ public static partial class DPIAwareness
     #region Methods
 
     /// <summary>
-    /// Makes the process per-monitor DPI aware (version 2). This is needed when using desktop duplication with <c>DuplicateOutput1</c>.
+    /// Makes the process per-monitor DPI aware (version 2). This is needed to capture in HDR (<see cref="DX11CaptureOptions.CaptureHdr"/>, which uses <c>DuplicateOutput1</c>).
     /// </summary>
     /// <remarks>
     /// The DPI awareness of a process can only be set once, before any window is created.

@@ -26,6 +26,7 @@ public sealed class WindowsInteropTests
         AssertSize(helper, "SourceDeviceName", 84); // DISPLAYCONFIG_SOURCE_DEVICE_NAME
         AssertSize(helper, "TargetDeviceName", 420); // DISPLAYCONFIG_TARGET_DEVICE_NAME
         AssertSize(helper, "AdapterName", 276);     // DISPLAYCONFIG_ADAPTER_NAME
+        AssertSize(helper, "SdrWhiteLevel", 24);    // DISPLAYCONFIG_SDR_WHITE_LEVEL
 
         Type targetName = GetNestedType(helper, "TargetDeviceName");
         Assert.AreEqual(36, Marshal.OffsetOf(targetName, "MonitorFriendlyDeviceName").ToInt32());

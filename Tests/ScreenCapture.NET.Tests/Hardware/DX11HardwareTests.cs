@@ -219,7 +219,11 @@ public sealed class DX11HardwareTests
     [TestMethod]
     public void MatchesDX9Orientation()
     {
-        using DX11ScreenCaptureService service = new();
+        // With CaptureHdr: without it, a display showing HDR is captured far too bright (Windows' own conversion), while DX9 gets its SDR colors.
+        // The orientation is handled the same way with both duplications (DuplicateOutput1 on SDR displays).
+        Assert.IsTrue(DPIAwareness.Initialize());
+
+        using DX11ScreenCaptureService service = new(new DX11CaptureOptions { CaptureHdr = true });
         using DX9ScreenCaptureService reference = new();
         HardwareTestHelper.AssertMatchesReferenceOrientation(service, reference);
     }
@@ -368,25 +372,148 @@ public sealed class DX11HardwareTests
         StringAssert.Contains(error.Message, "'missing' isn't connected");
     }
 
+    /// <summary>
+    /// With <see cref="DX11CaptureOptions.CaptureHdr"/>, a pattern of SDR colors keeps its values on every display: tone mapped on displays showing HDR
+    /// (within 1 per channel, the 16-bit frames round), and like without the option on the others (8-bit frames of <c>DuplicateOutput1</c>).
+    /// <b>[HW]</b> Inconclusive (after checking the SDR displays) if no display shows HDR: turn on HDR for a display and run it again.
+    /// Also inconclusive for HDR displays if the desktop changes the colors on SDR displays (Night light, color management): turn that off.
+    /// Shows a small window in the center of every display for a moment.
+    /// </summary>
     [TestMethod]
-    public void CapturesWithDuplicateOutput1()
+    public void HdrCaptureKeepsSdrColors()
     {
+        const int width = 256;
+        const int height = 16;
+
         // DuplicateOutput1 only works in a per-monitor DPI aware (version 2) process.
         Assert.IsTrue(DPIAwareness.Initialize());
 
-        using DX11ScreenCaptureService service = new(new DX11CaptureOptions { UseDuplicateOutput1 = true });
-        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        DX11CaptureOptions plainOptions = new() { Timeout = TimeSpan.FromMilliseconds(100) };
+        using DX11ScreenCaptureService plainService = new(plainOptions);
+        using DX11ScreenCaptureService hdrService = new(plainOptions with { CaptureHdr = true });
+        ColorBGRA[] pattern = CreateSdrPattern(width, height);
 
-        DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
-        Assert.IsTrue(screenCapture.Options.UseDuplicateOutput1);
-        Assert.IsNull(screenCapture.LastError, "The duplication failed.");
+        List<(Display Display, int MaxDifference, int DifferentPixels)> hdrResults = [];
+        string? colorTransform = null;
+        foreach (Display display in HardwareTestHelper.GetAllDisplays(hdrService))
+        {
+            int x = (display.Width - width) / 2;
+            int y = (display.Height - height) / 2;
+            CaptureRegion region = new(x, y, width, height);
+            using TestPatternWindow window = new(display.X + x, display.Y + y, width, height, pattern);
 
-        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
+            // One after another: a process can only duplicate an output once at a time.
+            bool hdr = IsShowingHdr(display);
+            ColorBGRA[] hdrPixels;
+            using (DX11ScreenCapture screenCapture = hdrService.GetScreenCapture(display))
+                hdrPixels = CapturePattern(screenCapture, region, pattern, hdr ? 1 : 0);
 
-        HardwareTestHelper.CaptureFrame(screenCapture);
+            // Windows' own conversion on HDR displays.
+            ColorBGRA[] plainPixels;
+            using (DX11ScreenCapture screenCapture = plainService.GetScreenCapture(display))
+                plainPixels = CapturePattern(screenCapture, region, pattern, 0);
 
-        using CaptureFrame<ColorBGRA> frame = zone.Lock();
-        Assert.IsTrue(frame.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
+            (int plainDifference, int plainPixelsDifferent) = Compare(pattern, plainPixels);
+            (int hdrDifference, int hdrPixelsDifferent) = Compare(pattern, hdrPixels);
+            Console.WriteLine($"{display.DeviceName} ({(hdr ? "HDR" : "SDR")}): max difference with CaptureHdr {hdrDifference} ({hdrPixelsDifferent} pixels), "
+                            + $"without {plainDifference} ({plainPixelsDifferent} pixels).");
+
+            if (hdr)
+                hdrResults.Add((display, hdrDifference, hdrPixelsDifferent));
+            else
+            {
+                CollectionAssert.AreEqual(plainPixels, hdrPixels, $"{display.DeviceName} (SDR): CaptureHdr changed the image.");
+                if (plainDifference > 0)
+                    colorTransform ??= $"{display.DeviceName} shows the pattern with other colors (by up to {plainDifference}) also without HDR: is Night light or color management on?";
+            }
+        }
+
+        if (hdrResults.Count == 0)
+            Assert.Inconclusive("No display shows HDR: only the SDR displays were checked.");
+        if (colorTransform != null)
+            Assert.Inconclusive($"HDR displays not checked: {colorTransform}");
+
+        foreach ((Display display, int maxDifference, int differentPixels) in hdrResults)
+            Assert.IsLessThanOrEqualTo(1, maxDifference, $"{display.DeviceName} (HDR): {differentPixels} pixels differ, by up to {maxDifference}.");
+    }
+
+    // Captures until the window shows up in a frame (the pixels match within the tolerance), at most for 3 s; returns the last pixels.
+    private static ColorBGRA[] CapturePattern(DX11ScreenCapture screenCapture, CaptureRegion region, ColorBGRA[] pattern, int tolerance)
+    {
+        Assert.IsNull(screenCapture.LastError, $"{screenCapture.Display.DeviceName} (CaptureHdr: {screenCapture.Options.CaptureHdr}): the duplication failed: {screenCapture.LastError}");
+
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(region);
+        try
+        {
+            ColorBGRA[] pixels;
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            do
+            {
+                screenCapture.CaptureScreen();
+                pixels = HardwareTestHelper.GetPixels(zone);
+            } while ((Compare(pattern, pixels).MaxDifference > tolerance) && (stopwatch.Elapsed < TimeSpan.FromSeconds(3)));
+
+            return pixels;
+        }
+        finally
+        {
+            screenCapture.UnregisterCaptureZone(zone);
+        }
+    }
+
+    // Every value in every channel: ramps of gray, red, green and blue, then mixed colors.
+    private static ColorBGRA[] CreateSdrPattern(int width, int height)
+    {
+        ColorBGRA[] pattern = new ColorBGRA[width * height];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                byte value = (byte)x;
+                pattern[(y * width) + x] = y switch
+                {
+                    0 => new ColorBGRA(value, value, value, 255),
+                    1 => new ColorBGRA(0, 0, value, 255),
+                    2 => new ColorBGRA(0, value, 0, 255),
+                    3 => new ColorBGRA(value, 0, 0, 255),
+                    _ => new ColorBGRA((byte)((x * (y + 3)) + (y * 31)), (byte)((x * (y + 5)) + (y * 59)), (byte)((x * (y + 7)) + (y * 97)), 255)
+                };
+            }
+
+        return pattern;
+    }
+
+    private static (int MaxDifference, int DifferentPixels) Compare(ColorBGRA[] expected, ColorBGRA[] actual)
+    {
+        int maxDifference = 0;
+        int differentPixels = 0;
+        for (int i = 0; i < expected.Length; i++)
+        {
+            int difference = Math.Max(Math.Abs(expected[i].R - actual[i].R), Math.Max(Math.Abs(expected[i].G - actual[i].G), Math.Abs(expected[i].B - actual[i].B)));
+            maxDifference = Math.Max(maxDifference, difference);
+            if (difference > 0) differentPixels++;
+        }
+
+        return (maxDifference, differentPixels);
+    }
+
+    // The color space of the output: HDR (ST.2084, BT.2020) or SDR (sRGB).
+    private static bool IsShowingHdr(Display display)
+    {
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
+        using IDXGIFactory1 _ = factory!;
+
+        for (int adapterIndex = 0; factory!.EnumAdapters1(adapterIndex, out IDXGIAdapter1? adapter).Success; adapterIndex++)
+            using (adapter)
+                for (int outputIndex = 0; adapter.EnumOutputs(outputIndex, out IDXGIOutput? output).Success; outputIndex++)
+                    using (output)
+                    {
+                        using IDXGIOutput6 output6 = output.QueryInterface<IDXGIOutput6>();
+                        OutputDescription1 description = output6.Description1;
+                        if (string.Equals(description.DeviceName, display.DeviceName, StringComparison.OrdinalIgnoreCase))
+                            return description.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020;
+                    }
+
+        throw new InvalidOperationException($"No output shows {display.DeviceName}.");
     }
 
     [TestMethod]
@@ -440,7 +567,7 @@ public sealed class DX11HardwareTests
         DX11ScreenCapture screenCapture = service.GetScreenCapture(display);
 
         InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
-            () => service.GetScreenCapture(display, new DX11CaptureOptions { UseDuplicateOutput1 = true }));
+            () => service.GetScreenCapture(display, new DX11CaptureOptions { CaptureHdr = true }));
         StringAssert.Contains(exception.Message, display.Id);
 
         // Changing the timeout of the capture doesn't change the options it was created with.
