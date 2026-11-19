@@ -85,7 +85,7 @@ public sealed class HdrToneMappingTests
             return device.CreateTexture2D(description, new SubresourceData((nint)pointer, rowPitch));
     }
 
-    private static float SrgbToLinear(byte value)
+    internal static float SrgbToLinear(byte value)
     {
         float v = value / 255f;
         return v <= 0.04045f ? v / 12.92f : MathF.Pow((v + 0.055f) / 1.055f, 2.4f);
@@ -197,7 +197,7 @@ public sealed class HdrToneMappingTests
         byte[] embedded = new byte[stream.Length];
         stream.ReadExactly(embedded);
 
-        CollectionAssert.AreEqual(stripped, embedded, "The embedded shader doesn't match HdrToneMapping.hlsl: run ScreenCapture.NET.DX11/Shaders/Compile.cmd.");
+        CollectionAssert.AreEqual(stripped, embedded, "The embedded shader doesn't match HdrToneMapping.hlsl: run Shared/D3D11/Shaders/Compile.cmd.");
     }
 
     private static unsafe byte[] Strip(ReadOnlySpan<byte> bytecode)

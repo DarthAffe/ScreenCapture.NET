@@ -15,12 +15,13 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\Windows\*.cs" Link="Shared\Windows\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\D3D11\*.cs" Link="Shared\D3D11\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Precompiled with Shaders/Compile.cmd: no shader compiler is needed at build or run time.
+    <!-- Precompiled with Shared/D3D11/Shaders/Compile.cmd: no shader compiler is needed at build or run time.
          WithCulture="false": MSBuild would take the "ps" of "HdrToneMapping.ps.cso" for a culture (Pashto) and move it to a satellite assembly. -->
-    <EmbeddedResource Include="Shaders\*.cso" LogicalName="ScreenCapture.NET.Shaders.%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="..\Shared\D3D11\Shaders\*.cso" Link="Shared\D3D11\Shaders\%(Filename)%(Extension)" LogicalName="ScreenCapture.NET.Shaders.%(Filename)%(Extension)" WithCulture="false" />
   </ItemGroup>
 
   <ItemGroup>

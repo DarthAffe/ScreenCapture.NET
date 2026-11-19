@@ -618,11 +618,26 @@ public sealed class DX11HardwareTests
     private static void AssertNoDirectXObjects(DX11ScreenCapture screenCapture)
     {
         // The factory belongs to the service.
-        List<FieldInfo> fields = [.. typeof(DX11ScreenCapture).GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                                                              .Where(f => typeof(CppObject).IsAssignableFrom(f.FieldType) && (f.Name != "_factory"))];
-        Assert.IsGreaterThanOrEqualTo(4, fields.Count, "DirectX fields not found.");
+        AssertNoDirectXFields(screenCapture, 3, "_factory");
+
+        // The zone pipeline holds the capture texture, the HDR resources and the zone textures (and borrows the device and the context).
+        object zonePipeline = typeof(DX11ScreenCapture).GetField("_zonePipeline", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(screenCapture)
+                              ?? throw new InvalidOperationException("_zonePipeline not found.");
+        AssertNoDirectXFields(zonePipeline, 3);
+
+        Type pipelineType = zonePipeline.GetType();
+        Assert.IsNull(pipelineType.GetField("_hdrFrame", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(zonePipeline), "_hdrFrame wasn't reset.");
+        Assert.AreEqual(0, ((System.Collections.ICollection)pipelineType.GetField("_textures", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(zonePipeline)!).Count,
+                        "Zone textures were left.");
+    }
+
+    private static void AssertNoDirectXFields(object owner, int minimumCount, params string[] ignored)
+    {
+        List<FieldInfo> fields = [.. owner.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+                                          .Where(f => typeof(CppObject).IsAssignableFrom(f.FieldType) && !ignored.Contains(f.Name))];
+        Assert.IsGreaterThanOrEqualTo(minimumCount, fields.Count, $"DirectX fields of {owner.GetType().Name} not found.");
 
         foreach (FieldInfo field in fields)
-            Assert.IsNull(field.GetValue(screenCapture), $"{field.Name} wasn't reset.");
+            Assert.IsNull(field.GetValue(owner), $"{owner.GetType().Name}.{field.Name} wasn't reset.");
     }
 }

@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <!-- HdrToneMappingTests compiles it and compares the result with the embedded bytecode. -->
-    <None Include="..\..\ScreenCapture.NET.DX11\Shaders\HdrToneMapping.hlsl" Link="Shaders\HdrToneMapping.hlsl" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Shared\D3D11\Shaders\HdrToneMapping.hlsl" Link="Shaders\HdrToneMapping.hlsl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

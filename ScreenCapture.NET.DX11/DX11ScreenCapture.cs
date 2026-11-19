@@ -1,14 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using HPPH;
 using SharpGen.Runtime;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
-using Vortice.Mathematics;
-using MapFlags = Vortice.Direct3D11.MapFlags;
 using ResultCode = Vortice.DXGI.ResultCode;
 
 namespace ScreenCapture.NET;
@@ -21,7 +18,7 @@ namespace ScreenCapture.NET;
 /// A display mode change (resolution, rotation) ends the duplication: the next capture restarts it and reads the display again (see <see cref="IScreenCapture.DisplayChanged"/>).
 /// </remarks>
 // ReSharper disable once InconsistentNaming
-public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
+public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11ZonePipelineHost
 {
     #region Constants
 
@@ -37,11 +34,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Properties & Fields
 
-    // Guards the DirectX objects and the immediate context (which isn't thread-safe): held by captures, zone updates and restarts.
+    // Guards the DirectX objects, the zone pipeline and the immediate context (which isn't thread-safe): held by captures, zone updates and restarts.
+    // The zone pipeline guards its zone textures with a lock of its own, acquired after this one; Unregister takes only that one.
     private readonly Lock _captureLock = new();
-
-    // Guards _textures. Acquired after _captureLock; Unregister takes only this one, so it doesn't wait for a capture waiting for a frame.
-    private readonly Lock _texturesLock = new();
 
     private bool _isDisposed;
 
@@ -72,18 +67,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private IDXGIOutputDuplication? _duplicatedOutput;
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
-    private ID3D11Texture2D? _captureTexture;
 
-    // If _captureTexture holds a frame: a new one is empty until the first frame is copied to it. Only used under _captureLock.
-    private bool _captureTextureHasFrame;
-
-    // Counts the frames copied to _captureTexture, so the staging texture of a zone knows if it holds the current one. Only used under _captureLock.
-    private long _captureTextureVersion;
-
-    private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
-
-    // Only with CaptureHdr: created on the first HDR frame of a duplication, tone maps the frames into _captureTexture. Only used under _captureLock.
-    private HdrFrame? _hdrFrame;
+    // Holds the frame and writes the zones from it. Initialized by every restart with the new device, released before the device is disposed.
+    private readonly D3D11ZonePipeline _zonePipeline;
 
     // The monitor of the display, to read its SDR white level for the tone mapping (null if unknown). Only used under _captureLock.
     private WindowsDisplayDevices.MonitorTarget? _monitorTarget;
@@ -112,6 +98,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         this._factory = factory;
         this.Options = options;
         this._timeout = DX11CaptureOptions.ToMilliseconds(options.Timeout);
+        this._zonePipeline = new D3D11ZonePipeline(this);
 
         Restart();
     }
@@ -127,14 +114,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         lock (_captureLock)
         {
-            if ((_context == null) || (_duplicatedOutput == null) || (_captureTexture == null))
+            if ((_duplicatedOutput == null) || !_zonePipeline.IsInitialized)
                 return RestartCapture();
 
             try
             {
-                CaptureResult result = AcquireFrame(_duplicatedOutput, _context, _captureTexture, out timestamp);
-                if (_captureTextureHasFrame && result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout)
-                    QueueZoneCopies(_context, _captureTexture);
+                CaptureResult result = AcquireFrame(_duplicatedOutput, out timestamp);
+                if (result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout)
+                    _zonePipeline.QueueZoneCopies();
 
                 return result;
             }
@@ -150,7 +137,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
-    private CaptureResult AcquireFrame(IDXGIOutputDuplication duplicatedOutput, ID3D11DeviceContext context, ID3D11Texture2D captureTexture, out long timestamp)
+    private CaptureResult AcquireFrame(IDXGIOutputDuplication duplicatedOutput, out long timestamp)
     {
         timestamp = 0;
 
@@ -172,7 +159,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             if ((screenResource == null) || (frameInfo.LastPresentTime == 0))
             {
                 // A pointer drawn into the zones changed: they're written again from the last frame, with the pointer as it is now.
-                if (cursorChanged && _captureTextureHasFrame)
+                if (cursorChanged && _zonePipeline.HasFrame)
                 {
                     timestamp = frameInfo.LastMouseUpdateTime;
                     return CaptureResult.NewFrame;
@@ -183,11 +170,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
             if (Options.CaptureHdr && (screenTexture.Description.Format == Format.R16G16B16A16_Float))
-                ToneMap(context, screenTexture, captureTexture);
+            {
+                // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
+                float? sdrWhiteLevel = (_monitorTarget is { } monitorTarget) && monitorTarget.TryGetSdrWhiteLevel(out float whiteLevel) ? whiteLevel : null;
+                _zonePipeline.ToneMapFrame(screenTexture, sdrWhiteLevel);
+            }
             else
-                context.CopySubresourceRegion(captureTexture, 0, 0, 0, 0, screenTexture, 0);
-            _captureTextureHasFrame = true;
-            _captureTextureVersion++;
+                _zonePipeline.CopyFrame(screenTexture);
 
             timestamp = frameInfo.LastPresentTime;
 
@@ -203,22 +192,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
             catch (Exception ex) { ReportError(ex); }
         }
-    }
-
-    /// <summary>
-    /// Tone maps an HDR frame of the duplication into the capture texture (only queues the work on the GPU). Called under <see cref="_captureLock"/>.
-    /// </summary>
-    private void ToneMap(ID3D11DeviceContext context, ID3D11Texture2D screenTexture, ID3D11Texture2D captureTexture)
-    {
-        // The frame of the duplication can't be bound to a shader: it's copied to a texture that can.
-        _hdrFrame ??= HdrFrame.Create(_device!, captureTexture);
-        context.CopySubresourceRegion(_hdrFrame.Texture, 0, 0, 0, 0, screenTexture, 0);
-
-        // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
-        if ((_monitorTarget is { } monitorTarget) && monitorTarget.TryGetSdrWhiteLevel(out float sdrWhiteLevel))
-            _hdrFrame.WhiteScale = HdrToneMapper.GetWhiteScale(sdrWhiteLevel);
-
-        _hdrFrame.ToneMapper.Draw(context, _hdrFrame.TextureView, _hdrFrame.CaptureTextureTarget, _hdrFrame.Width, _hdrFrame.Height, _hdrFrame.WhiteScale);
     }
 
     /// <summary>
@@ -281,144 +254,15 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         // _captureLock: another thread can capture (or restart) meanwhile, and both use the immediate context.
         lock (_captureLock)
-            lock (_texturesLock)
-            {
-                // E.g. a Restart on another thread replaced the capture texture after this capture got its frame.
-                if ((_device == null) || (_context == null) || (_captureTexture == null) || !_captureTextureHasFrame) return false;
+        {
+            if (!_zonePipeline.WriteZone(captureZone, buffer)) return false;
 
-                // Set by the restart under these locks, so it matches the capture texture.
-                Display display = Display;
-                if (!captureZone.Region.IsWithin(display.Width, display.Height)) return false;
-
-                // Under the zone lock these values belong together (and to the zone's buffer).
-                CaptureRegion region = captureZone.Region;
-                ZoneTextures? textures = GetTextures(captureZone, display, region, captureZone.Width, captureZone.Height, captureZone.DownscaleLevel);
-                if (textures == null) return false;
-
-                // Usually queued by this capture's QueueZoneCopies. Not if the zone changed since, or wasn't expected to be written (e.g. an update requested meanwhile).
-                if (!textures.HoldsCopy(_captureTextureVersion, region))
-                    CopyToStaging(_context, _captureTexture, textures, region, display);
-
-                // Waits until the GPU did the copy. The copies of all zones were queued before and run meanwhile, so mostly only the first zone waits.
-                MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
-                try
-                {
-                    // The staging texture is the downscaled region in the native orientation of the output; only the rotation is left.
-                    ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
-                    WriteCaptureZoneFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, mapSource.RowPitch), captureZone, buffer, display.Rotation);
-                }
-                finally
-                {
-                    _context.Unmap(textures.StagingTexture, 0);
-                }
-
-                // Into the zone's pixels, not the staging texture: that keeps the frame for writes with the pointer somewhere else.
-                if (_cursorVisible && (_cursorShape != null))
-                    _cursorShape.Draw(buffer, region, captureZone.Width, captureZone.Height, textures.DownscaleLevel, _cursorX, _cursorY);
-            }
+            // Into the zone's pixels, not the staging texture: that keeps the frame for writes with the pointer somewhere else.
+            if (_cursorVisible && (_cursorShape != null))
+                _cursorShape.Draw(buffer, captureZone.Region, captureZone.Width, captureZone.Height, captureZone.DownscaleLevel, _cursorX, _cursorY);
+        }
 
         return true;
-    }
-
-    /// <summary>
-    /// Queues the copies of the current frame to the staging textures of all zones that are probably written by this capture, without waiting for them.
-    /// </summary>
-    /// <remarks>
-    /// Called under <see cref="_captureLock"/> after a frame was acquired, before the zones are written. Mapping a staging texture waits for the GPU;
-    /// with all copies queued first, the first map waits for all of them at once instead of every zone waiting for its own copy.
-    /// <para>
-    /// Without the zone locks: a zone can change until it's written. Its staging texture remembers what it holds, and the write copies again if that doesn't match.
-    /// </para>
-    /// </remarks>
-    private void QueueZoneCopies(ID3D11DeviceContext context, ID3D11Texture2D captureTexture)
-    {
-        // Set by the restart under _captureLock, so it matches the capture texture.
-        Display display = Display;
-        bool queued = false;
-
-        try
-        {
-            lock (_texturesLock)
-                foreach (CaptureZone<ColorBGRA> captureZone in CaptureZones)
-                {
-                    // Zones that aren't written by this capture (not updated automatically, already showing this frame) skip the copy.
-                    if (!captureZone.IsValid || !(captureZone.AutoUpdate || captureZone.IsUpdateRequested)) continue;
-
-                    // Read separately, so the region and the level can belong to different changes: the size is computed from exactly these values.
-                    CaptureRegion region = captureZone.Region;
-                    if (!region.IsWithin(display.Width, display.Height)) continue;
-
-                    (int width, int height, int downscaleLevel) = CalculateScaledSize(region.Width, region.Height, captureZone.DownscaleLevel);
-
-                    ZoneTextures? textures = GetTextures(captureZone, display, region, width, height, downscaleLevel);
-                    if ((textures == null) || textures.HoldsCopy(_captureTextureVersion, region)) continue;
-
-                    CopyToStaging(context, captureTexture, textures, region, display);
-                    queued = true;
-                }
-        }
-        catch (Exception ex)
-        {
-            // E.g. no memory for new textures: the zone update tries again and reports its own error.
-            ReportError(ex);
-        }
-
-        // Hands the copies to the GPU now: it works on them while the capture raises its events.
-        if (queued)
-            context.Flush();
-    }
-
-    /// <summary>
-    /// Copies the zone's region of the frame to its staging texture (downscaled through the mip chain of its scaling texture). Only queues the work on the GPU.
-    /// </summary>
-    private void CopyToStaging(ID3D11DeviceContext context, ID3D11Texture2D captureTexture, ZoneTextures textures, CaptureRegion region, Display display)
-    {
-        CaptureRegion source = GetSourceRegion(region, display);
-        Box sourceBox = new(source.X, source.Y, 0, source.X + source.Width, source.Y + source.Height, 1);
-        if (textures.ScalingTexture != null)
-        {
-            context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, captureTexture, 0, sourceBox);
-            context.GenerateMips(textures.ScalingTextureView);
-            context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, textures.DownscaleLevel);
-        }
-        else
-            context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, captureTexture, 0, sourceBox);
-
-        textures.SetCopy(_captureTextureVersion, region);
-    }
-
-    /// <summary>
-    /// Gets the textures of a zone and (re)creates them if the zone is new or was resized.
-    /// </summary>
-    /// <remarks>
-    /// Called under <see cref="_captureLock"/> and <see cref="_texturesLock"/>, with the size the zone had when it was read (the zone lock isn't held while copies are queued).
-    /// Creating them here instead of on register/update means a capture never sees a zone without textures or with textures of the wrong size.
-    /// </remarks>
-    /// <param name="captureZone">The zone.</param>
-    /// <param name="display">The display of the capture texture.</param>
-    /// <param name="region">The region of the zone.</param>
-    /// <param name="width">The width of the zone's pixels (after downscaling) for <paramref name="region"/> and <paramref name="downscaleLevel"/>.</param>
-    /// <param name="height">The height of the zone's pixels (after downscaling) for <paramref name="region"/> and <paramref name="downscaleLevel"/>.</param>
-    /// <param name="downscaleLevel">The downscale level of the zone.</param>
-    /// <returns>The textures, or <c>null</c> if the zone was unregistered.</returns>
-    private ZoneTextures? GetTextures(CaptureZone<ColorBGRA> captureZone, Display display, CaptureRegion region, int width, int height, int downscaleLevel)
-    {
-        if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
-        {
-            if (textures.Fits(region.Width, region.Height, downscaleLevel)) return textures;
-
-            textures.Dispose();
-            _textures.Remove(captureZone);
-        }
-
-        // A running capture can still hold an unregistered zone in its snapshot. UnregisterCaptureZone disposes the textures after removing
-        // the zone (under _texturesLock), so creating them only for registered zones means none are left behind.
-        if (!CaptureZones.Contains(captureZone)) return null;
-
-        textures = CreateTextures(display, region, width, height, downscaleLevel);
-        _textures.Add(captureZone, textures);
-
-        return textures;
     }
 
     /// <inheritdoc />
@@ -426,128 +270,59 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         if (!base.UnregisterCaptureZone(captureZone)) return false;
 
-        lock (_texturesLock)
-            if (_textures.Remove(captureZone, out ZoneTextures? textures))
-                textures.Dispose();
+        _zonePipeline.RemoveZone(captureZone);
 
         return true;
-    }
-
-    private ZoneTextures CreateTextures(Display display, CaptureRegion region, int scaledWidth, int scaledHeight, int downscaleLevel)
-    {
-        // Textures only depend on the size, not on the position of the zone. A restart disposes them, so they're never left with another rotation.
-        (int unscaledWidth, int unscaledHeight) = PixelHelper.GetRotatedSize(region.Width, region.Height, display.Rotation);
-        (int width, int height) = PixelHelper.GetRotatedSize(scaledWidth, scaledHeight, display.Rotation);
-
-        Texture2DDescription stagingTextureDesc = new()
-        {
-            CPUAccessFlags = CpuAccessFlags.Read,
-            BindFlags = BindFlags.None,
-            Format = Format.B8G8R8A8_UNorm,
-            Width = width,
-            Height = height,
-            MiscFlags = ResourceOptionFlags.None,
-            MipLevels = 1,
-            ArraySize = 1,
-            SampleDescription = { Count = 1, Quality = 0 },
-            Usage = ResourceUsage.Staging
-        };
-        ID3D11Texture2D stagingTexture = _device!.CreateTexture2D(stagingTextureDesc);
-
-        ID3D11Texture2D? scalingTexture = null;
-        ID3D11ShaderResourceView? scalingTextureView = null;
-        if (downscaleLevel > 0)
-        {
-            Texture2DDescription scalingTextureDesc = new()
-            {
-                CPUAccessFlags = CpuAccessFlags.None,
-                BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                Format = Format.B8G8R8A8_UNorm,
-                Width = unscaledWidth,
-                Height = unscaledHeight,
-                MiscFlags = ResourceOptionFlags.GenerateMips,
-                MipLevels = downscaleLevel + 1,
-                ArraySize = 1,
-                SampleDescription = { Count = 1, Quality = 0 },
-                Usage = ResourceUsage.Default
-            };
-            scalingTexture = _device!.CreateTexture2D(scalingTextureDesc);
-            scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
-        }
-
-        return new ZoneTextures(region.Width, region.Height, downscaleLevel, width, height, stagingTexture, scalingTexture, scalingTextureView);
     }
 
     /// <inheritdoc />
     protected override bool PerformRestart()
     {
         lock (_captureLock)
-            lock (_texturesLock)
+        {
+            // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
+            if (_isDisposed) return false;
+
+            try
             {
-                // Dispose releases everything under these locks after setting the flag: nothing created here may outlive it.
-                if (_isDisposed) return false;
+                DisposeDX();
 
-                try
-                {
-                    foreach (ZoneTextures textures in _textures.Values)
-                        textures.Dispose();
-                    _textures.Clear();
+                // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
+                // and after displays were added or removed the indices can point to another adapter or output.
+                (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DX11Devices.FindDisplay(_factory, Display.Id)
+                                                                                                     ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+                using IDXGIAdapter1 adapter = foundAdapter;
+                using IDXGIOutput dxgiOutput = foundOutput;
 
-                    DisposeDX();
+                D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
+                _context = _device!.ImmediateContext;
 
-                    // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
-                    // and after displays were added or removed the indices can point to another adapter or output.
-                    (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DX11Devices.FindDisplay(_factory, Display.Id)
-                                                                                                         ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
-                    using IDXGIAdapter1 adapter = foundAdapter;
-                    using IDXGIOutput dxgiOutput = foundOutput;
+                using IDXGIOutput5 output = dxgiOutput.QueryInterface<IDXGIOutput5>();
 
-                    D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
-                    _context = _device!.ImmediateContext;
+                // The duplication delivers the frames in the native orientation of the output.
+                _zonePipeline.Initialize(_device, _context, display, display.Rotation);
 
-                    using IDXGIOutput5 output = dxgiOutput.QueryInterface<IDXGIOutput5>();
+                // While the display shows HDR, DuplicateOutput1 delivers 16-bit frames (tone mapped by the capture), otherwise 8-bit ones.
+                // DuplicateOutput always delivers 8-bit frames, converted by Windows.
+                if (Options.CaptureHdr)
+                    _duplicatedOutput = output.DuplicateOutput1(_device, [Format.R16G16B16A16_Float, Format.B8G8R8A8_UNorm]);
+                else
+                    _duplicatedOutput = output.DuplicateOutput(_device);
 
-                    int width = display.Width;
-                    int height = display.Height;
-                    if (display.Rotation is ImageRotation.Rotate90 or ImageRotation.Rotate270)
-                        (width, height) = (height, width);
+                // Zone writes take the display of the capture texture from the pipeline: the zones get this one after the capture.
+                SetDisplay(display);
 
-                    Texture2DDescription captureTextureDesc = new()
-                    {
-                        CPUAccessFlags = CpuAccessFlags.None,
-                        BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                        Format = Format.B8G8R8A8_UNorm,
-                        Width = width,
-                        Height = height,
-                        MiscFlags = ResourceOptionFlags.None,
-                        MipLevels = 1,
-                        ArraySize = 1,
-                        SampleDescription = { Count = 1, Quality = 0 },
-                        Usage = ResourceUsage.Default
-                    };
-                    _captureTexture = _device.CreateTexture2D(captureTextureDesc);
-
-                    // While the display shows HDR, DuplicateOutput1 delivers 16-bit frames (tone mapped by the capture), otherwise 8-bit ones.
-                    // DuplicateOutput always delivers 8-bit frames, converted by Windows.
-                    if (Options.CaptureHdr)
-                        _duplicatedOutput = output.DuplicateOutput1(_device, [Format.R16G16B16A16_Float, Format.B8G8R8A8_UNorm]);
-                    else
-                        _duplicatedOutput = output.DuplicateOutput(_device);
-
-                    // Under _texturesLock: zone updates read the display there, so they never see it differ from the capture texture.
-                    SetDisplay(display);
-
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
-                    DisposeDX();
-                    ReportError(ex);
-
-                    return false;
-                }
+                return true;
             }
+            catch (Exception ex)
+            {
+                // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
+                DisposeDX();
+                ReportError(ex);
+
+                return false;
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -559,28 +334,17 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         base.Dispose(disposing);
 
         lock (_captureLock)
-            lock (_texturesLock)
-            {
-                foreach (ZoneTextures textures in _textures.Values)
-                    try { textures.Dispose(); } catch { /**/ }
-                _textures.Clear();
-
-                DisposeDX();
-            }
+            DisposeDX();
     }
 
     private void DisposeDX()
     {
         try { _duplicatedOutput?.Dispose(); } catch { /**/ }
-        try { _hdrFrame?.Dispose(); } catch { /**/ }
-        try { _captureTexture?.Dispose(); } catch { /**/ }
+        _zonePipeline.Release();
         try { _context?.Dispose(); } catch { /**/ }
         try { _device?.Dispose(); } catch { /**/ }
 
         _duplicatedOutput = null;
-        _hdrFrame = null;
-        _captureTexture = null;
-        _captureTextureHasFrame = false;
         _context = null;
         _device = null;
 
@@ -591,161 +355,19 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #endregion
 
-    /// <summary>
-    /// The resources tone mapping the HDR frames of a duplication into its capture texture.
-    /// </summary>
-    private sealed class HdrFrame : IDisposable
-    {
-        #region Properties & Fields
+    #region ID3D11ZonePipelineHost
 
-        public int Width { get; }
-        public int Height { get; }
+    IReadOnlyList<CaptureZone<ColorBGRA>> ID3D11ZonePipelineHost.CaptureZones => CaptureZones;
 
-        // The HDR frame, readable by the shader.
-        public ID3D11Texture2D Texture { get; }
-        public ID3D11ShaderResourceView TextureView { get; }
+    (int width, int height, int downscaleLevel) ID3D11ZonePipelineHost.CalculateScaledSize(int width, int height, int downscaleLevel)
+        => CalculateScaledSize(width, height, downscaleLevel);
 
-        public ID3D11RenderTargetView CaptureTextureTarget { get; }
-        public HdrToneMapper ToneMapper { get; }
+    CaptureRegion ID3D11ZonePipelineHost.GetSourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
 
-        // The last SDR white level read (see HdrToneMapper.GetWhiteScale); no scaling until one was read.
-        public float WhiteScale { get; set; } = 1;
+    void ID3D11ZonePipelineHost.WriteCaptureZoneFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation)
+        => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
 
-        #endregion
+    void ID3D11ZonePipelineHost.ReportError(Exception exception) => ReportError(exception);
 
-        #region Constructors
-
-        private HdrFrame(int width, int height, ID3D11Texture2D texture, ID3D11ShaderResourceView textureView, ID3D11RenderTargetView captureTextureTarget, HdrToneMapper toneMapper)
-        {
-            this.Width = width;
-            this.Height = height;
-            this.Texture = texture;
-            this.TextureView = textureView;
-            this.CaptureTextureTarget = captureTextureTarget;
-            this.ToneMapper = toneMapper;
-        }
-
-        #endregion
-
-        #region Methods
-
-        public static HdrFrame Create(ID3D11Device device, ID3D11Texture2D captureTexture)
-        {
-            Texture2DDescription captureTextureDesc = captureTexture.Description;
-
-            ID3D11Texture2D? texture = null;
-            ID3D11ShaderResourceView? textureView = null;
-            ID3D11RenderTargetView? captureTextureTarget = null;
-            try
-            {
-                Texture2DDescription textureDesc = new()
-                {
-                    CPUAccessFlags = CpuAccessFlags.None,
-                    BindFlags = BindFlags.ShaderResource,
-                    Format = Format.R16G16B16A16_Float,
-                    Width = captureTextureDesc.Width,
-                    Height = captureTextureDesc.Height,
-                    MiscFlags = ResourceOptionFlags.None,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    SampleDescription = { Count = 1, Quality = 0 },
-                    Usage = ResourceUsage.Default
-                };
-                texture = device.CreateTexture2D(textureDesc);
-                textureView = device.CreateShaderResourceView(texture);
-                captureTextureTarget = device.CreateRenderTargetView(captureTexture);
-
-                return new HdrFrame(captureTextureDesc.Width, captureTextureDesc.Height, texture, textureView, captureTextureTarget, new HdrToneMapper(device));
-            }
-            catch
-            {
-                captureTextureTarget?.Dispose();
-                textureView?.Dispose();
-                texture?.Dispose();
-                throw;
-            }
-        }
-
-        public void Dispose()
-        {
-            ToneMapper.Dispose();
-            CaptureTextureTarget.Dispose();
-            TextureView.Dispose();
-            Texture.Dispose();
-        }
-
-        #endregion
-    }
-
-    private sealed class ZoneTextures : IDisposable
-    {
-        #region Properties & Fields
-
-        // The zone size (display orientation) the textures were created for.
-        public int UnscaledWidth { get; }
-        public int UnscaledHeight { get; }
-        public int DownscaleLevel { get; }
-
-        // The size of the staging texture (native orientation of the output).
-        public int StagingWidth { get; }
-        public int StagingHeight { get; }
-
-        public ID3D11Texture2D StagingTexture { get; }
-        public ID3D11Texture2D? ScalingTexture { get; }
-        public ID3D11ShaderResourceView? ScalingTextureView { get; }
-
-        // What the staging texture holds: the region of the capture texture's frame with this version (0: nothing yet).
-        private long _copiedVersion;
-        private CaptureRegion _copiedRegion;
-
-        #endregion
-
-        #region Constructors
-
-        public ZoneTextures(int unscaledWidth, int unscaledHeight, int downscaleLevel, int stagingWidth, int stagingHeight,
-                            ID3D11Texture2D stagingTexture, ID3D11Texture2D? scalingTexture, ID3D11ShaderResourceView? scalingTextureView)
-        {
-            this.UnscaledWidth = unscaledWidth;
-            this.UnscaledHeight = unscaledHeight;
-            this.DownscaleLevel = downscaleLevel;
-            this.StagingWidth = stagingWidth;
-            this.StagingHeight = stagingHeight;
-            this.StagingTexture = stagingTexture;
-            this.ScalingTexture = scalingTexture;
-            this.ScalingTextureView = scalingTextureView;
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Checks if the textures were created for a zone of the given size and downscale level.
-        /// </summary>
-        public bool Fits(int unscaledWidth, int unscaledHeight, int downscaleLevel)
-            => (unscaledWidth == UnscaledWidth) && (unscaledHeight == UnscaledHeight) && (downscaleLevel == DownscaleLevel);
-
-        /// <summary>
-        /// Checks if the staging texture holds (or the GPU is writing) <paramref name="region"/> of the frame with the given version. Called under the capture lock.
-        /// </summary>
-        public bool HoldsCopy(long version, CaptureRegion region) => (version == _copiedVersion) && (region == _copiedRegion);
-
-        /// <summary>
-        /// Records that a copy of <paramref name="region"/> of the frame with the given version to the staging texture was queued. Called under the capture lock.
-        /// </summary>
-        public void SetCopy(long version, CaptureRegion region)
-        {
-            _copiedVersion = version;
-            _copiedRegion = region;
-        }
-
-        public void Dispose()
-        {
-            StagingTexture.Dispose();
-            ScalingTexture?.Dispose();
-            ScalingTextureView?.Dispose();
-        }
-
-        #endregion
-    }
+    #endregion
 }
