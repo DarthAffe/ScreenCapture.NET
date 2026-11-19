@@ -193,6 +193,33 @@ public sealed class D3D11ZonePipelineTests
         CollectionAssert.AreEqual(colors, GetPixels(zone), "white level kept");
     }
 
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void FramesLargerThanTheDisplayUseTheirTopLeft(bool hdr)
+    {
+        // Like the texture of a WGC frame pool, which can be larger than its content.
+        const int FRAME_WIDTH = 21;
+        const int FRAME_HEIGHT = 19;
+        Display display = CreateDisplay(16, 16, ImageRotation.None);
+        using WarpScreenCapture capture = new(display);
+        CaptureZone<ColorBGRA> zone = capture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 16));
+
+        Random random = new(7);
+        ColorBGRA[] frame = [.. Enumerable.Range(0, FRAME_WIDTH * FRAME_HEIGHT).Select(_ => new ColorBGRA((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256), 255))];
+        if (hdr)
+            // 1.0 = SDR white (80 nits): no scaling.
+            capture.SetHdrFrame([.. frame.SelectMany(c => new[] { (Half)HdrToneMappingTests.SrgbToLinear(c.R), (Half)HdrToneMappingTests.SrgbToLinear(c.G), (Half)HdrToneMappingTests.SrgbToLinear(c.B), (Half)1 })],
+                                HdrToneMapper.SCRGB_WHITE_NITS, FRAME_WIDTH, FRAME_HEIGHT);
+        else
+            capture.SetFrame(frame, FRAME_WIDTH, FRAME_HEIGHT);
+
+        Assert.AreEqual(CaptureResult.NewFrame, capture.CaptureScreen());
+
+        ColorBGRA[] expected = [.. Enumerable.Range(0, 16 * 16).Select(i => frame[((i / 16) * FRAME_WIDTH) + (i % 16)])];
+        CollectionAssert.AreEqual(expected, GetPixels(zone));
+    }
+
     #endregion
 
     /// <summary>
@@ -240,14 +267,25 @@ public sealed class D3D11ZonePipelineTests
         public void SetFrame(ColorBGRA[] pixels)
         {
             (int width, int height) = PixelHelper.GetRotatedSize(Display.Width, Display.Height, Display.Rotation);
-            SetNextFrame(CreateTexture(Format.B8G8R8A8_UNorm, width, height, pixels, width * 4), false, null);
+            SetFrame(pixels, width, height);
         }
+
+        /// <summary>
+        /// Sets the frame of the next capture with its own size (at least the one of the output).
+        /// </summary>
+        public void SetFrame(ColorBGRA[] pixels, int width, int height)
+            => SetNextFrame(CreateTexture(Format.B8G8R8A8_UNorm, width, height, pixels, width * 4), false, null);
 
         /// <summary>
         /// Sets an HDR frame (scRGB, RGBA) of the next capture, in the orientation of the display (only used without a rotation).
         /// </summary>
-        public void SetHdrFrame(Half[] rgba, float? sdrWhiteLevel)
-            => SetNextFrame(CreateTexture(Format.R16G16B16A16_Float, Display.Width, Display.Height, rgba, Display.Width * 8), true, sdrWhiteLevel);
+        public void SetHdrFrame(Half[] rgba, float? sdrWhiteLevel) => SetHdrFrame(rgba, sdrWhiteLevel, Display.Width, Display.Height);
+
+        /// <summary>
+        /// Sets an HDR frame (scRGB, RGBA) of the next capture with its own size (at least the one of the display).
+        /// </summary>
+        public void SetHdrFrame(Half[] rgba, float? sdrWhiteLevel, int width, int height)
+            => SetNextFrame(CreateTexture(Format.R16G16B16A16_Float, width, height, rgba, width * 8), true, sdrWhiteLevel);
 
         private void SetNextFrame(ID3D11Texture2D frame, bool isHdr, float? sdrWhiteLevel)
         {

@@ -43,6 +43,11 @@ internal static unsafe partial class WGCInterop
     /// </summary>
     public const int PIXEL_FORMAT_BGRA8 = 87;
 
+    /// <summary>
+    /// <c>DirectXPixelFormat.R16G16B16A16Float</c> (the value of <c>DXGI_FORMAT_R16G16B16A16_FLOAT</c>): scRGB, used for HDR.
+    /// </summary>
+    public const int PIXEL_FORMAT_RGBA16F = 10;
+
     #endregion
 
     #region Properties & Fields

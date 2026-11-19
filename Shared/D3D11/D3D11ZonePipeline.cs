@@ -158,9 +158,9 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Tone maps an HDR frame (scRGB, <c>R16G16B16A16_Float</c>, the size of the capture texture) into the capture texture. Only queues the work on the GPU.
+    /// Tone maps an HDR frame (scRGB, <c>R16G16B16A16_Float</c>) into the capture texture. Only queues the work on the GPU.
     /// </summary>
-    /// <param name="frame">The frame.</param>
+    /// <param name="frame">The frame: at least the size of the capture texture, its top left part is used (e.g. the content of a larger texture of a frame pool).</param>
     /// <param name="sdrWhiteLevel">The current SDR white level of the display in nits (see <see cref="HdrToneMapper.GetWhiteScale"/>); <c>null</c> keeps the last one.</param>
     public void ToneMapFrame(ID3D11Texture2D frame, float? sdrWhiteLevel)
     {
@@ -168,7 +168,7 @@ internal sealed class D3D11ZonePipeline
 
         // The frame can't be bound to a shader (e.g. the one of a duplication): it's copied to a texture that can.
         _hdrFrame ??= HdrFrame.Create(_device!, _captureTexture!);
-        context.CopySubresourceRegion(_hdrFrame.Texture, 0, 0, 0, 0, frame, 0);
+        context.CopySubresourceRegion(_hdrFrame.Texture, 0, 0, 0, 0, frame, 0, _captureTextureBox);
 
         if (sdrWhiteLevel is { } whiteLevel)
             _hdrFrame.WhiteScale = HdrToneMapper.GetWhiteScale(whiteLevel);

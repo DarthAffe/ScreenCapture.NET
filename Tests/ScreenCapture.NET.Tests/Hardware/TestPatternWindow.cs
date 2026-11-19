@@ -30,6 +30,9 @@ internal sealed class TestPatternWindow : IDisposable
 
     #region Properties & Fields
 
+    // Owned while the window is shown, see the constructor.
+    private readonly Mutex _otherWindows;
+
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _shown = new();
     private volatile bool _stop;
@@ -50,6 +53,10 @@ internal sealed class TestPatternWindow : IDisposable
     /// <summary>
     /// Shows the image (row by row, alpha ignored) at the given position on the desktop (physical pixels).
     /// </summary>
+    /// <remarks>
+    /// Only one test pattern window is shown at a time, also across processes (the test processes of both TFMs run at the same time and show their windows at the same places):
+    /// it waits until the window of another process is gone. Dispose it on the thread that created it.
+    /// </remarks>
     public TestPatternWindow(int x, int y, int width, int height, ColorBGRA[] pixels)
     {
         if (pixels.Length != (width * height)) throw new ArgumentException("The image doesn't have the size of the window.", nameof(pixels));
@@ -58,12 +65,31 @@ internal sealed class TestPatternWindow : IDisposable
         _width = width;
         _height = height;
 
-        _wndProc = WindowProc;
-        _thread = new Thread(() => Run(x, y)) { IsBackground = true, Name = nameof(TestPatternWindow) };
-        _thread.Start();
+        _otherWindows = new Mutex(false, "ScreenCapture.NET.Tests.TestPatternWindow");
+        try
+        {
+            _otherWindows.WaitOne();
+        }
+        catch (AbandonedMutexException)
+        {
+            // A test process ended while it showed a window: the mutex is owned now anyway.
+        }
 
-        if (!_shown.Wait(TimeSpan.FromSeconds(5)) || (_error != null))
-            throw new InvalidOperationException("The test pattern window couldn't be shown.", _error);
+        try
+        {
+            _wndProc = WindowProc;
+            _thread = new Thread(() => Run(x, y)) { IsBackground = true, Name = nameof(TestPatternWindow) };
+            _thread.Start();
+
+            if (!_shown.Wait(TimeSpan.FromSeconds(5)) || (_error != null))
+                throw new InvalidOperationException("The test pattern window couldn't be shown.", _error);
+        }
+        catch
+        {
+            _otherWindows.ReleaseMutex();
+            _otherWindows.Dispose();
+            throw;
+        }
     }
 
     #endregion
@@ -144,6 +170,9 @@ internal sealed class TestPatternWindow : IDisposable
         _stop = true;
         _thread.Join();
         _shown.Dispose();
+
+        _otherWindows.ReleaseMutex();
+        _otherWindows.Dispose();
     }
 
     #endregion

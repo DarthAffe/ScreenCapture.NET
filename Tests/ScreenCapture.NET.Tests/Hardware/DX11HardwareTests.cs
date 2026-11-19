@@ -406,12 +406,12 @@ public sealed class DX11HardwareTests
             bool hdr = IsShowingHdr(display);
             ColorBGRA[] hdrPixels;
             using (DX11ScreenCapture screenCapture = hdrService.GetScreenCapture(display))
-                hdrPixels = CapturePattern(screenCapture, region, pattern, hdr ? 1 : 0);
+                hdrPixels = CapturePattern(screenCapture, region, pattern, hdr ? 1 : 0, "CaptureHdr");
 
             // Windows' own conversion on HDR displays.
             ColorBGRA[] plainPixels;
             using (DX11ScreenCapture screenCapture = plainService.GetScreenCapture(display))
-                plainPixels = CapturePattern(screenCapture, region, pattern, 0);
+                plainPixels = CapturePattern(screenCapture, region, pattern, 0, "plain");
 
             (int plainDifference, int plainPixelsDifferent) = Compare(pattern, plainPixels);
             (int hdrDifference, int hdrPixelsDifferent) = Compare(pattern, hdrPixels);
@@ -438,9 +438,9 @@ public sealed class DX11HardwareTests
     }
 
     // Captures until the window shows up in a frame (the pixels match within the tolerance), at most for 3 s; returns the last pixels.
-    private static ColorBGRA[] CapturePattern(DX11ScreenCapture screenCapture, CaptureRegion region, ColorBGRA[] pattern, int tolerance)
+    internal static ColorBGRA[] CapturePattern(AbstractScreenCapture<ColorBGRA> screenCapture, CaptureRegion region, ColorBGRA[] pattern, int tolerance, string name)
     {
-        Assert.IsNull(screenCapture.LastError, $"{screenCapture.Display.DeviceName} (CaptureHdr: {screenCapture.Options.CaptureHdr}): the duplication failed: {screenCapture.LastError}");
+        Assert.IsNull(screenCapture.LastError, $"{screenCapture.Display.DeviceName} ({name}): the capture failed: {screenCapture.LastError}");
 
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(region);
         try

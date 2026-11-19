@@ -1,9 +1,10 @@
+extern alias WGC;
 using System.Runtime.Versioning;
 
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// Checks the option values (no capture needed). The DX11 and DX9 assemblies are Windows-only.
+/// Checks the option values (no capture needed). The DX11, DX9 and WGC assemblies are Windows-only.
 /// </summary>
 [TestClass]
 [OSCondition(OperatingSystems.Windows)]
@@ -63,6 +64,30 @@ public sealed class CaptureOptionsTests
         Assert.AreNotEqual(options, options with { Timeout = TimeSpan.FromMilliseconds(251) });
         Assert.AreNotEqual(options, options with { CaptureHdr = false });
         Assert.AreNotEqual(options, options with { DrawCursor = true });
+    }
+
+    [TestMethod]
+    public void WGCDefaults()
+    {
+        WGC::ScreenCapture.NET.WGCCaptureOptions options = new();
+
+        Assert.AreEqual(TimeSpan.FromSeconds(1), options.Timeout);
+        Assert.IsFalse(options.ShowBorder);
+        Assert.IsFalse(options.DrawCursor);
+        Assert.IsFalse(options.CaptureHdr);
+        Assert.AreEqual(WGC::ScreenCapture.NET.WGCCaptureOptions.Default, options);
+    }
+
+    [TestMethod]
+    public void WGCOptionsAreEqualByValue()
+    {
+        WGC::ScreenCapture.NET.WGCCaptureOptions options = new() { Timeout = TimeSpan.FromMilliseconds(250), CaptureHdr = true };
+
+        Assert.AreEqual(options, new WGC::ScreenCapture.NET.WGCCaptureOptions { Timeout = TimeSpan.FromMilliseconds(250), CaptureHdr = true });
+        Assert.AreNotEqual(options, options with { Timeout = TimeSpan.FromMilliseconds(251) });
+        Assert.AreNotEqual(options, options with { CaptureHdr = false });
+        Assert.AreNotEqual(options, options with { DrawCursor = true });
+        Assert.AreNotEqual(options, options with { ShowBorder = true });
     }
 
     [TestMethod]

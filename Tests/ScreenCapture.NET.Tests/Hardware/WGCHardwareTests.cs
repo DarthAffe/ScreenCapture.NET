@@ -99,9 +99,6 @@ public sealed class WGCHardwareTests
         Assert.AreSame(WGCCaptureOptions.Default, defaultService.Options);
     }
 
-    [TestMethod]
-    public void BorderIsOffByDefault() => Assert.IsFalse(WGCCaptureOptions.Default.ShowBorder);
-
     /// <summary>
     /// On Windows 11 the yellow border around a captured display is only drawn with <see cref="WGCCaptureOptions.ShowBorder"/>.
     /// It isn't part of the frames of the capture, so DX11 looks for it at the top edge of the first display.
@@ -362,7 +359,7 @@ public sealed class WGCHardwareTests
 
     /// <summary>
     /// A pattern of SDR colors in a window is captured with its exact values on every display that doesn't show HDR
-    /// (HDR displays are converted by Windows, see 6.7). Shows a small window in the center of every display for a moment.
+    /// (HDR displays are converted by Windows, see <see cref="HdrCaptureKeepsSdrColors"/>). Shows a small window in the center of every display for a moment.
     /// </summary>
     [TestMethod]
     public void CapturesExactColors()
@@ -401,6 +398,65 @@ public sealed class WGCHardwareTests
 
         if (checkedDisplays == 0)
             Assert.Inconclusive("Every display shows HDR.");
+    }
+
+    /// <summary>
+    /// With <see cref="WGCCaptureOptions.CaptureHdr"/> a pattern of SDR colors in a window is captured with its values (±1) on a display showing HDR,
+    /// and exactly as without the option on every other display (those are captured in 16 bits too).
+    /// Inconclusive if no display shows HDR. Shows a small window in the center of every display for a moment.
+    /// </summary>
+    [TestMethod]
+    public void HdrCaptureKeepsSdrColors()
+    {
+        const int width = 256;
+        const int height = 16;
+
+        WGCCaptureOptions plainOptions = new() { Timeout = TimeSpan.FromMilliseconds(100) };
+        using WGCScreenCaptureService plainService = new(plainOptions);
+        using WGCScreenCaptureService hdrService = new(plainOptions with { CaptureHdr = true });
+        ColorBGRA[] pattern = DX11HardwareTests.CreateSdrPattern(width, height);
+
+        List<(Display Display, int MaxDifference, int DifferentPixels)> hdrResults = [];
+        string? colorTransform = null;
+        foreach (Display display in HardwareTestHelper.GetAllDisplays(hdrService))
+        {
+            int x = (display.Width - width) / 2;
+            int y = (display.Height - height) / 2;
+            CaptureRegion region = new(x, y, width, height);
+            using TestPatternWindow window = new(display.X + x, display.Y + y, width, height, pattern);
+
+            bool hdr = DX11HardwareTests.IsShowingHdr(display);
+            ColorBGRA[] hdrPixels;
+            using (WGCScreenCapture screenCapture = hdrService.GetScreenCapture(display))
+                hdrPixels = DX11HardwareTests.CapturePattern(screenCapture, region, pattern, hdr ? 1 : 0, "CaptureHdr");
+
+            // Windows' own conversion on HDR displays.
+            ColorBGRA[] plainPixels;
+            using (WGCScreenCapture screenCapture = plainService.GetScreenCapture(display))
+                plainPixels = DX11HardwareTests.CapturePattern(screenCapture, region, pattern, 0, "plain");
+
+            (int plainDifference, int plainPixelsDifferent) = DX11HardwareTests.Compare(pattern, plainPixels);
+            (int hdrDifference, int hdrPixelsDifferent) = DX11HardwareTests.Compare(pattern, hdrPixels);
+            Console.WriteLine($"{display.DeviceName} ({(hdr ? "HDR" : "SDR")}): max difference with CaptureHdr {hdrDifference} ({hdrPixelsDifferent} pixels), "
+                            + $"without {plainDifference} ({plainPixelsDifferent} pixels).");
+
+            if (hdr)
+                hdrResults.Add((display, hdrDifference, hdrPixelsDifferent));
+            else
+            {
+                CollectionAssert.AreEqual(plainPixels, hdrPixels, $"{display.DeviceName} (SDR): CaptureHdr changed the image.");
+                if (plainDifference > 0)
+                    colorTransform ??= $"{display.DeviceName} shows the pattern with other colors (by up to {plainDifference}) also without HDR: is Night light or color management on?";
+            }
+        }
+
+        if (hdrResults.Count == 0)
+            Assert.Inconclusive("No display shows HDR: only the SDR displays were checked.");
+        if (colorTransform != null)
+            Assert.Inconclusive($"HDR displays not checked: {colorTransform}");
+
+        foreach ((Display display, int maxDifference, int differentPixels) in hdrResults)
+            Assert.IsLessThanOrEqualTo(1, maxDifference, $"{display.DeviceName} (HDR): {differentPixels} pixels differ, by up to {maxDifference}.");
     }
 
     /// <summary>

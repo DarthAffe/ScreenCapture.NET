@@ -47,6 +47,26 @@ public sealed record WGCCaptureOptions
     /// </remarks>
     public bool ShowBorder { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the mouse pointer is part of the frames. (default <c>false</c>)
+    /// </summary>
+    /// <remarks>
+    /// Windows draws it into the frames (so it's averaged into downscaled zones like everything else), and a pointer that moves or changes its shape makes a new frame.
+    /// Before Windows 10 2004 the pointer is always drawn.
+    /// </remarks>
+    public bool DrawCursor { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the displays are captured in HDR and tone mapped to the 8-bit zones. (default <c>false</c>)
+    /// </summary>
+    /// <remarks>
+    /// Without it, Windows converts the HDR image of a display showing HDR to 8 bits itself.
+    /// With it, the capture gets the 16-bit image and maps it on the GPU: colors up to SDR white (the "SDR content brightness" setting of the display)
+    /// get the values they have on an SDR display, brighter colors are scaled down as a whole (keeping their hue), and colors outside of the sRGB gamut are clamped to it.
+    /// Displays that don't show HDR are captured in 16 bits too and get the same colors as without it; that costs some GPU time per frame.
+    /// </remarks>
+    public bool CaptureHdr { get; init; }
+
     #endregion
 
     #region Methods

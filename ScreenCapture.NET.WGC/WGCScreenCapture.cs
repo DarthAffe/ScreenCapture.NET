@@ -86,6 +86,9 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
     // The size of the frames when the capture started (the one of the display). Only used under _captureLock.
     private SizeInt32 _frameSize;
 
+    // Reads the SDR white level of the display for HDR frames; null if Windows has no target for it. Only used under _captureLock.
+    private WindowsDisplayDevices.MonitorTarget? _monitorTarget;
+
     // Holds the frame and writes the zones from it. Initialized by every restart with the new device, released before the device is disposed.
     private readonly D3D11ZonePipeline _zonePipeline;
 
@@ -184,7 +187,14 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
             {
                 // Frames are in the orientation of the display. The texture of the frame pool can be larger than its content (it's copied from the top left).
                 using (ID3D11Texture2D texture = GetTexture(frame))
-                    _zonePipeline.CopyFrame(texture);
+                    if (texture.Description.Format == Format.R16G16B16A16_Float)
+                    {
+                        // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
+                        float? sdrWhiteLevel = (_monitorTarget is { } monitorTarget) && monitorTarget.TryGetSdrWhiteLevel(out float whiteLevel) ? whiteLevel : null;
+                        _zonePipeline.ToneMapFrame(texture, sdrWhiteLevel);
+                    }
+                    else
+                        _zonePipeline.CopyFrame(texture);
 
                 timestamp = ToStopwatchTimestamp(GetSystemRelativeTime(frame));
             }
@@ -298,8 +308,8 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
 
                 // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
                 // and after displays were added or removed the indices can point to another adapter or output.
-                (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _) = DXGIDevices.FindDisplay(_factory, Display.Id)
-                                                                                         ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+                (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DXGIDevices.FindDisplay(_factory, Display.Id)
+                                                                                                      ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
                 using IDXGIAdapter1 adapter = foundAdapter;
                 using IDXGIOutput output = foundOutput;
 
@@ -326,14 +336,15 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
 
                 _itemClosedToken = AddClosed(_item, new ItemClosedHandler(() => OnItemClosed(generation)));
 
-                _framePool = CreateFreeThreadedFramePool(_direct3DDevice, PIXEL_FORMAT_BGRA8, FRAME_POOL_BUFFERS, size);
+                // In HDR every display is captured in 16 bits: a display can switch to HDR without a mode change.
+                _framePool = CreateFreeThreadedFramePool(_direct3DDevice, Options.CaptureHdr ? PIXEL_FORMAT_RGBA16F : PIXEL_FORMAT_BGRA8, FRAME_POOL_BUFFERS, size);
                 _frameArrivedToken = AddFrameArrived(_framePool, new FrameArrivedHandler(framePool => OnFrameArrived(framePool, generation)));
                 _frameSize = size;
 
                 _session = CreateCaptureSession(_framePool, _item);
 
-                // Windows would draw the mouse pointer into the frames (before Windows 10 2004 it always does).
-                TrySetCursorCaptureEnabled(_session, false);
+                // Without the option Windows would draw the mouse pointer into the frames anyway (before Windows 10 2004 it always does).
+                TrySetCursorCaptureEnabled(_session, Options.DrawCursor);
                 TrySetBorderRequired(_session, Options.ShowBorder);
                 StartCapture(_session);
 
@@ -398,6 +409,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
         _direct3DDevice = null;
         _context = null;
         _device = null;
+        _monitorTarget = null;
     }
 
     #endregion
