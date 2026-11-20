@@ -58,6 +58,28 @@ internal static partial class X11
     [LibraryImport("libX11.so.6")]
     internal static partial nint XSetErrorHandler(nint handler);
 
+    /// <summary>
+    /// Installs a process-wide handler for broken connections (<c>int (*)(Display*)</c>) and returns the previous one (Xlib's default if none was installed).
+    /// </summary>
+    /// <remarks>
+    /// Xlib's default handler prints the error and terminates the process. After a handler returns, Xlib calls the exit handler of the display (see <see cref="XSetIOErrorExitHandler"/>).
+    /// </remarks>
+    [LibraryImport("libX11.so.6")]
+    internal static partial nint XSetIOErrorHandler(nint handler);
+
+    /// <summary>
+    /// Sets what Xlib calls on a broken connection after the I/O error handler returned (<c>void (*)(Display*, void*)</c>), instead of terminating the process. libX11 1.7 and newer.
+    /// </summary>
+    /// <remarks>
+    /// If it returns, the failing call returns a failure and every later call on the display returns at once.
+    /// </remarks>
+    /// <exception cref="System.EntryPointNotFoundException">libX11 is older than 1.7.</exception>
+    [LibraryImport("libX11.so.6")]
+    internal static partial void XSetIOErrorExitHandler(nint display, nint handler, nint userData);
+
+    [LibraryImport("libX11.so.6")]
+    internal static partial void XUnlockDisplay(nint display);
+
     [LibraryImport("libX11.so.6")]
     internal static partial int XCloseDisplay(nint display);
 

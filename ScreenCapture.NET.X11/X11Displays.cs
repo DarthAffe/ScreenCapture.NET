@@ -40,6 +40,7 @@ internal static class X11Displays
     /// <summary>
     /// Gets all displays of the server: the active monitors of every screen in the order of the server, or the whole screen if it has none (or the server has no RandR 1.5).
     /// </summary>
+    /// <exception cref="InvalidOperationException">The connection broke meanwhile.</exception>
     public static List<X11Display> GetDisplays(X11DisplayHandle display)
     {
         GraphicsCard graphicsCard = GetGraphicsCard(display);
@@ -62,6 +63,10 @@ internal static class X11Displays
                                             screenNumber, default));
         }
 
+        // A broken connection reads no monitors, which looks like a server without them.
+        if (display.IsConnectionLost)
+            throw new InvalidOperationException($"Reading the displays failed: the connection to the X server '{graphicsCard.Id}' was lost.");
+
         return displays;
     }
 
@@ -69,6 +74,7 @@ internal static class X11Displays
     /// Finds the display with the given id as it is now.
     /// </summary>
     /// <returns>The display; <c>null</c> if the server has no display with the id (anymore).</returns>
+    /// <exception cref="InvalidOperationException">The connection broke meanwhile.</exception>
     public static X11Display? Find(X11DisplayHandle display, string id)
     {
         foreach (X11Display x11Display in GetDisplays(display))
@@ -81,7 +87,7 @@ internal static class X11Displays
     /// <summary>
     /// Reads where a monitor is now. One round trip, without the names (see <see cref="GetDisplays"/>).
     /// </summary>
-    /// <returns><c>false</c> if the screen of the root window has no active monitor with the name (anymore).</returns>
+    /// <returns><c>false</c> if the screen of the root window has no active monitor with the name (anymore), or the connection broke.</returns>
     public static unsafe bool TryGetMonitorRegion(X11DisplayHandle display, CULong root, CULong monitor, out CaptureRegion region)
     {
         X11.XRRMonitorInfo* monitors = X11.XRRGetMonitors(display, root, getActive: true, out int count);

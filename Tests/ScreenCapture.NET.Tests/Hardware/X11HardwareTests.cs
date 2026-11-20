@@ -11,7 +11,7 @@ namespace ScreenCapture.NET.Tests.Hardware;
 [TestCategory(HardwareTestHelper.CATEGORY)]
 [OSCondition(OperatingSystems.Linux)]
 [SupportedOSPlatform("linux")]
-public sealed class X11HardwareTests
+public sealed partial class X11HardwareTests
 {
     [TestMethod]
     public void EnumeratesDisplays()
@@ -328,6 +328,77 @@ public sealed class X11HardwareTests
         display.ClearError();
         Assert.IsNull(display.LastError);
     }
+
+    /// <summary>
+    /// A broken connection reads no monitors, so without a check the displays would be the whole screens with their last known size.
+    /// </summary>
+    [TestMethod]
+    public void DisplaysOfBrokenConnectionAreNotRead()
+    {
+        using XvfbServer server = XvfbServer.Start();
+        using X11DisplayHandle display = X11DisplayHandle.Open(server.DisplayName);
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
+        Assert.AreEqual("screen", X11Displays.GetDisplays(display).Single().Display.DeviceName);
+
+        server.Kill();
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(() => X11Displays.GetDisplays(display));
+        Assert.AreEqual($"Reading the displays failed: the connection to the X server '{server.DisplayName}' was lost.", exception.Message);
+    }
+
+    /// <summary>
+    /// Xlib locks a broken connection for the thread that found it before it calls the handlers (see <see cref="X11ErrorHandler"/>):
+    /// unless the lock is released, any other thread that uses or closes the connection waits forever.
+    /// </summary>
+    [TestMethod]
+    public void BrokenConnectionCanBeClosedFromAnotherThread()
+    {
+        TimeSpan timeout = TimeSpan.FromSeconds(5);
+
+        using XvfbServer server = XvfbServer.Start();
+        X11DisplayHandle display = X11DisplayHandle.Open(server.DisplayName);
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
+        Assert.IsFalse(display.IsConnectionLost);
+        server.Kill();
+
+        // Xlib compares pthread_t, which a new thread can reuse once a thread ended: the thread that found the broken connection lives until the other one is done.
+        using ManualResetEventSlim found = new();
+        using ManualResetEventSlim release = new();
+        nuint foundOn = 0;
+        Thread finder = new(() =>
+        {
+            foundOn = pthread_self();
+            _ = X11.XSync(display, false);
+            found.Set();
+            release.Wait();
+        }) { IsBackground = true };
+
+        nuint closedOn = 0;
+        Thread closer = new(() =>
+        {
+            closedOn = pthread_self();
+            _ = X11.XSync(display, false);
+            display.Dispose();
+        }) { IsBackground = true };
+
+        try
+        {
+            finder.Start();
+            Assert.IsTrue(found.Wait(timeout), "The sync didn't return.");
+            Assert.IsTrue(display.IsConnectionLost);
+            Assert.IsNull(display.LastError);
+
+            closer.Start();
+            Assert.IsTrue(closer.Join(timeout), "Another thread couldn't use the broken connection.");
+            Assert.AreNotEqual(foundOn, closedOn);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    [LibraryImport("libc")]
+    private static partial nuint pthread_self();
 
     /// <summary>
     /// The fourth byte of a depth-24 visual is padding that every server fills as it likes (Xvfb: 0, xorgxrdp: 255),
@@ -649,6 +720,67 @@ public sealed class X11HardwareTests
         server.Xrandr("--setmonitor", "box", "200/1x100/1+100+100", "none");
         HardwareTestHelper.CaptureFrame(screenCapture);
         Assert.AreEqual(box, screenCapture.Display);
+    }
+
+    /// <summary>
+    /// A connection the server breaks (here it's killed, like a crash or a restart) made Xlib's default I/O error handler end the process, here the test host.
+    /// The capture is unavailable while the server is gone and captures again once it's back.
+    /// </summary>
+    /// <param name="randrExtension">With RandR the display is a monitor, and the monitor check runs into the broken connection first; without it the read of the screen does.</param>
+    /// <param name="useSharedMemory">Whether the screen is read with <c>XShmGetImage</c> or <c>XGetSubImage</c>.</param>
+    /// <param name="failedCall">The call that runs into the broken connection.</param>
+    [TestMethod]
+    [DataRow(true, true, "XRRGetMonitors")]
+    [DataRow(false, true, "XShmGetImage")]
+    [DataRow(false, false, "XGetSubImage")]
+    public void LostConnectionIsUnavailableUntilTheServerIsBack(bool randrExtension, bool useSharedMemory, string failedCall)
+    {
+        using XvfbServer server = XvfbServer.Start(randrExtension: randrExtension);
+        using X11ScreenCaptureService service = new(new X11CaptureOptions { UseSharedMemory = useSharedMemory }, server.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        List<Exception> errors = [];
+        screenCapture.ErrorOccurred += (_, e) => errors.Add(e.Exception);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        server.Kill();
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+
+        // It found the broken connection, then couldn't connect again.
+        Assert.HasCount(2, errors, $"Errors: {string.Join(" | ", errors)}");
+        Assert.AreEqual($"{failedCall} failed: the connection to the X server was lost.", errors[0].Message);
+        StringAssert.Contains(errors[1].Message, $"Couldn't connect to the X server '{server.DisplayName}'");
+
+        server.Restart();
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        CaptureResult result;
+        while (((result = screenCapture.CaptureScreen()) != CaptureResult.NewFrame) && (stopwatch.Elapsed < TimeSpan.FromSeconds(5)))
+            Thread.Sleep(20);
+
+        Assert.AreEqual(CaptureResult.NewFrame, result, $"The capture didn't come back: {screenCapture.LastError}");
+        Assert.AreEqual(display, screenCapture.Display);
+    }
+
+    /// <summary>
+    /// Closing the connection (<c>XCloseDisplay</c>) syncs with the server, so it runs into a connection that broke since the last capture.
+    /// </summary>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void CaptureOfLostServerCanBeDisposed(bool useSharedMemory)
+    {
+        using XvfbServer server = XvfbServer.Start();
+        using X11ScreenCaptureService service = new(new X11CaptureOptions { UseSharedMemory = useSharedMemory }, server.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        server.Kill();
+        screenCapture.Dispose();
     }
 
     private static ColorBGRA[] CaptureWholeDisplay(X11ScreenCapture screenCapture)

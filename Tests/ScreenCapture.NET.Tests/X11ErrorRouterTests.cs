@@ -53,6 +53,50 @@ public sealed unsafe class X11ErrorRouterTests
         Assert.IsNull(errors.LastError);
     }
 
+    [TestMethod]
+    public void BrokenConnectionOfOwnDisplayIsRecorded()
+    {
+        X11ErrorRouter router = new() { PreviousIOErrorHandler = (nint)(delegate* unmanaged[Cdecl]<nint, int>)&CountingIOErrorHandler };
+        nint display = 0x1005;
+        X11ErrorRouter.DisplayErrors errors = router.Register(display);
+        _forwardedCalls = 0;
+
+        Assert.AreEqual(0, router.OnIOError(display));
+        Assert.IsTrue(errors.IsConnectionLost);
+        Assert.IsNull(errors.LastError);
+        Assert.AreEqual(0, _forwardedCalls);
+
+        // It stays broken.
+        errors.Clear();
+        Assert.IsTrue(errors.IsConnectionLost);
+    }
+
+    [TestMethod]
+    public void BrokenConnectionOfOtherDisplayIsPassedOn()
+    {
+        X11ErrorRouter router = new() { PreviousIOErrorHandler = (nint)(delegate* unmanaged[Cdecl]<nint, int>)&CountingIOErrorHandler };
+        X11ErrorRouter.DisplayErrors errors = router.Register(0x1006);
+        nint display = 0x1007;
+        _forwardedCalls = 0;
+
+        Assert.AreEqual(43, router.OnIOError(display));
+        Assert.AreEqual(1, _forwardedCalls);
+        Assert.AreEqual(display, _forwardedDisplay);
+        Assert.IsFalse(errors.IsConnectionLost);
+    }
+
+    [TestMethod]
+    public void BrokenConnectionOfUnregisteredDisplayIsNotRecorded()
+    {
+        X11ErrorRouter router = new();
+        nint display = 0x1008;
+        X11ErrorRouter.DisplayErrors errors = router.Register(display);
+        router.Unregister(display, errors);
+
+        Assert.AreEqual(0, router.OnIOError(display));
+        Assert.IsFalse(errors.IsConnectionLost);
+    }
+
     /// <summary>
     /// A closed display's address can be reused by a new display before the old one is unregistered.
     /// </summary>
@@ -101,6 +145,14 @@ public sealed unsafe class X11ErrorRouterTests
         };
 
         return router.OnError(display, &error);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int CountingIOErrorHandler(nint display)
+    {
+        _forwardedCalls++;
+        _forwardedDisplay = display;
+        return 43;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

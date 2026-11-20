@@ -15,7 +15,11 @@ internal sealed partial class XvfbServer : IDisposable
 {
     #region Properties & Fields
 
-    private readonly Process _process;
+    // The arguments of Xvfb without a display name, and whether it runs in its own IPC namespace.
+    private readonly List<string> _arguments;
+    private readonly bool _ownIpcNamespace;
+
+    private Process _process;
 
     /// <summary>
     /// Gets the name of the X display (e.g. <c>:3</c>) to connect to.
@@ -26,8 +30,10 @@ internal sealed partial class XvfbServer : IDisposable
 
     #region Constructors
 
-    private XvfbServer(Process process, string displayName)
+    private XvfbServer(List<string> arguments, bool ownIpcNamespace, Process process, string displayName)
     {
+        this._arguments = arguments;
+        this._ownIpcNamespace = ownIpcNamespace;
         this._process = process;
         this.DisplayName = displayName;
     }
@@ -53,6 +59,38 @@ internal sealed partial class XvfbServer : IDisposable
         if (!randrExtension)
             arguments.AddRange(["-extension", "RANDR"]);
 
+        (Process process, string displayNumber) = Launch(arguments, ownIpcNamespace);
+        return new XvfbServer(arguments, ownIpcNamespace, process, $":{displayNumber}");
+    }
+
+    /// <summary>
+    /// Kills the server, like a crash: its clients' connections break.
+    /// </summary>
+    public void Kill()
+    {
+        if (!_process.HasExited)
+        {
+            // unshare execs Xvfb, so this is the server in both cases.
+            _process.Kill();
+            _process.WaitForExit();
+        }
+    }
+
+    /// <summary>
+    /// Kills the server if it's still running and starts it again with the same display name and arguments (but none of its state, e.g. the root pattern).
+    /// </summary>
+    public void Restart()
+    {
+        Kill();
+        _process.Dispose();
+
+        // An explicit display number is used as is; -displayfd still tells when the server is ready.
+        (_process, string displayNumber) = Launch([DisplayName, .. _arguments], _ownIpcNamespace);
+        Assert.AreEqual(DisplayName, $":{displayNumber}", "The server restarted with another display.");
+    }
+
+    private static (Process process, string displayNumber) Launch(List<string> arguments, bool ownIpcNamespace)
+    {
         // -r maps the user to root in a new user namespace, which allows the IPC namespace without privileges.
         ProcessStartInfo startInfo = ownIpcNamespace ? new ProcessStartInfo("unshare", ["-r", "--ipc", "Xvfb", .. arguments]) : new ProcessStartInfo("Xvfb", arguments);
         startInfo.UseShellExecute = false;
@@ -91,7 +129,7 @@ internal sealed partial class XvfbServer : IDisposable
             }
         }
 
-        return new XvfbServer(process, $":{displayNumber}");
+        return (process, displayNumber);
     }
 
     /// <summary>
@@ -206,13 +244,7 @@ internal sealed partial class XvfbServer : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        if (!_process.HasExited)
-        {
-            // unshare execs Xvfb, so this is the server in both cases.
-            _process.Kill();
-            _process.WaitForExit();
-        }
-
+        Kill();
         _process.Dispose();
     }
 

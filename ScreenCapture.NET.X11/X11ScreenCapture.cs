@@ -10,10 +10,16 @@ namespace ScreenCapture.NET;
 /// https://x.org/releases/current/doc/libX11/libX11/libX11.html#XGetImage
 /// </summary>
 /// <remarks>
-/// The first connection to the X server installs a process-wide Xlib error handler (<c>XSetErrorHandler</c>) that stays installed.
-/// It records errors of this library's connections (a failed capture restarts instead of Xlib terminating the process)
-/// and passes errors of all other connections to the handler that was installed before.
-/// If other code installs its own handler afterwards without passing errors on, X errors of the capture are handled by that code.
+/// The first connection to the X server installs process-wide Xlib error handlers that stay installed: one for errors of requests (<c>XSetErrorHandler</c>)
+/// and, with libX11 1.7 or newer, one for broken connections (<c>XSetIOErrorHandler</c>).
+/// They handle the errors of this library's connections instead of Xlib terminating the process, and pass the errors of all other connections to the handlers that were installed before.
+/// If other code installs its own handlers afterwards without passing errors on, the errors of the capture are handled by that code.
+/// <para>
+/// A failed request or a broken connection makes the capture restart. While the X server can't be reached (e.g. it stopped, or the network to a remote server failed),
+/// the capture is <see cref="CaptureResult.Unavailable"/>; it captures again once the server is back.
+/// With a libX11 older than 1.7, Xlib still terminates the process when a connection breaks.
+/// A connection that stops responding without breaking (e.g. on a network that drops all packets) blocks the capture until the system gives up on it, which can take minutes.
+/// </para>
 /// <para>
 /// A display is a RandR monitor, a rectangle of an X screen (see <see cref="X11ScreenCaptureService.GetDisplays"/>), and only that rectangle is read.
 /// Every capture checks where the monitor is (one more round trip to the server): a monitor that was moved or resized makes the capture restart with it
@@ -103,17 +109,23 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             // A monitor is only a rectangle of the screen: reading it after it was moved, resized or removed would succeed with the wrong pixels.
             if ((_monitor.Value != 0) && !IsMonitorUnchanged(_display, _drawable, _monitor, new CaptureRegion(_x, _y, _image.Width, _image.Height)))
+            {
+                // A broken connection reads no monitors either.
+                if (_display.IsConnectionLost)
+                    ReportError(new InvalidOperationException($"XRRGetMonitors failed{DescribeFailure(_display)}."));
+
                 return RestartCapture();
+            }
 
             _display.ClearError();
             bool read = _image.IsShared
                             ? X11.XShmGetImage(_display, _drawable, _image, _x, _y, X11.ALL_PLANES)
                             : X11.XGetSubImage(_display, _drawable, _x, _y, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0) != 0;
 
-            // E.g. BadMatch if the screen got smaller than the image. Starting over picks up the current state.
+            // E.g. BadMatch if the screen got smaller than the image, or a broken connection. Starting over picks up the current state.
             if (!read || (_display.LastError != null))
             {
-                ReportError(new InvalidOperationException($"{(_image.IsShared ? "XShmGetImage" : "XGetSubImage")} failed{FormatXError(_display.LastError)}."));
+                ReportError(new InvalidOperationException($"{(_image.IsShared ? "XShmGetImage" : "XGetSubImage")} failed{DescribeFailure(_display)}."));
                 return RestartCapture();
             }
 
@@ -125,7 +137,10 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private static bool IsMonitorUnchanged(X11DisplayHandle display, CULong root, CULong monitor, CaptureRegion region)
         => X11Displays.TryGetMonitorRegion(display, root, monitor, out CaptureRegion current) && (current == region);
 
-    private static string FormatXError(X11Error? error) => error == null ? string.Empty : $" with {error}";
+    private static string DescribeFailure(X11DisplayHandle display)
+        => display.IsConnectionLost ? ": the connection to the X server was lost"
+         : display.LastError is { } error ? $" with {error}"
+         : string.Empty;
 
     /// <inheritdoc />
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
@@ -178,7 +193,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 {
                     image = X11.XGetImage(display, drawable, current.X, current.Y, (uint)current.Width, (uint)current.Height, X11.ALL_PLANES, X11.ZPIXMAP);
                     if (image.IsInvalid || (display.LastError != null))
-                        throw new InvalidOperationException($"XGetImage of the {current.Width}x{current.Height} display at {current.X}, {current.Y} failed{FormatXError(display.LastError)}.");
+                        throw new InvalidOperationException($"XGetImage of the {current.Width}x{current.Height} display at {current.X}, {current.Y} failed{DescribeFailure(display)}.");
 
                     image.ReadDescription();
                 }
