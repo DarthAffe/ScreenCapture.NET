@@ -55,11 +55,10 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
             Dictionary<string, GraphicsCard> graphicsCards = new(StringComparer.Ordinal);
             for (int i = 0; i < _direct3D9.AdapterCount; i++)
             {
+                // The first adapter of each card creates it.
                 string id = DX9Devices.GetGraphicsCardId(_direct3D9, i);
-                if (graphicsCards.ContainsKey(id)) continue;
-
-                AdapterIdentifier adapterIdentifier = _direct3D9.GetAdapterIdentifier(i);
-                graphicsCards.Add(id, new GraphicsCard(id, i, adapterIdentifier.Description, adapterIdentifier.VendorId, adapterIdentifier.DeviceId));
+                if (!graphicsCards.ContainsKey(id))
+                    graphicsCards.Add(id, DX9Devices.CreateGraphicsCard(_direct3D9, i));
             }
 
             return graphicsCards.Values;

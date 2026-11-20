@@ -191,7 +191,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             for (int i = 0; i < captureZones.Length; i++)
                 updated[i] = TryUpdateCaptureZone(captureZones[i], frameNumber);
 
-            // Raised after the loop and without holding any lock, so handlers can (un)register or update zones and lock other zones.
+            // Raised after the loop, so every zone shows this frame before any handler runs (e.g. a handler of one zone that reads another).
+            // No lock is held: handlers can (un)register or update zones and lock other zones.
             for (int i = 0; i < captureZones.Length; i++)
                 if (updated[i])
                     captureZones[i].RaiseUpdated();
@@ -261,6 +262,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             if (version == _appliedDisplayVersion) return;
         }
 
+        // Read under the lock (not just with Volatile.Read): it waits for a register that runs right now. That one may have created its zone with the old display,
+        // and would only add it to the array after this walked it.
         CaptureZone<TColor>[] captureZones;
         lock (_captureZonesLock)
             captureZones = _captureZones;

@@ -24,7 +24,6 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private IDirect3DDevice9? _device;
     private IDirect3DSurface9? _surface;
 
-    // Replaced under _captureLock, but read by zone updates without it: the pixels and their size always belong together.
     // The frame read from the surface, replaced by restarts. Only used under _captureLock.
     private FrameBuffer? _frame;
 
@@ -190,15 +189,11 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     private void DisposeDX()
     {
-        try
-        {
-            try { _surface?.Dispose(); } catch { /**/}
-            try { _device?.Dispose(); } catch { /**/}
-            _frame = null;
-            _device = null;
-            _surface = null;
-        }
-        catch { /**/ }
+        try { _surface?.Dispose(); } catch { /**/}
+        try { _device?.Dispose(); } catch { /**/}
+        _frame = null;
+        _device = null;
+        _surface = null;
     }
 
     #endregion

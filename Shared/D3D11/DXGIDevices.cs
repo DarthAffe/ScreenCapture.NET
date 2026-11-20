@@ -39,15 +39,12 @@ internal static class DXGIDevices
         List<Display> displays = [];
 
         // The card is found by its id: its index can point to another adapter by now (e.g. after an adapter was added or removed).
-        int index = FindAdapterIndex(factory, graphicsCard.Id);
-        if (index < 0) return displays;
+        if (FindAdapter(factory, graphicsCard.Id) is not (IDXGIAdapter1 adapter, int index)) return displays;
+        using IDXGIAdapter1 _ = adapter;
 
         // The captures open the adapter by its index.
         graphicsCard = graphicsCard with { Index = index };
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
-
-        factory.EnumAdapters1(index, out IDXGIAdapter1 adapter).CheckError();
-        using IDXGIAdapter1 _ = adapter;
 
         for (int i = 0; ; i++)
         {
@@ -61,16 +58,20 @@ internal static class DXGIDevices
         }
     }
 
-    private static int FindAdapterIndex(IDXGIFactory1 factory, string id)
+    // The caller disposes the adapter.
+    private static (IDXGIAdapter1 Adapter, int Index)? FindAdapter(IDXGIFactory1 factory, string id)
     {
         for (int i = 0; ; i++)
         {
-            bool found = factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
-            using (adapter)
+            if (!factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success)
             {
-                if (!found) return -1;
-                if (string.Equals(WindowsDisplayDevices.GetGraphicsCardId(adapter.Description1.Luid), id, StringComparison.Ordinal)) return i;
+                adapter?.Dispose();
+                return null;
             }
+
+            if (string.Equals(WindowsDisplayDevices.GetGraphicsCardId(adapter.Description1.Luid), id, StringComparison.Ordinal)) return (adapter, i);
+
+            adapter.Dispose();
         }
     }
 
