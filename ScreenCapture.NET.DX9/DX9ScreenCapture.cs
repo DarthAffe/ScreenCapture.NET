@@ -28,8 +28,6 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     // The frame read from the surface, replaced by restarts. Only used under _captureLock.
     private FrameBuffer? _frame;
 
-    private bool _isDisposed;
-
     /// <summary>
     /// Gets the options this capture was created with.
     /// </summary>
@@ -145,7 +143,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         lock (_captureLock)
         {
             // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
-            if (_isDisposed) return false;
+            if (IsDisposed) return false;
 
             DisposeDX();
 
@@ -184,13 +182,10 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_isDisposed) return;
-        _isDisposed = true;
-
-        base.Dispose(disposing);
-
         lock (_captureLock)
             DisposeDX();
+
+        base.Dispose(disposing);
     }
 
     private void DisposeDX()

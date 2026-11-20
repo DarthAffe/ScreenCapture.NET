@@ -40,25 +40,44 @@ public sealed class DisposalTests
         screenCapture.Dispose();
 
         Assert.AreEqual(1, screenCapture.Disposals);
-        Assert.IsTrue(screenCapture.IsDisposed);
+        Assert.IsTrue(screenCapture.DisposedBeforeRelease, "IsDisposed wasn't set before the override ran.");
         Assert.ThrowsExactly<ObjectDisposedException>(() => screenCapture.CaptureScreen());
     }
 
+    [TestMethod]
+    public void ConcurrentDisposeRunsTheOverrideOnce()
+    {
+        for (int round = 0; round < 100; round++)
+        {
+            CountingScreenCapture screenCapture = new();
+            using Barrier barrier = new(4);
+
+            Task[] disposals = [.. Enumerable.Range(0, barrier.ParticipantCount).Select(_ => Task.Factory.StartNew(() =>
+            {
+                barrier.SignalAndWait();
+                screenCapture.Dispose();
+            }, TaskCreationOptions.LongRunning))];
+
+            Assert.IsTrue(Task.WaitAll(disposals, TimeSpan.FromSeconds(10)));
+            Assert.AreEqual(1, screenCapture.Disposals, $"Round {round}.");
+        }
+    }
+
     /// <summary>
-    /// Follows the pattern documented on <see cref="AbstractScreenCapture{TColor}.Dispose(bool)"/>.
+    /// Follows the pattern documented on <see cref="AbstractScreenCapture{TColor}.Dispose(bool)"/>: no own flag, the base runs it once.
     /// </summary>
     private sealed class CountingScreenCapture : TestScreenCapture
     {
-        private bool _isDisposed;
+        private int _disposals;
 
-        public int Disposals { get; private set; }
+        public int Disposals => Volatile.Read(ref _disposals);
+
+        public bool DisposedBeforeRelease { get; private set; }
 
         protected override void Dispose(bool disposing)
         {
-            if (_isDisposed) return;
-            _isDisposed = true;
-
-            Disposals++;
+            DisposedBeforeRelease = IsDisposed;
+            Interlocked.Increment(ref _disposals);
 
             base.Dispose(disposing);
         }

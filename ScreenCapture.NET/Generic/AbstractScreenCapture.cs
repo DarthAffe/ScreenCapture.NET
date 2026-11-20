@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using HPPH;
 
@@ -664,27 +665,32 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Don't throw: report errors with <see cref="ReportError"/> and return <c>false</c> (exceptions are reported and count as a failed restart).
     /// After a failed restart, <see cref="RestartCapture"/> waits 100 ms before the next attempt, doubling with every further failure up to 2 s.
     /// <para>
-    /// It can run concurrently with <see cref="PerformScreenCapture"/> (from <see cref="Restart"/>) and must return <c>false</c> once the capture is disposed.
+    /// It can run concurrently with <see cref="PerformScreenCapture"/> (from <see cref="Restart"/>) and must return <c>false</c> once the capture is disposed: check <see cref="IsDisposed"/> under the lock <see cref="Dispose(bool)"/> releases the resources under.
     /// </para>
     /// </remarks>
     /// <returns><c>true</c> if the capture runs; otherwise <c>false</c>.</returns>
     protected abstract bool PerformRestart();
 
     /// <inheritdoc />
+    [SuppressMessage("Design", "CA1063:Implement IDisposable Correctly", Justification = "Dispose(bool) runs only once, so backends don't need their own flag; the flag is set before it runs, so a racing PerformRestart sees it.")]
     public void Dispose()
     {
+        // Set before the backend releases its resources: a restart racing the dispose sees it under the backend's lock.
+        if (Interlocked.Exchange(ref _isDisposed, true)) return;
+
         Dispose(true);
         GC.SuppressFinalize(this);
     }
 
     /// <summary>
-    /// Releases the resources of this screen capture and marks it as disposed.
+    /// Releases the resources of this screen capture.
     /// </summary>
     /// <remarks>
-    /// This can be called more than once. Overrides release their resources only on the first call, call the base implementation and never throw.
+    /// Called once, by the first <see cref="Dispose()"/>: <see cref="IsDisposed"/> is already <c>true</c>. Overrides call the base implementation and never throw.
+    /// Release the resources under the lock <see cref="PerformRestart"/> uses, and check <see cref="IsDisposed"/> there, so a restart doesn't create resources that outlive the capture.
     /// </remarks>
     /// <param name="disposing">Always <c>true</c>: screen captures have no finalizer.</param>
-    protected virtual void Dispose(bool disposing) => _isDisposed = true;
+    protected virtual void Dispose(bool disposing) { }
 
     #endregion
 

@@ -38,8 +38,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     // The zone pipeline guards its zone textures with a lock of its own, acquired after this one; Unregister takes only that one.
     private readonly Lock _captureLock = new();
 
-    private bool _isDisposed;
-
     /// <summary>
     /// Gets the options this capture was created with.
     /// </summary>
@@ -281,7 +279,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         lock (_captureLock)
         {
             // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
-            if (_isDisposed) return false;
+            if (IsDisposed) return false;
 
             try
             {
@@ -328,13 +326,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_isDisposed) return;
-        _isDisposed = true;
-
-        base.Dispose(disposing);
-
         lock (_captureLock)
             DisposeDX();
+
+        base.Dispose(disposing);
     }
 
     private void DisposeDX()

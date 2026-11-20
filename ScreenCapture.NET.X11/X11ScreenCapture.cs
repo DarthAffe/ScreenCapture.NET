@@ -47,8 +47,6 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private int _y;
     private CULong _monitor;
 
-    private bool _isDisposed;
-
     // The X display (server) to connect to; null for the one named by $DISPLAY.
     private readonly string? _displayName;
 
@@ -155,7 +153,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         lock (_captureLock)
         {
             // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
-            if (_isDisposed) return false;
+            if (IsDisposed) return false;
 
             DisposeHandles();
 
@@ -217,13 +215,10 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_isDisposed) return;
-        _isDisposed = true;
-
-        base.Dispose(disposing);
-
         lock (_captureLock)
             DisposeHandles();
+
+        base.Dispose(disposing);
     }
 
     private void DisposeHandles()
