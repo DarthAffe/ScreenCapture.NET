@@ -13,7 +13,7 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     #region Properties & Fields
 
-    private X11ErrorHandler.DisplayErrors? _errors;
+    private X11ErrorRouter.DisplayErrors? _errors;
 
     /// <summary>
     /// Gets the last X error of a request on this connection since <see cref="ClearError"/>.

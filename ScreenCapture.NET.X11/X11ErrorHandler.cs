@@ -35,23 +35,7 @@ internal static unsafe class X11ErrorHandler
     private static readonly Lock INSTALL_LOCK = new();
     private static bool _isInstalled;
 
-    private static readonly ConcurrentDictionary<nint, DisplayErrors> DISPLAYS = new();
-
-    private static nint _previousHandler;
-
-    /// <summary>
-    /// Gets or sets the handler errors for unknown displays are passed to. Set by the installation; tests can replace it.
-    /// </summary>
-    internal static nint PreviousHandler
-    {
-        get => Volatile.Read(ref _previousHandler);
-        set => Volatile.Write(ref _previousHandler, value);
-    }
-
-    /// <summary>
-    /// Gets the handler function.
-    /// </summary>
-    internal static delegate* unmanaged[Cdecl]<nint, X11.XErrorEvent*, int> Handler => &OnError;
+    private static readonly X11ErrorRouter ROUTER = new();
 
     #endregion
 
@@ -62,21 +46,70 @@ internal static unsafe class X11ErrorHandler
     /// </summary>
     /// <param name="display">The <c>Display*</c>.</param>
     /// <returns>The errors of the display.</returns>
-    internal static DisplayErrors Register(nint display)
+    internal static X11ErrorRouter.DisplayErrors Register(nint display)
     {
         EnsureInstalled();
-        return Track(display);
+        return ROUTER.Register(display);
     }
 
+    /// <inheritdoc cref="X11ErrorRouter.Unregister"/>
+    internal static void Unregister(nint display, X11ErrorRouter.DisplayErrors errors) => ROUTER.Unregister(display, errors);
+
+    private static void EnsureInstalled()
+    {
+        lock (INSTALL_LOCK)
+        {
+            if (_isInstalled) return;
+
+            // Returns Xlib's default handler if none was installed.
+            ROUTER.PreviousHandler = X11.XSetErrorHandler((nint)(delegate* unmanaged[Cdecl]<nint, X11.XErrorEvent*, int>)&OnError);
+            _isInstalled = true;
+        }
+    }
+
+    // Called by Xlib on the thread that made the failing call. Must not throw: an exception can't cross into native code.
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int OnError(nint display, X11.XErrorEvent* error) => ROUTER.OnError(display, error);
+
+    #endregion
+}
+
+/// <summary>
+/// Records the X errors of the registered displays and passes errors for any other display to <see cref="PreviousHandler"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="X11ErrorHandler"/> routes the errors of the process through one instance.
+/// </remarks>
+internal sealed unsafe class X11ErrorRouter
+{
+    #region Properties & Fields
+
+    private readonly ConcurrentDictionary<nint, DisplayErrors> _displays = new();
+
+    private nint _previousHandler;
+
     /// <summary>
-    /// Records errors for the given display without installing the handler.
+    /// Gets or sets the handler errors for other displays are passed to (a <c>XErrorHandler</c>); <c>0</c> to drop them.
+    /// </summary>
+    public nint PreviousHandler
+    {
+        get => Volatile.Read(ref _previousHandler);
+        set => Volatile.Write(ref _previousHandler, value);
+    }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Records errors for the given display from now on.
     /// </summary>
     /// <param name="display">The <c>Display*</c>.</param>
     /// <returns>The errors of the display.</returns>
-    internal static DisplayErrors Track(nint display)
+    public DisplayErrors Register(nint display)
     {
         DisplayErrors errors = new();
-        DISPLAYS[display] = errors;
+        _displays[display] = errors;
         return errors;
     }
 
@@ -89,26 +122,18 @@ internal static unsafe class X11ErrorHandler
     /// </remarks>
     /// <param name="display">The <c>Display*</c>.</param>
     /// <param name="errors">The errors returned by <see cref="Register"/>.</param>
-    internal static void Unregister(nint display, DisplayErrors errors)
-        => DISPLAYS.TryRemove(new KeyValuePair<nint, DisplayErrors>(display, errors));
+    public void Unregister(nint display, DisplayErrors errors)
+        => _displays.TryRemove(new KeyValuePair<nint, DisplayErrors>(display, errors));
 
-    private static void EnsureInstalled()
+    /// <summary>
+    /// Handles an error like an Xlib error handler. Doesn't throw.
+    /// </summary>
+    /// <param name="display">The <c>Display*</c> of the failed request.</param>
+    /// <param name="error">The error.</param>
+    /// <returns>The result of <see cref="PreviousHandler"/> for other displays; otherwise <c>0</c> (ignored by Xlib).</returns>
+    public int OnError(nint display, X11.XErrorEvent* error)
     {
-        lock (INSTALL_LOCK)
-        {
-            if (_isInstalled) return;
-
-            // Returns Xlib's default handler if none was installed.
-            PreviousHandler = X11.XSetErrorHandler((nint)Handler);
-            _isInstalled = true;
-        }
-    }
-
-    // Called by Xlib on the thread that made the failing call. Must not throw: an exception can't cross into native code.
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static int OnError(nint display, X11.XErrorEvent* error)
-    {
-        if (DISPLAYS.TryGetValue(display, out DisplayErrors? errors))
+        if (_displays.TryGetValue(display, out DisplayErrors? errors))
         {
             errors.LastError = new X11Error(error->error_code, error->request_code, error->minor_code);
             return 0;
