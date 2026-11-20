@@ -193,7 +193,7 @@ internal sealed class D3D11ZonePipeline
     /// with all copies queued first, the first map waits for all of them at once instead of every zone waiting for its own copy.
     /// <para>
     /// Without the zone locks: a zone can change until it's written. Its staging texture remembers what it holds, and the write copies again if that doesn't match.
-    /// Errors are reported to the capture, the writes try again.
+    /// Only zones that already have textures of their size are copied here: new and resized zones get their textures, and their copy, when they're written.
     /// </para>
     /// </remarks>
     public void QueueZoneCopies()
@@ -202,32 +202,23 @@ internal sealed class D3D11ZonePipeline
 
         bool queued = false;
 
-        try
-        {
-            lock (_texturesLock)
-                foreach (CaptureZone<ColorBGRA> captureZone in _host.CaptureZones)
-                {
-                    // Zones that aren't written by this capture (not updated automatically, already showing this frame) skip the copy.
-                    if (!captureZone.IsValid || !(captureZone.AutoUpdate || captureZone.IsUpdateRequested)) continue;
+        lock (_texturesLock)
+            foreach (CaptureZone<ColorBGRA> captureZone in _host.CaptureZones)
+            {
+                // Zones that aren't written by this capture (not updated automatically, already showing this frame) skip the copy.
+                if (!captureZone.IsValid || !(captureZone.AutoUpdate || captureZone.IsUpdateRequested)) continue;
 
-                    // Read separately, so the region and the level can belong to different changes: the size is computed from exactly these values.
-                    CaptureRegion region = captureZone.Region;
-                    if (!region.IsWithin(_display.Width, _display.Height)) continue;
+                // Region and level are read separately and can belong to different changes: then the textures don't fit, or the write copies again.
+                CaptureRegion region = captureZone.Region;
+                if (!region.IsWithin(_display.Width, _display.Height)) continue;
 
-                    (int width, int height, int downscaleLevel) = _host.CalculateScaledSize(region.Width, region.Height, captureZone.DownscaleLevel);
+                if (!_textures.TryGetValue(captureZone, out ZoneTextures? textures)
+                 || !textures.Fits(region.Width, region.Height, captureZone.DownscaleLevel)
+                 || textures.HoldsCopy(_version, region)) continue;
 
-                    ZoneTextures? textures = GetTextures(captureZone, region, width, height, downscaleLevel);
-                    if ((textures == null) || textures.HoldsCopy(_version, region)) continue;
-
-                    CopyToStaging(_context, _captureTexture, textures, region);
-                    queued = true;
-                }
-        }
-        catch (Exception ex)
-        {
-            // E.g. no memory for new textures: the zone update tries again and reports its own error.
-            _host.ReportError(ex);
-        }
+                CopyToStaging(_context, _captureTexture, textures, region);
+                queued = true;
+            }
 
         // Hands the copies to the GPU now: it works on them while the capture raises its events.
         if (queued)
@@ -250,12 +241,11 @@ internal sealed class D3D11ZonePipeline
             // The display of the capture texture: the zone's own one can still be the previous one.
             if (!captureZone.Region.IsWithin(_display.Width, _display.Height)) return false;
 
-            // Under the zone lock these values belong together (and to the zone's buffer).
             CaptureRegion region = captureZone.Region;
-            ZoneTextures? textures = GetTextures(captureZone, region, captureZone.Width, captureZone.Height, captureZone.DownscaleLevel);
+            ZoneTextures? textures = GetTextures(captureZone);
             if (textures == null) return false;
 
-            // Usually queued by QueueZoneCopies. Not if the zone changed since, or wasn't expected to be written (e.g. an update requested meanwhile).
+            // Usually queued by QueueZoneCopies. Not if the zone is new, changed since, or wasn't expected to be written (e.g. an update requested meanwhile).
             if (!textures.HoldsCopy(_version, region))
                 CopyToStaging(_context, _captureTexture, textures, region);
 
@@ -309,17 +299,16 @@ internal sealed class D3D11ZonePipeline
     /// Gets the textures of a zone and (re)creates them if the zone is new or was resized.
     /// </summary>
     /// <remarks>
-    /// Called under the capture lock and <see cref="_texturesLock"/>, with the size the zone had when it was read (the zone lock isn't held while copies are queued).
+    /// Called under the zone lock, the capture lock and <see cref="_texturesLock"/>: the region and the size of the zone belong together (and to its buffer).
     /// Creating them here instead of on register/update means a capture never sees a zone without textures or with textures of the wrong size.
     /// </remarks>
     /// <param name="captureZone">The zone.</param>
-    /// <param name="region">The region of the zone.</param>
-    /// <param name="width">The width of the zone's pixels (after downscaling) for <paramref name="region"/> and <paramref name="downscaleLevel"/>.</param>
-    /// <param name="height">The height of the zone's pixels (after downscaling) for <paramref name="region"/> and <paramref name="downscaleLevel"/>.</param>
-    /// <param name="downscaleLevel">The downscale level of the zone.</param>
     /// <returns>The textures, or <c>null</c> if the zone was unregistered.</returns>
-    private ZoneTextures? GetTextures(CaptureZone<ColorBGRA> captureZone, CaptureRegion region, int width, int height, int downscaleLevel)
+    private ZoneTextures? GetTextures(CaptureZone<ColorBGRA> captureZone)
     {
+        CaptureRegion region = captureZone.Region;
+        int downscaleLevel = captureZone.DownscaleLevel;
+
         if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
         {
             if (textures.Fits(region.Width, region.Height, downscaleLevel)) return textures;
@@ -332,7 +321,7 @@ internal sealed class D3D11ZonePipeline
         // the zone (RemoveZone, under _texturesLock), so creating them only for registered zones means none are left behind.
         if (!_host.CaptureZones.Contains(captureZone)) return null;
 
-        textures = CreateTextures(region, width, height, downscaleLevel);
+        textures = CreateTextures(region, captureZone.Width, captureZone.Height, downscaleLevel);
         _textures.Add(captureZone, textures);
 
         return textures;

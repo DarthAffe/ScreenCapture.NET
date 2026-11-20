@@ -15,15 +15,9 @@ internal interface ID3D11ZonePipelineHost
     /// <inheritdoc cref="AbstractScreenCapture{TColor}.CaptureZones"/>
     IReadOnlyList<CaptureZone<ColorBGRA>> CaptureZones { get; }
 
-    /// <inheritdoc cref="AbstractScreenCapture{TColor}.CalculateScaledSize"/>
-    (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel);
-
     /// <inheritdoc cref="AbstractScreenCapture{TColor}.GetSourceRegion(CaptureRegion, Display)"/>
     CaptureRegion GetSourceRegion(CaptureRegion region, Display display);
 
     /// <inheritdoc cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromScaled"/>
     void WriteCaptureZoneFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation);
-
-    /// <inheritdoc cref="AbstractScreenCapture{TColor}.ReportError"/>
-    void ReportError(Exception exception);
 }

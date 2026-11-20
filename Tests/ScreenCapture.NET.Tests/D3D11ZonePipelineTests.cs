@@ -107,6 +107,10 @@ public sealed class D3D11ZonePipelineTests
         CaptureZone<ColorBGRA> resized = capture.RegisterCaptureZone(new CaptureRegion(8, 0, 16, 8), 1);
         CaptureZone<ColorBGRA> rescaled = capture.RegisterCaptureZone(new CaptureRegion(0, 8, 16, 16), 1);
 
+        // Written once, so the zones have textures and the next capture queues their copies.
+        capture.SetFrame(CreateFrame(display, 1));
+        Assert.AreEqual(CaptureResult.NewFrame, capture.CaptureScreen());
+
         // Like a zone changed on another thread while the capture waits for the GPU: its copy was queued for the old region.
         capture.CopiesQueued = () =>
         {
@@ -374,15 +378,10 @@ public sealed class D3D11ZonePipelineTests
 
         IReadOnlyList<CaptureZone<ColorBGRA>> ID3D11ZonePipelineHost.CaptureZones => CaptureZones;
 
-        (int width, int height, int downscaleLevel) ID3D11ZonePipelineHost.CalculateScaledSize(int width, int height, int downscaleLevel)
-            => CalculateScaledSize(width, height, downscaleLevel);
-
         CaptureRegion ID3D11ZonePipelineHost.GetSourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
 
         void ID3D11ZonePipelineHost.WriteCaptureZoneFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation)
             => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
-
-        void ID3D11ZonePipelineHost.ReportError(Exception exception) => ReportError(exception);
 
         #endregion
     }

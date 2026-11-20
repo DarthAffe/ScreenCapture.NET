@@ -359,15 +359,10 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11
 
     IReadOnlyList<CaptureZone<ColorBGRA>> ID3D11ZonePipelineHost.CaptureZones => CaptureZones;
 
-    (int width, int height, int downscaleLevel) ID3D11ZonePipelineHost.CalculateScaledSize(int width, int height, int downscaleLevel)
-        => CalculateScaledSize(width, height, downscaleLevel);
-
     CaptureRegion ID3D11ZonePipelineHost.GetSourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
 
     void ID3D11ZonePipelineHost.WriteCaptureZoneFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation)
         => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
-
-    void ID3D11ZonePipelineHost.ReportError(Exception exception) => ReportError(exception);
 
     #endregion
 }

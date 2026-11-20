@@ -625,7 +625,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <param name="height">The original height.</param>
     /// <param name="downscaleLevel">The level of downscaling to be used.</param>
     /// <returns>A tuple containing the scaled width, the scaled height and the downscale-level used. (This can be smaller then the one provided if the image is not big enough to scale down that often.)</returns>
-    protected static (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
+    private static (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
     {
         if (downscaleLevel > 0)
             for (int i = 0; i < downscaleLevel; i++)
