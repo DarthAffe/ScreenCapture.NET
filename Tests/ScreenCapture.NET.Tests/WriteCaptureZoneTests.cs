@@ -120,22 +120,6 @@ public sealed class WriteCaptureZoneTests
     }
 
     [TestMethod]
-    public void OverriddenSizeCalculationThrows()
-    {
-        using OtherSizeScreenCapture screenCapture = new();
-        // 9 / 2 is rounded up to 5 instead of down to 4.
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 9, 9), 1);
-        RefImage<ColorARGB> frame = RefImage<ColorARGB>.Wrap(CreateFrame(9, 9, blockSize: 1), 9, 9);
-
-        try
-        {
-            Write(frame, zone);
-            Assert.Fail("No exception.");
-        }
-        catch (InvalidOperationException) { }
-    }
-
-    [TestMethod]
     public void NullZoneThrows()
     {
         RefImage<ColorARGB> frame = RefImage<ColorARGB>.Wrap(CreateFrame(6, 6, blockSize: 1), 6, 6);
@@ -150,14 +134,4 @@ public sealed class WriteCaptureZoneTests
     }
 
     #endregion
-
-    // Rounds the scaled size up instead of down.
-    private sealed class OtherSizeScreenCapture : TestScreenCapture
-    {
-        protected override (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
-        {
-            int factor = 1 << downscaleLevel;
-            return (((width + factor) - 1) / factor, ((height + factor) - 1) / factor, downscaleLevel);
-        }
-    }
 }

@@ -158,12 +158,6 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
         => WriteCaptureZone(frame, captureZone, buffer, rotation);
 
     /// <summary>
-    /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromRegion"/>.
-    /// </summary>
-    public static void WriteFromRegion(RefImage<ColorARGB> region, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)
-        => WriteCaptureZoneFromRegion(region, captureZone, buffer, rotation);
-
-    /// <summary>
     /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromScaled"/>.
     /// </summary>
     public static void WriteFromScaled(RefImage<ColorARGB> scaled, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)

@@ -75,7 +75,7 @@ public sealed class RotatedCaptureZoneTests
                            TestScreenCapture.SourceRegion(new CaptureRegion(10, 20, 300, 400), TestScreenCapture.CreateDisplay(1920, 1080, rotation)));
 
     /// <summary>
-    /// Every region at every level shows the same pixels, whether the frame, the cropped region or the downscaled region is in the native orientation and rotated by the helper
+    /// Every region at every level shows the same pixels, whether the frame or the downscaled region is in the native orientation and rotated by the helper
     /// or the frame is in the orientation of the display.
     /// </summary>
     [TestMethod]
@@ -86,7 +86,6 @@ public sealed class RotatedCaptureZoneTests
     public void NativeOrientationMatchesTheDisplay(ImageRotation rotation)
     {
         using TestScreenCapture screenCapture = new();
-        Display display = TestScreenCapture.CreateDisplay(DISPLAY_WIDTH, DISPLAY_HEIGHT, rotation);
 
         ColorARGB[] displayFrame = CreateDisplayFrame();
         ColorARGB[] nativeFrame = Rotate(displayFrame, DISPLAY_WIDTH, DISPLAY_HEIGHT, Inverse(rotation));
@@ -105,11 +104,6 @@ public sealed class RotatedCaptureZoneTests
 
                             ColorARGB[] fromFrame = Write(zone, buffer => TestScreenCapture.Write(RefImage<ColorARGB>.Wrap(nativeFrame, nativeWidth, nativeHeight), zone, buffer, rotation));
                             CollectionAssert.AreEqual(expected, fromFrame, $"{name}, from the frame.");
-
-                            CaptureRegion source = TestScreenCapture.SourceRegion(zone.Region, display);
-                            (byte[] region, int regionStride) = Crop(nativeFrame, nativeWidth, source);
-                            ColorARGB[] fromRegion = Write(zone, buffer => TestScreenCapture.WriteFromRegion(RefImage<ColorARGB>.Wrap(region, source.Width, source.Height, regionStride), zone, buffer, rotation));
-                            CollectionAssert.AreEqual(expected, fromRegion, $"{name}, from the region.");
 
                             ColorARGB[] scaled = Rotate(expected, zone.Width, zone.Height, Inverse(rotation));
                             (int scaledWidth, int scaledHeight) = PixelHelper.GetRotatedSize(zone.Width, zone.Height, rotation);
@@ -166,22 +160,6 @@ public sealed class RotatedCaptureZoneTests
             Assert.Fail("No exception.");
         }
         catch (ArgumentOutOfRangeException) { }
-    }
-
-    [TestMethod]
-    public void RegionOfAnotherSizeThrows()
-    {
-        using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 6));
-        // 4x6 itself, but 6x4 after the rotation.
-        ColorARGB[] region = new ColorARGB[4 * 6];
-
-        try
-        {
-            Write(zone, buffer => TestScreenCapture.WriteFromRegion(RefImage<ColorARGB>.Wrap(region, 4, 6), zone, buffer, ImageRotation.Rotate90));
-            Assert.Fail("No exception.");
-        }
-        catch (ArgumentException) { }
     }
 
     [TestMethod]

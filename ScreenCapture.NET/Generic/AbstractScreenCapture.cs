@@ -128,7 +128,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     #region Methods
 
     /// <inheritdoc />
-    public virtual CaptureResult CaptureScreen()
+    public CaptureResult CaptureScreen()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
@@ -407,12 +407,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// </summary>
     /// <remarks>
     /// For backends that capture the whole frame into memory; call it from <see cref="PerformCaptureZoneUpdate"/>.
-    /// A zone goes through crop, downscale and rotation in this order. This does all three; if the hardware already did a part,
-    /// use <see cref="WriteCaptureZoneFromRegion"/> or <see cref="WriteCaptureZoneFromScaled"/> instead.
+    /// A zone goes through crop, downscale and rotation in this order. This does all three; if the hardware already cropped and downscaled the region,
+    /// use <see cref="WriteCaptureZoneFromScaled"/> instead.
     /// <para>
     /// Downscaling averages blocks of 2^level x 2^level pixels, starting at the top left of the region on the display;
     /// columns on the right and rows at the bottom (on the display) that don't fill a whole block are ignored. A region smaller than a block is averaged as one block.
-    /// The result has the zone's size as calculated by the default <see cref="CalculateScaledSize"/>.
     /// </para>
     /// </remarks>
     /// <param name="frame">The captured frame. Rotated by <paramref name="rotation"/> it covers the display: the region of the zone is in these coordinates.</param>
@@ -425,7 +424,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The region of <paramref name="captureZone"/> doesn't lie within <paramref name="frame"/> (rotated by <paramref name="rotation"/>).</exception>
     /// <exception cref="ArgumentException"><paramref name="buffer"/> is too small for the zone.</exception>
-    /// <exception cref="InvalidOperationException">The size of the zone isn't the one of the default <see cref="CalculateScaledSize"/> (it was overridden).</exception>
     protected static void WriteCaptureZone(RefImage<TColor> frame, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
@@ -437,34 +435,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
         CaptureRegion source = GetSourceRegion(region, frameWidth, frameHeight, rotation);
         WriteRegion(frame[source.X, source.Y, source.Width, source.Height], region.Width, region.Height, captureZone, buffer, rotation);
-    }
-
-    /// <summary>
-    /// Writes the pixels of a zone from its already cropped region into its buffer: downscaled by its level and rotated into the orientation of the display.
-    /// </summary>
-    /// <remarks>
-    /// For backends whose hardware crops the region (e.g. from a frame in the native orientation of the output, at <see cref="GetSourceRegion(CaptureRegion, Display)"/>).
-    /// Downscales and rotates like <see cref="WriteCaptureZone"/>.
-    /// </remarks>
-    /// <param name="region">The region of the zone, rotated by <paramref name="rotation"/> it has the size of <see cref="CaptureZone{TColor}.Region"/>.</param>
-    /// <param name="captureZone">The zone to write.</param>
-    /// <param name="buffer">The buffer passed to <see cref="PerformCaptureZoneUpdate"/>.</param>
-    /// <param name="rotation">How <paramref name="region"/> is rotated (clockwise) into the orientation of the display (see <see cref="WriteCaptureZone"/>).</param>
-    /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="region"/> (rotated by <paramref name="rotation"/>) doesn't have the size of the zone's region, or <paramref name="buffer"/> is too small for the zone.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The size of the zone isn't the one of the default <see cref="CalculateScaledSize"/> (it was overridden).</exception>
-    protected static void WriteCaptureZoneFromRegion(RefImage<TColor> region, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
-    {
-        ArgumentNullException.ThrowIfNull(captureZone);
-
-        CaptureRegion zoneRegion = captureZone.Region;
-        (int width, int height) = PixelHelper.GetRotatedSize(region.Width, region.Height, rotation);
-        if ((width != zoneRegion.Width) || (height != zoneRegion.Height))
-            throw new ArgumentException($"The region has a size of {width}x{height} (in the orientation of the display), but the one of the zone is {zoneRegion.Width}x{zoneRegion.Height}.", nameof(region));
-
-        WriteRegion(region, width, height, captureZone, buffer, rotation);
     }
 
     /// <summary>
@@ -521,8 +491,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     {
         int factor = 1 << captureZone.DownscaleLevel;
         (int scaledWidth, int scaledHeight) = PixelHelper.GetDownscaledSize(width, height, factor);
-        if ((scaledWidth != captureZone.Width) || (scaledHeight != captureZone.Height))
-            throw new InvalidOperationException($"The zone has a size of {captureZone.Width}x{captureZone.Height}, but downscaling its region gives {scaledWidth}x{scaledHeight}.");
 
         if (rotation == ImageRotation.None)
         {
@@ -609,7 +577,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     ICaptureZone IScreenCapture.RegisterCaptureZone(CaptureRegion region, int downscaleLevel) => RegisterCaptureZone(region, downscaleLevel);
 
     /// <inheritdoc cref="IScreenCapture.RegisterCaptureZone" />
-    public virtual CaptureZone<TColor> RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0)
+    public CaptureZone<TColor> RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
@@ -634,7 +602,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="region"/> doesn't lie within the display or is empty, or <paramref name="downscaleLevel"/> is negative.
     /// </exception>
-    protected virtual void ValidateCaptureZoneAndThrow(CaptureRegion region, int downscaleLevel)
+    private void ValidateCaptureZoneAndThrow(CaptureRegion region, int downscaleLevel)
     {
         if (region.X < 0) throw new ArgumentOutOfRangeException(nameof(region), region, "X must not be negative.");
         if (region.Y < 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Y must not be negative.");
@@ -657,7 +625,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <param name="height">The original height.</param>
     /// <param name="downscaleLevel">The level of downscaling to be used.</param>
     /// <returns>A tuple containing the scaled width, the scaled height and the downscale-level used. (This can be smaller then the one provided if the image is not big enough to scale down that often.)</returns>
-    protected virtual (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
+    protected static (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
     {
         if (downscaleLevel > 0)
             for (int i = 0; i < downscaleLevel; i++)
@@ -714,7 +682,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc cref="IScreenCapture.UpdateCaptureZone" />
-    public virtual void UpdateCaptureZone(CaptureZone<TColor> captureZone, CaptureRegion? region = null, int? downscaleLevel = null)
+    public void UpdateCaptureZone(CaptureZone<TColor> captureZone, CaptureRegion? region = null, int? downscaleLevel = null)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);

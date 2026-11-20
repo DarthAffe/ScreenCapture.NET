@@ -327,8 +327,38 @@ public sealed class ScreenCaptureLoopTests
     /// <summary>
     /// A capture that breaks the contract of <see cref="IScreenCapture.CaptureScreen"/> by throwing.
     /// </summary>
-    internal sealed class ThrowingScreenCapture(Exception exception) : TestScreenCapture
+    internal sealed class ThrowingScreenCapture(Exception exception) : IScreenCapture
     {
-        public override CaptureResult CaptureScreen() => throw exception;
+        private readonly TestScreenCapture _screenCapture = new();
+
+        public Display Display => _screenCapture.Display;
+        public bool IsDisposed => _screenCapture.IsDisposed;
+        public Exception? LastError => _screenCapture.LastError;
+
+        public event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated
+        {
+            add => _screenCapture.Updated += value;
+            remove => _screenCapture.Updated -= value;
+        }
+
+        public event EventHandler<ScreenCaptureErrorEventArgs>? ErrorOccurred
+        {
+            add => _screenCapture.ErrorOccurred += value;
+            remove => _screenCapture.ErrorOccurred -= value;
+        }
+
+        public event EventHandler<ScreenCaptureDisplayChangedEventArgs>? DisplayChanged
+        {
+            add => _screenCapture.DisplayChanged += value;
+            remove => _screenCapture.DisplayChanged -= value;
+        }
+
+        public CaptureResult CaptureScreen() => throw exception;
+
+        public ICaptureZone RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0) => _screenCapture.RegisterCaptureZone(region, downscaleLevel);
+        public bool UnregisterCaptureZone(ICaptureZone captureZone) => ((IScreenCapture)_screenCapture).UnregisterCaptureZone(captureZone);
+        public void UpdateCaptureZone(ICaptureZone captureZone, CaptureRegion? region = null, int? downscaleLevel = null) => ((IScreenCapture)_screenCapture).UpdateCaptureZone(captureZone, region, downscaleLevel);
+        public void Restart() => _screenCapture.Restart();
+        public void Dispose() => _screenCapture.Dispose();
     }
 }
