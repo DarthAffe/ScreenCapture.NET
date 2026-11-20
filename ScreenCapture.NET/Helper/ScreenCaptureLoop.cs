@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -167,12 +167,14 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// <remarks>
     /// The loop ends after the current capture, which can take up to the timeout of the capture (DX11) or its restart backoff (up to 2 s).
     /// Called on the thread of the loop (e.g. from an <see cref="IScreenCapture.Updated"/> handler) it doesn't wait: the loop ends when the handler returned.
+    /// That also holds for a loop started again on that thread meanwhile (e.g. <c>Stop(); Start(); Stop();</c> in one handler), which waits for the handler before it captures.
     /// </remarks>
     public void Stop()
     {
         LoopRun? run = RequestStop();
 
-        if ((run != null) && (run.Thread != Thread.CurrentThread))
+        // Waiting for a run that waits for this thread would deadlock.
+        if ((run != null) && (run.Thread != Thread.CurrentThread) && !run.WaitsFor(Thread.CurrentThread))
             run.Thread.Join();
     }
 
@@ -284,6 +286,7 @@ public sealed class ScreenCaptureLoop : IDisposable
         private bool _woken;
 
         // The run before this one, whose thread may still finish a capture (cleared once it has ended, so runs don't keep each other alive).
+        // Cleared by the thread of this run, read by others (WaitsFor).
         private LoopRun? _previous = previous;
 
         public Thread Thread { get; set; } = null!;
@@ -307,8 +310,19 @@ public sealed class ScreenCaptureLoop : IDisposable
 
         public void JoinPrevious()
         {
-            _previous?.Thread.Join();
-            _previous = null;
+            Volatile.Read(ref _previous)?.Thread.Join();
+            Volatile.Write(ref _previous, null);
+        }
+
+        // If this run waits for the thread before it captures: the thread of a run before this one that hasn't ended yet.
+        // A run whose previous one is cleared doesn't wait for anything anymore: the runs before it have ended.
+        public bool WaitsFor(Thread thread)
+        {
+            for (LoopRun? run = Volatile.Read(ref _previous); run != null; run = Volatile.Read(ref run._previous))
+                if (run.Thread == thread)
+                    return true;
+
+            return false;
         }
 
         public void Wait(TimeSpan timeout)

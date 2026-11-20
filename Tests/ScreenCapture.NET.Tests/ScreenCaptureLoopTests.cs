@@ -164,6 +164,50 @@ public sealed class ScreenCaptureLoopTests
         Assert.IsFalse(overlapped);
     }
 
+    /// <summary>
+    /// A run started in a handler waits for the handler's thread before it captures: stopping (or disposing) it in the same handler must not wait for it,
+    /// also when it waits through a run started before it.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, DisplayName = "Stop")]
+    [DataRow(true, DisplayName = "Dispose")]
+    public void StopAfterARestartInAHandlerDoesntDeadlock(bool dispose)
+    {
+        using TestScreenCapture screenCapture = new();
+
+        ScreenCaptureLoop loop = new(screenCapture);
+        int captures = 0;
+        using ManualResetEventSlim handled = new();
+
+        screenCapture.Updated += (_, _) =>
+        {
+            if (Interlocked.Increment(ref captures) != 1) return;
+
+            // The third run waits for the second, which waits for this thread.
+            loop.Stop();
+            loop.Start();
+            loop.Stop();
+            loop.Start();
+            if (dispose)
+                loop.Dispose();
+            else
+                loop.Stop();
+
+            handled.Set();
+        };
+
+        loop.Start();
+        bool returned = handled.Wait(TIMEOUT);
+
+        // Not disposed after a deadlock: Dispose would wait for the deadlocked threads forever.
+        if (returned)
+            loop.Dispose();
+
+        Assert.IsTrue(returned, "The handler didn't return (deadlock).");
+        Assert.IsTrue(loop.Completion.Wait(TIMEOUT));
+        Assert.AreEqual(1, Volatile.Read(ref captures), "The stopped run captured.");
+    }
+
     [TestMethod]
     public void StopAsyncDoesntWaitForTheRunningCapture()
     {
