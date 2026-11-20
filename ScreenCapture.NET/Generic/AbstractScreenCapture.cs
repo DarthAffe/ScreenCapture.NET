@@ -325,8 +325,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             using (captureZone.EnterUpdateScope())
             {
-                // Unregistered while this capture held it in its snapshot.
-                if (!captureZone.IsValid || captureZone.IsUnregistered) return false;
+                // Checked again: it can have been unregistered while this capture held it in its snapshot, or written meanwhile by a capture
+                // on another thread (with the same frame, or taking the update request).
+                if (captureZone.IsUnregistered || !captureZone.NeedsUpdate(frameNumber)) return false;
 
                 ZoneBuffer<TColor>? buffer = captureZone.BeginWrite();
                 if (buffer == null) return false;
@@ -460,11 +461,13 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
         lock (_captureZonesLock)
         {
-            ValidateCaptureZoneAndThrow(region, downscaleLevel);
+            // Read once: the zone gets the display it was validated against. If a restart changes it meanwhile, ApplyDisplayChange moves the zone (and checks it again).
+            Display display = Display;
+            ValidateCaptureZoneAndThrow(region, downscaleLevel, display);
 
             (int width, int height, downscaleLevel) = CalculateScaledSize(region.Width, region.Height, downscaleLevel);
 
-            CaptureZone<TColor> captureZone = new(Display, region, width, height, downscaleLevel);
+            CaptureZone<TColor> captureZone = new(display, region, width, height, downscaleLevel);
             Volatile.Write(ref _captureZones, [.. _captureZones, captureZone]);
 
             return captureZone;
@@ -476,10 +479,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// </summary>
     /// <param name="region">The region of the zone on the display.</param>
     /// <param name="downscaleLevel">The downscale-level of the zone.</param>
+    /// <param name="display">The display the zone is on.</param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="region"/> doesn't lie within the display or is empty, or <paramref name="downscaleLevel"/> is negative.
     /// </exception>
-    private void ValidateCaptureZoneAndThrow(CaptureRegion region, int downscaleLevel)
+    private static void ValidateCaptureZoneAndThrow(CaptureRegion region, int downscaleLevel, Display display)
     {
         if (region.X < 0) throw new ArgumentOutOfRangeException(nameof(region), region, "X must not be negative.");
         if (region.Y < 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Y must not be negative.");
@@ -487,10 +491,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         if (region.Height <= 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Height must be greater than 0.");
 
         // Compared this way, X + Width can't overflow (X and Y aren't negative here).
-        if (region.Width > (Display.Width - region.X))
-            throw new ArgumentOutOfRangeException(nameof(region), region, $"X + Width must not be greater than the display width ({Display.Width}).");
-        if (region.Height > (Display.Height - region.Y))
-            throw new ArgumentOutOfRangeException(nameof(region), region, $"Y + Height must not be greater than the display height ({Display.Height}).");
+        if (region.Width > (display.Width - region.X))
+            throw new ArgumentOutOfRangeException(nameof(region), region, $"X + Width must not be greater than the display width ({display.Width}).");
+        if (region.Height > (display.Height - region.Y))
+            throw new ArgumentOutOfRangeException(nameof(region), region, $"Y + Height must not be greater than the display height ({display.Height}).");
 
         ArgumentOutOfRangeException.ThrowIfNegative(downscaleLevel);
     }
@@ -580,12 +584,14 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 if (Array.IndexOf(_captureZones, captureZone) < 0)
                     throw new ArgumentException(NOT_REGISTERED_MESSAGE, nameof(captureZone));
 
-                captureZone.SetDisplay(Display);
+                // Read once, like in RegisterCaptureZone.
+                Display display = Display;
+                captureZone.SetDisplay(display);
 
                 CaptureRegion newRegion = region ?? captureZone.Region;
                 int newDownscaleLevel = downscaleLevel ?? captureZone.DownscaleLevel;
 
-                ValidateCaptureZoneAndThrow(newRegion, newDownscaleLevel);
+                ValidateCaptureZoneAndThrow(newRegion, newDownscaleLevel, display);
 
                 (int newWidth, int newHeight, newDownscaleLevel) = CalculateScaledSize(newRegion.Width, newRegion.Height, newDownscaleLevel);
                 captureZone.Update(newRegion, newWidth, newHeight, newDownscaleLevel);

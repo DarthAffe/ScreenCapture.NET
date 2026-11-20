@@ -159,6 +159,40 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
+    /// A second capture with the same frame (<see cref="CaptureResult.NoChange"/>) that reaches the zone while the first one writes it doesn't write it again.
+    /// </summary>
+    [TestMethod]
+    public void ConcurrentCapturesWriteAZoneOncePerFrame()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+
+        int updated = 0;
+        zone.Updated += (_, _) => Interlocked.Increment(ref updated);
+
+        int writes = 0;
+        Task<CaptureResult>? second = null;
+        screenCapture.ZoneUpdateStarting = _ =>
+        {
+            if (Interlocked.Increment(ref writes) != 1) return;
+
+            screenCapture.Result = CaptureResult.NoChange;
+            second = Task.Factory.StartNew(screenCapture.CaptureScreen, TaskCreationOptions.LongRunning);
+
+            // Gives the second capture the time to get to the zone (it then waits for its lock).
+            Thread.Sleep(200);
+        };
+
+        Assert.AreEqual(CaptureResult.NewFrame, screenCapture.CaptureScreen());
+        Assert.IsNotNull(second);
+        Assert.IsTrue(second.Wait(TimeSpan.FromSeconds(10)));
+        Assert.AreEqual(CaptureResult.NoChange, second.Result);
+
+        Assert.AreEqual(1, Volatile.Read(ref writes), "The zone was written twice for the same frame.");
+        Assert.AreEqual(1, Volatile.Read(ref updated));
+    }
+
+    /// <summary>
     /// The deadlock case: a user thread holds a frame of the zone and changes the zone while the capture thread wants to update it.
     /// </summary>
     [TestMethod]

@@ -259,6 +259,7 @@ public sealed class DisplayChangeTests
 
     /// <summary>
     /// A zone registered while another thread changes the display ends up with the current display: none is left with an old one.
+    /// Zones whose region only fits the original display are valid exactly if they fit the current one: none keeps the validation of an older display.
     /// </summary>
     [TestMethod]
     public void ZonesRegisteredDuringChangesFollowTheDisplay()
@@ -266,16 +267,28 @@ public sealed class DisplayChangeTests
         const int ROUNDS = 50;
         const int ZONES_PER_ROUND = 200;
 
+        CaptureRegion fitsBoth = new(0, 0, 16, 16);
+        CaptureRegion fitsOriginalOnly = new(1500, 800, 100, 100);
+
         for (int round = 0; round < ROUNDS; round++)
         {
             using TestScreenCapture screenCapture = new();
 
+            int rejected = 0;
             using Barrier start = new(2);
             Thread registering = new(() =>
             {
                 start.SignalAndWait();
                 for (int i = 0; i < ZONES_PER_ROUND; i++)
-                    screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 16));
+                    try
+                    {
+                        screenCapture.RegisterCaptureZone((i % 2) == 0 ? fitsBoth : fitsOriginalOnly);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        // fitsOriginalOnly while the display is smaller.
+                        rejected++;
+                    }
             });
             registering.Start();
 
@@ -285,9 +298,13 @@ public sealed class DisplayChangeTests
             registering.Join();
 
             // The last change was applied by its restart: every zone has to follow it without another capture.
-            Assert.HasCount(ZONES_PER_ROUND, screenCapture.Zones);
+            Display display = screenCapture.Display;
+            Assert.HasCount(ZONES_PER_ROUND - rejected, screenCapture.Zones);
             foreach (CaptureZone<ColorARGB> zone in screenCapture.Zones)
-                Assert.AreEqual(screenCapture.Display, zone.Display, $"Round {round}");
+            {
+                Assert.AreEqual(display, zone.Display, $"Round {round}");
+                Assert.AreEqual(zone.Region.IsWithin(display.Width, display.Height), zone.IsValid, $"Round {round}: {zone.Region} on {display.Width}x{display.Height}");
+            }
         }
     }
 

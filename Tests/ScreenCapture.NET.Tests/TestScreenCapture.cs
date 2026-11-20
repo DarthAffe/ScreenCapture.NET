@@ -13,6 +13,11 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     public Action<CaptureZone<ColorARGB>>? ZoneUpdating { get; set; }
 
     /// <summary>
+    /// Called at the start of every zone update with the zone lock held, but before <see cref="CaptureLock"/> is taken: captures on other threads can run meanwhile.
+    /// </summary>
+    public Action<CaptureZone<ColorARGB>>? ZoneUpdateStarting { get; set; }
+
+    /// <summary>
     /// Gets or sets the color written to each pixel of a zone (by its location in the zone).
     /// </summary>
     public Func<int, int, ColorARGB> Pattern { get; set; } = GetColorFromLocation;
@@ -135,6 +140,8 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     // Under CaptureLock like a real backend (see the contract of PerformCaptureZoneUpdate): captures on other threads don't run meanwhile.
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer)
     {
+        ZoneUpdateStarting?.Invoke(captureZone);
+
         lock (CaptureLock)
         {
             ZoneUpdating?.Invoke(captureZone);
