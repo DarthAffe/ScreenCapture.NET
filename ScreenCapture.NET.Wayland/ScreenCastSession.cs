@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 using Tmds.DBus.Protocol;
 
 namespace ScreenCapture.NET;
@@ -41,7 +42,12 @@ internal sealed class ScreenCastSession : IDisposable
     private IDisposable? _closedWatch;
     private volatile string? _sessionPath;
     private volatile bool _isClosed;
+    private volatile bool _isStarted;
     private int _isDisposed;
+
+    // Guards the PipeWire connection, created by the first capture.
+    private readonly Lock _coreLock = new();
+    private PipeWireCore? _core;
 
     /// <summary>
     /// Gets the streams the user shared; empty until the session is started.
@@ -52,6 +58,11 @@ internal sealed class ScreenCastSession : IDisposable
     /// Gets a value indicating whether the session ended: the portal closed it (e.g. the user stopped sharing) or the connection to the session bus closed.
     /// </summary>
     public bool IsClosed => _isClosed || _disconnected.IsCompleted;
+
+    /// <summary>
+    /// Gets a value indicating whether the session was started (the user shared the <see cref="Streams"/>).
+    /// </summary>
+    public bool IsStarted => _isStarted;
 
     #endregion
 
@@ -97,10 +108,60 @@ internal sealed class ScreenCastSession : IDisposable
 
             Dictionary<string, VariantValue> started = await RequestAsync("Start", null, sessionPath, parentWindow: string.Empty).ConfigureAwait(false);
             Streams = PortalStream.ReadStreams(started);
+            _isStarted = true;
         }
         catch (DBusExceptionBase ex)
         {
             throw new InvalidOperationException($"The screen cast portal (xdg-desktop-portal) isn't available: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets the connection to PipeWire through which the streams of the session are received; the first call opens it.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The session was disposed.</exception>
+    /// <exception cref="InvalidOperationException">The portal didn't open the connection, or libpipewire couldn't connect.</exception>
+    public PipeWireCore GetPipeWireCore()
+    {
+        lock (_coreLock)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
+            if (_core != null) return _core;
+
+            string sessionPath = _sessionPath ?? throw new InvalidOperationException("The screen cast session wasn't started.");
+
+            // On the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
+            SafeFileHandle socket = Task.Run(() => OpenPipeWireRemoteAsync(sessionPath)).GetAwaiter().GetResult();
+            _core = PipeWireCore.Connect(socket);
+            return _core;
+        }
+    }
+
+    // The socket only shows PipeWire the nodes of this session.
+    private async Task<SafeFileHandle> OpenPipeWireRemoteAsync(string sessionPath)
+    {
+        MessageWriter writer = _connection.GetMessageWriter();
+        MessageBuffer call;
+        try
+        {
+            writer.WriteMethodCallHeader(PORTAL_NAME, PORTAL_PATH, SCREEN_CAST_INTERFACE, "OpenPipeWireRemote", "oa{sv}", MessageFlags.None);
+            writer.WriteObjectPath(sessionPath);
+            ArrayStart options = writer.WriteDictionaryStart();
+            writer.WriteDictionaryEnd(options);
+            call = writer.CreateMessage();
+        }
+        finally
+        {
+            writer.Dispose();
+        }
+
+        try
+        {
+            return await _connection.CallMethodAsync(call, (message, _) => message.GetBodyReader().ReadHandle<SafeFileHandle>(), null).ConfigureAwait(false);
+        }
+        catch (DBusExceptionBase ex)
+        {
+            throw new InvalidOperationException($"The screen cast portal didn't open the PipeWire connection: {ex.Message}", ex);
         }
     }
 
@@ -212,11 +273,19 @@ internal sealed class ScreenCastSession : IDisposable
                : new InvalidOperationException($"The screen cast portal ended the session ({method} failed with response {code}).");
 
     /// <summary>
-    /// Ends the session and closes the connection. Can be called while <see cref="StartAsync"/> waits, which then fails.
+    /// Closes the PipeWire connection (destroying the streams of the captures), ends the session and closes the connection to the bus.
+    /// Can be called while <see cref="StartAsync"/> waits, which then fails.
     /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0) return;
+
+        // The streams of the captures first: they're destroyed with it.
+        lock (_coreLock)
+        {
+            _core?.Dispose();
+            _core = null;
+        }
 
         string? sessionPath = _sessionPath;
         if ((sessionPath != null) && !IsClosed)

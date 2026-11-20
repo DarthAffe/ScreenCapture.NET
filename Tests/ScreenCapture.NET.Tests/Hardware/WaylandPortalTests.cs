@@ -1,6 +1,8 @@
+extern alias Wayland;
 using System.Runtime.Versioning;
 using HPPH;
 using Tmds.DBus.Protocol;
+using Wayland::ScreenCapture.NET;
 
 namespace ScreenCapture.NET.Tests.Hardware;
 

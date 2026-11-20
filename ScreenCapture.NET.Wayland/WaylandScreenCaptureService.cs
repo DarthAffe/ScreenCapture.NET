@@ -11,7 +11,8 @@ namespace ScreenCapture.NET;
 /// <remarks>
 /// Wayland compositors only share the screen with the consent of the user: the first <see cref="GetDisplays"/> starts a screen cast session,
 /// for which the compositor shows a dialog where the user chooses the monitors to share. The displays are the shared monitors (see <see cref="GetDisplays"/>).
-/// It works wherever xdg-desktop-portal with a backend for the desktop runs (e.g. KDE Plasma, GNOME, or wlroots compositors with xdg-desktop-portal-wlr).
+/// It works wherever xdg-desktop-portal with a backend for the desktop runs (e.g. KDE Plasma, GNOME, or wlroots compositors with xdg-desktop-portal-wlr), and needs libpipewire.
+/// <para>Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, WaylandCaptureOptions)"/>.</para>
 /// </remarks>
 public sealed class WaylandScreenCaptureService : IScreenCaptureService
 {
@@ -24,6 +25,30 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     private readonly Lock _stateLock = new();
     private ScreenCastSession? _session;
     private volatile bool _isDisposed;
+
+    private readonly ScreenCaptureCache<WaylandScreenCapture, WaylandCaptureOptions> _screenCaptures;
+
+    /// <summary>
+    /// Gets the options of captures created without their own options.
+    /// </summary>
+    public WaylandCaptureOptions Options { get; }
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WaylandScreenCaptureService"/> class.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is connected yet: the screen cast session starts with the first <see cref="GetDisplays"/>.
+    /// </remarks>
+    /// <param name="options">The options of captures created without their own options; <c>null</c> for <see cref="WaylandCaptureOptions.Default"/>.</param>
+    public WaylandScreenCaptureService(WaylandCaptureOptions? options = null)
+    {
+        Options = options ?? WaylandCaptureOptions.Default;
+        _screenCaptures = new ScreenCaptureCache<WaylandScreenCapture, WaylandCaptureOptions>(this, (display, captureOptions) => new WaylandScreenCapture(this, display, captureOptions), capture => capture.Options);
+    }
 
     #endregion
 
@@ -103,12 +128,61 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
         }
     }
 
+    /// <summary>
+    /// Finds the stream of a display in the current session.
+    /// </summary>
+    /// <returns>The session, the stream and its display; <c>null</c> if there's no started session (anymore) or it doesn't share the display.</returns>
+    internal (ScreenCastSession Session, PortalStream Stream, Display Display)? FindStream(string displayId)
+    {
+        ScreenCastSession? session;
+        lock (_stateLock)
+            session = _session;
+
+        if (session is not { IsStarted: true, IsClosed: false }) return null;
+
+        List<Display> displays = WaylandDisplays.GetDisplays(session.Streams, WaylandDisplays.GetGraphicsCard());
+        for (int i = 0; i < displays.Count; i++)
+            if (string.Equals(displays[i].Id, displayId, StringComparison.Ordinal))
+                return (session, session.Streams[i], displays[i]);
+
+        return null;
+    }
+
     /// <inheritdoc />
-    public IScreenCapture GetScreenCapture(Display display) => throw new NotImplementedException();
+    IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
+
+    /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
+    /// <remarks>
+    /// The display has to be one of the current session (see <see cref="GetDisplays"/>); otherwise the capture is <see cref="CaptureResult.Unavailable"/>.
+    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A capture that was disposed is replaced by a new one.
+    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// </remarks>
+    public WaylandScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
+
+    /// <summary>
+    /// Creates a <see cref="WaylandScreenCapture"/> with the given options for the given display.
+    /// </summary>
+    /// <remarks>
+    /// The display has to be one of the current session (see <see cref="GetDisplays"/>); otherwise the capture is <see cref="CaptureResult.Unavailable"/>.
+    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
+    /// A capture that was disposed is replaced by a new one.
+    /// An existing capture is only returned if it was created with equal options.
+    /// </remarks>
+    /// <param name="display">The display to capture.</param>
+    /// <param name="options">The options of the capture.</param>
+    /// <returns>The <see cref="WaylandScreenCapture"/> for the given display.</returns>
+    /// <exception cref="InvalidOperationException">The capture of the display already exists with other options.</exception>
+    public WaylandScreenCapture GetScreenCapture(Display display, WaylandCaptureOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return _screenCaptures.GetOrCreate(display, options, requireEqualOptions: true);
+    }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Ends the screen cast session; a <see cref="GetDisplays"/> waiting for the user then throws an <see cref="ObjectDisposedException"/>.
+    /// Disposes all captures created by the service and ends the screen cast session; a <see cref="GetDisplays"/> waiting for the user then throws an <see cref="ObjectDisposedException"/>.
     /// It's thread-safe and can be called more than once.
     /// </remarks>
     public void Dispose()
@@ -123,6 +197,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
             _session = null;
         }
 
+        _screenCaptures.DisposeAll();
         session?.Dispose();
     }
 

@@ -50,7 +50,7 @@ public sealed class X11InteropTests
 
             ColorBGRA[] expected = [.. pixels.Select(p => new ColorBGRA(p.B, p.G, p.R, byte.MaxValue))];
 
-            X11ScreenCapture.SetOpaque(pixels);
+            OpaquePixels.SetOpaque(pixels);
 
             CollectionAssert.AreEqual(expected, pixels, $"length {length}");
         }

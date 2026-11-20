@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+using System.Runtime.Versioning;
 using Tmds.DBus.Protocol;
 
 namespace ScreenCapture.NET.Tests.Hardware;
@@ -5,8 +7,10 @@ namespace ScreenCapture.NET.Tests.Hardware;
 /// <summary>
 /// A ScreenCast portal on the <see cref="PrivateSessionBus"/> that answers like xdg-desktop-portal: requests under the path of their handle token,
 /// responses as <c>Response</c> signals of the requests, the session under the path of its token. The "dialog" is answered with <see cref="StartResponse"/>.
+/// <c>OpenPipeWireRemote</c> hands out a socket of the PipeWire daemon of the user (unlike the real portal's, it isn't limited to the nodes of the session).
 /// Disposing it removes the portal from the bus.
 /// </summary>
+[SupportedOSPlatform("linux")]
 internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
 {
     #region Constants
@@ -24,6 +28,9 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
     private readonly List<string> _calls = [];
     private readonly HashSet<string> _sessions = [];
     private Dictionary<string, VariantValue>? _selectSourcesOptions;
+
+    // Kept open until the portal is disposed: the reply that passes them on is sent asynchronously.
+    private readonly List<Socket> _sockets = [];
 
     public string Path => "/org/freedesktop/portal/desktop";
     public bool HandlesChildPaths => true;
@@ -54,7 +61,7 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
     public bool SessionHandleAsObjectPath { get; set; }
 
     /// <summary>
-    /// Gets the methods called so far, in order (<c>CreateSession</c>, <c>SelectSources</c>, <c>Start</c>, <c>Close</c>).
+    /// Gets the methods called so far, in order (<c>CreateSession</c>, <c>SelectSources</c>, <c>Start</c>, <c>OpenPipeWireRemote</c>, <c>Close</c>).
     /// </summary>
     public IReadOnlyList<string> Calls
     {
@@ -198,6 +205,33 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
                 break;
             }
 
+            case SCREEN_CAST_INTERFACE when method == "OpenPipeWireRemote":
+            {
+                string session = request.GetBodyReader().ReadObjectPathAsString();
+                if (!IsSession(context, session)) break;
+
+                Socket socket = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                socket.Connect(new UnixDomainSocketEndPoint(PipeWireVideoSource.GetDaemonSocket()));
+                lock (_lock)
+                {
+                    _calls.Add(method);
+                    _sockets.Add(socket);
+                }
+
+                MessageWriter writer = context.CreateReplyWriter("h");
+                try
+                {
+                    writer.WriteHandle(socket.SafeHandle);
+                    context.Reply(writer.CreateMessage());
+                }
+                finally
+                {
+                    writer.Dispose();
+                }
+
+                break;
+            }
+
             case SESSION_INTERFACE when method == "Close":
             {
                 lock (_lock)
@@ -334,7 +368,14 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
     // The unique name of the caller without the ':' and with '_' for '.' (computed here on its own, not with the code under test).
     private static string GetSender(Message request) => request.SenderAsString![1..].Replace('.', '_');
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose()
+    {
+        _connection.Dispose();
+
+        lock (_lock)
+            foreach (Socket socket in _sockets)
+                socket.Dispose();
+    }
 
     #endregion
 }

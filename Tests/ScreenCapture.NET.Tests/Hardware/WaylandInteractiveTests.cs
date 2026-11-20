@@ -1,5 +1,8 @@
+extern alias Wayland;
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using HPPH;
+using Wayland::ScreenCapture.NET;
 
 namespace ScreenCapture.NET.Tests.Hardware;
 
@@ -36,5 +39,29 @@ public sealed class WaylandInteractiveTests
         Stopwatch stopwatch = Stopwatch.StartNew();
         CollectionAssert.AreEqual(displays, service.GetDisplays(graphicsCard).ToList());
         Assert.IsLessThan(100, stopwatch.ElapsedMilliseconds, "The second call showed a dialog.");
+    }
+
+    /// <summary>
+    /// <b>Shows the share dialog once</b>: share one or more monitors. Each one is captured (the compositor sends a frame when the stream starts).
+    /// </summary>
+    [TestMethod]
+    public void SharedMonitorsAreCaptured()
+    {
+        if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") == null)
+            Assert.Inconclusive("Not in a Wayland session.");
+
+        using WaylandScreenCaptureService service = new();
+        foreach (Display display in service.GetDisplays(service.GetGraphicsCards().Single()).ToList())
+        {
+            WaylandScreenCapture capture = service.GetScreenCapture(display);
+            CaptureZone<ColorBGRA> zone = capture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height), downscaleLevel: 3);
+            HardwareTestHelper.CaptureFrame(capture);
+
+            Assert.AreEqual((display.Width, display.Height), (capture.Display.Width, capture.Display.Height), $"The frames of {display.Id} have another size than the portal told.");
+
+            ColorBGRA[] pixels = HardwareTestHelper.GetPixels(zone);
+            Assert.IsTrue(pixels.Any(pixel => (pixel.R | pixel.G | pixel.B) != 0), $"{display.Id} is black.");
+            Assert.IsTrue(pixels.All(pixel => pixel.A == byte.MaxValue), $"{display.Id} isn't opaque.");
+        }
     }
 }
