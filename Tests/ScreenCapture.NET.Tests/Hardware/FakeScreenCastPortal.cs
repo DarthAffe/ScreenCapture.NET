@@ -31,6 +31,11 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
     private readonly HashSet<string> _sessions = [];
     private Dictionary<string, VariantValue>? _selectSourcesOptions;
 
+    // The restore tokens that restore a session; the number of the last one handed out.
+    private readonly HashSet<string> _restoreTokens = [];
+    private int _lastRestoreToken;
+    private int _dialogs;
+
     // The sockets handed out (as duplicates: the reply disposes the handle it sends), so they can be broken.
     private readonly List<Socket> _sockets = [];
 
@@ -46,6 +51,28 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
     /// Gets or sets the <c>AvailableCursorModes</c> of the portal (1 hidden, 2 embedded, 4 metadata); <c>null</c> for a portal without it (version 1 of the interface).
     /// </summary>
     public uint? AvailableCursorModes { get; set; } = 7;
+
+    /// <summary>
+    /// Gets or sets the version of the ScreenCast interface (restore tokens need 4).
+    /// </summary>
+    public uint Version { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether every session gets a new restore token and the old one becomes invalid (like GNOME); otherwise a restored session keeps its token (like KDE).
+    /// </summary>
+    public bool RotatesRestoreTokens { get; set; } = true;
+
+    /// <summary>
+    /// Gets how often <c>Start</c> would have shown the dialog: every time, unless the session was restored with a valid token.
+    /// </summary>
+    public int Dialogs
+    {
+        get
+        {
+            lock (_lock)
+                return _dialogs;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the response code of <c>Start</c> (0 = shared, 1 = cancelled, 2 = failed).
@@ -215,10 +242,14 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
                 Dictionary<string, VariantValue> options = reader.ReadDictionaryOfStringToVariantValue();
                 if (!IsSession(context, session)) break;
 
+                string? restoreToken;
                 lock (_lock)
+                {
                     _calls.Add(method);
+                    restoreToken = GetRestoreToken();
+                }
 
-                Respond(context, options, StartResponse, null, [.. Streams], StartAnswered);
+                Respond(context, options, StartResponse, null, [.. Streams], StartAnswered, restoreToken);
                 break;
             }
 
@@ -254,7 +285,14 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
                 Reader reader = request.GetBodyReader();
                 string propertyInterface = reader.ReadString();
                 string property = reader.ReadString();
-                if ((propertyInterface != SCREEN_CAST_INTERFACE) || (property != "AvailableCursorModes") || (AvailableCursorModes is not { } modes))
+                uint? value = property switch
+                {
+                    "AvailableCursorModes" => AvailableCursorModes,
+                    "version" => Version,
+                    _ => null
+                };
+
+                if ((propertyInterface != SCREEN_CAST_INTERFACE) || (value is not { } propertyValue))
                 {
                     context.ReplyError("org.freedesktop.DBus.Error.UnknownProperty", $"No property {propertyInterface}.{property}.");
                     break;
@@ -263,7 +301,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
                 MessageWriter writer = context.CreateReplyWriter("v");
                 try
                 {
-                    writer.WriteVariantUInt32(modes);
+                    writer.WriteVariantUInt32(propertyValue);
                     context.Reply(writer.CreateMessage());
                 }
                 finally
@@ -303,6 +341,22 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
         return ValueTask.CompletedTask;
     }
 
+    // Under _lock, for Start: restores with the token of SelectSources (or shows the dialog) and hands out the token of the session, if it's to be remembered.
+    private string? GetRestoreToken()
+    {
+        string? requested = (_selectSourcesOptions?.TryGetValue("restore_token", out VariantValue token) ?? false) ? token.GetString() : null;
+        bool restored = (requested != null) && _restoreTokens.Contains(requested);
+        if (!restored) _dialogs++;
+
+        if (!(_selectSourcesOptions?.TryGetValue("persist_mode", out VariantValue persistMode) ?? false) || (persistMode.GetUInt32() == 0)) return null;
+        if (restored && !RotatesRestoreTokens) return requested;
+
+        if (restored) _restoreTokens.Remove(requested!);
+        string issued = $"token-{++_lastRestoreToken}";
+        _restoreTokens.Add(issued);
+        return issued;
+    }
+
     private bool IsSession(MethodContext context, string session)
     {
         lock (_lock)
@@ -314,12 +368,12 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
     }
 
     // Replies with the request and sends its response, like the portal does once the backend answered (after `answered`; ignored with RespondBeforeReply).
-    private void Respond(MethodContext context, Dictionary<string, VariantValue> options, uint code, string? session, List<FakeStream>? streams, Task? answered = null)
+    private void Respond(MethodContext context, Dictionary<string, VariantValue> options, uint code, string? session, List<FakeStream>? streams, Task? answered = null, string? restoreToken = null)
     {
         string requestPath = $"{Path}/request/{GetSender(context.Request)}/{options["handle_token"].GetString()}";
 
         if (RespondBeforeReply)
-            SendResponse(requestPath, code, session, streams);
+            SendResponse(requestPath, code, session, streams, restoreToken);
 
         MessageWriter writer = context.CreateReplyWriter("o");
         try
@@ -333,10 +387,10 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
         }
 
         if (!RespondBeforeReply)
-            _ = (answered ?? Task.CompletedTask).ContinueWith(_ => SendResponse(requestPath, code, session, streams), TaskScheduler.Default);
+            _ = (answered ?? Task.CompletedTask).ContinueWith(_ => SendResponse(requestPath, code, session, streams, restoreToken), TaskScheduler.Default);
     }
 
-    private void SendResponse(string requestPath, uint code, string? session, List<FakeStream>? streams)
+    private void SendResponse(string requestPath, uint code, string? session, List<FakeStream>? streams, string? restoreToken)
     {
         MessageWriter writer = _connection.GetMessageWriter();
         try
@@ -351,6 +405,13 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
                 writer.WriteString("session_handle");
                 if (SessionHandleAsObjectPath) writer.WriteVariantObjectPath(session);
                 else writer.WriteVariantString(session);
+            }
+
+            if (restoreToken != null)
+            {
+                writer.WriteDictionaryEntryStart();
+                writer.WriteString("restore_token");
+                writer.WriteVariantString(restoreToken);
             }
 
             if (streams != null)

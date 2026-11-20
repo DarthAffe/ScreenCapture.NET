@@ -10,7 +10,8 @@
 | [ScreenCapture.NET](https://www.nuget.org/packages/ScreenCapture.NET)| The core-package required to use ScreenCapture.NET captures or write your own. |
 | [ScreenCapture.NET.DX11](https://www.nuget.org/packages/ScreenCapture.NET.DX11) | DirectX 11 based capturing. Fast and supports the whole set of features. **This should always be used if possible!** *Note: This might not work on windows hybrid systems (check [the docs](https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/error-when-dda-capable-app-is-against-gpu) and [this issue](https://github.com/DarthAffe/ScreenCapture.NET/issues/39))*|
 | [ScreenCapture.NET.DX9](https://www.nuget.org/packages/ScreenCapture.NET.DX9) | DirectX 9 based  capturing. Slower then DX 11 and does not support rotated screens and GPU-accelerated downscaling. Only useful if the DX11 package can't be used for some reason. |
-| [ScreenCapture.NET.X11](https://www.nuget.org/packages/ScreenCapture.NET.X11) | libX11 based capturing for the X-Window-System. Currently the only way to use ScreenCapture.NET on linux. Quite slow and can easily break depending on the X-Server config. Works on my machine, but it's not really a high proprity to support at the moment. Does not support rotated screens and GPU-accelerated downscaling. |
+| [ScreenCapture.NET.X11](https://www.nuget.org/packages/ScreenCapture.NET.X11) | libX11 based capturing for the X-Window-System (on Wayland use the Wayland package). Quite slow and can easily break depending on the X-Server config. Works on my machine, but it's not really a high proprity to support at the moment. Does not support rotated screens and GPU-accelerated downscaling. |
+| [ScreenCapture.NET.Wayland](https://www.nuget.org/packages/ScreenCapture.NET.Wayland) | xdg-desktop-portal and PipeWire based capturing for Wayland desktops (KDE Plasma, GNOME, wlroots compositors with xdg-desktop-portal-wlr). The user has to allow the capture in a dialog of the desktop (see [Wayland](#wayland)). Needs libpipewire. |
 
 ## Usage
 ```csharp
@@ -107,3 +108,18 @@ using (fullscreen.Lock())
     RefImage<ColorBGRA> subImage = image[100, 150, 400, 300];
 }
 ```
+
+## Wayland
+Wayland desktops only share the screen with the consent of the user. The first `GetDisplays` of a `WaylandScreenCaptureService` starts a screen cast session: the desktop shows a dialog where the user picks the monitors to share, and `GetDisplays` blocks until the user answered it (it throws an `InvalidOperationException` if the user cancels). The displays are the shared monitors.
+
+The desktop can remember the selection: the service then has a restore token that starts a later session without the dialog. Store it and pass it back on the next start:
+```csharp
+WaylandScreenCaptureService screenCaptureService = new(sessionOptions: new WaylandSessionOptions { RestoreToken = LoadToken() });
+
+// The desktop may hand out a new token with every session (GNOME does): always store the latest one.
+screenCaptureService.RestoreTokenChanged += (_, args) => SaveToken(args.RestoreToken);
+
+IEnumerable<Display> displays = screenCaptureService.GetDisplays(screenCaptureService.GetGraphicsCards().First());
+```
+
+If the user stops sharing (or the session ends otherwise), the captures return `CaptureResult.Unavailable`. They never show the dialog themselves: the next `GetDisplays` starts a new session (restored without the dialog if the desktop remembered it), and the captures continue on it. `WaylandSessionOptions.DrawCursor` draws the mouse pointer into the frames.

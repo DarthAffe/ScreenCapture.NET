@@ -12,6 +12,10 @@ namespace ScreenCapture.NET;
 /// Wayland compositors only share the screen with the consent of the user: the first <see cref="GetDisplays"/> starts a screen cast session,
 /// for which the compositor shows a dialog where the user chooses the monitors to share. The displays are the shared monitors (see <see cref="GetDisplays"/>).
 /// It works wherever xdg-desktop-portal with a backend for the desktop runs (e.g. KDE Plasma, GNOME, or wlroots compositors with xdg-desktop-portal-wlr), and needs libpipewire.
+/// <para>
+/// The portal can remember the shared monitors (<see cref="WaylandSessionOptions.PersistMode"/>): it returns a <see cref="RestoreToken"/> that starts a later session without the dialog,
+/// also in a later process if the app stores it and passes it back (<see cref="WaylandSessionOptions.RestoreToken"/>).
+/// </para>
 /// <para>Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, WaylandCaptureOptions)"/>.</para>
 /// </remarks>
 public sealed class WaylandScreenCaptureService : IScreenCaptureService
@@ -25,6 +29,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     private readonly Lock _stateLock = new();
     private ScreenCastSession? _session;
     private volatile bool _isDisposed;
+    private volatile string? _restoreToken;
 
     private readonly ScreenCaptureCache<WaylandScreenCapture, WaylandCaptureOptions> _screenCaptures;
 
@@ -37,6 +42,28 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// Gets the options of the screen cast session, which apply to all captures.
     /// </summary>
     public WaylandSessionOptions SessionOptions { get; }
+
+    /// <summary>
+    /// Gets the token to restore the shared monitors in a later session without the dialog: the latest one the portal returned,
+    /// or the one of the <see cref="SessionOptions"/> until a session returned one. <c>null</c> if there's none.
+    /// </summary>
+    /// <remarks>
+    /// A new session (after one ended) restores with it on its own. Store it to restore the session in a later process (<see cref="WaylandSessionOptions.RestoreToken"/>):
+    /// the portal may hand out a new one with every session (see <see cref="RestoreTokenChanged"/>).
+    /// </remarks>
+    public string? RestoreToken => _restoreToken;
+
+    #endregion
+
+    #region Events
+
+    /// <summary>
+    /// Occurs when a session started and the portal returned another <see cref="RestoreToken"/> than the current one.
+    /// </summary>
+    /// <remarks>
+    /// Raised by <see cref="GetDisplays"/> (where sessions start) on its thread, after the session started and before it returns.
+    /// </remarks>
+    public event EventHandler<WaylandRestoreTokenChangedEventArgs>? RestoreTokenChanged;
 
     #endregion
 
@@ -54,6 +81,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     {
         Options = options ?? WaylandCaptureOptions.Default;
         SessionOptions = sessionOptions ?? WaylandSessionOptions.Default;
+        _restoreToken = SessionOptions.RestoreToken;
         _screenCaptures = new ScreenCaptureCache<WaylandScreenCapture, WaylandCaptureOptions>(this, (display, captureOptions) => new WaylandScreenCapture(this, display, captureOptions), capture => capture.Options);
     }
 
@@ -77,7 +105,8 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// <remarks>
     /// <para>
     /// The displays are the monitors the user shares: the first call starts a screen cast session and <b>blocks until the user answered the dialog of the compositor</b>.
-    /// Later calls return the displays of that session without a dialog. If the session ended (e.g. the user stopped sharing), the next call starts a new one, again with the dialog.
+    /// Later calls return the displays of that session without a dialog. If the session ended (e.g. the user stopped sharing), the next call starts a new one,
+    /// again with the dialog unless the portal restores it (see <see cref="RestoreToken"/>).
     /// </para>
     /// <para>
     /// The ids of the displays are <c>stream:</c> and the id the portal gives the stream, or its index if the portal gives none (e.g. KDE).
@@ -93,11 +122,20 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
         GraphicsCard portal = WaylandDisplays.GetGraphicsCard();
         if (!string.Equals(graphicsCard.Id, portal.Id, StringComparison.Ordinal)) return [];
 
-        return WaylandDisplays.GetDisplays(GetSession().Streams, portal);
+        ScreenCastSession session = GetSession(out string? newRestoreToken);
+
+        // Outside the locks: the handler may call into the service.
+        if (newRestoreToken != null)
+            RestoreTokenChanged?.Invoke(this, new WaylandRestoreTokenChangedEventArgs(newRestoreToken));
+
+        return WaylandDisplays.GetDisplays(session.Streams, portal);
     }
 
-    private ScreenCastSession GetSession()
+    // Returns the current session, or starts a new one. newRestoreToken is the token a new session returned if it's another than the current one.
+    private ScreenCastSession GetSession(out string? newRestoreToken)
     {
+        newRestoreToken = null;
+
         lock (_startLock)
         {
             ScreenCastSession? ended;
@@ -117,7 +155,12 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
             try
             {
                 // Started on the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
-                Task.Run(() => session.StartAsync(SessionOptions)).GetAwaiter().GetResult();
+                string? restoreToken = _restoreToken;
+                Task.Run(() => session.StartAsync(SessionOptions, restoreToken)).GetAwaiter().GetResult();
+
+                if ((session.RestoreToken != null) && !string.Equals(session.RestoreToken, restoreToken, StringComparison.Ordinal))
+                    _restoreToken = newRestoreToken = session.RestoreToken;
+
                 return session;
             }
             catch (Exception)

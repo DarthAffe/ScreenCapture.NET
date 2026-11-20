@@ -41,6 +41,12 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
     private ColorBGRA _color;
     private long _pts;
     private bool _corrupted;
+    private bool _gradient;
+    private byte _frameCounter;
+
+    // Sends frames like a monitor that changes all the time (see StartPump).
+    private Thread? _pump;
+    private volatile bool _stopPump;
 
     /// <summary>
     /// Gets the id of the node.
@@ -255,7 +261,16 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
             // The padding of the rows gets another color, so a capture that reads it shows.
             new Span<byte>(spaData->data, source._stride * source._height).Fill(0x5A);
             for (int y = 0; y < source._height; y++)
-                new Span<ColorBGRA>(spaData->data + (y * source._stride), source._width).Fill(source._color);
+            {
+                Span<ColorBGRA> row = new(spaData->data + (y * source._stride), source._width);
+                if (!source._gradient)
+                    row.Fill(source._color);
+                else
+                    for (int x = 0; x < row.Length; x++)
+                        row[x] = new ColorBGRA((byte)(x * 4), (byte)(y * 4), source._frameCounter, 0);
+            }
+
+            source._frameCounter++;
 
             spaData->chunk->offset = 0;
             spaData->chunk->size = (uint)(source._stride * source._height);
@@ -272,8 +287,41 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
         _ = pw_stream_queue_buffer(source._stream, buffer);
     }
 
+    /// <summary>
+    /// Sends a frame about every 16 ms from now on, like a monitor that changes all the time: a gradient (blue and green rise to the right and down) whose red changes with every frame.
+    /// </summary>
+    public void StartPump()
+    {
+        _stopPump = false;
+        _pump = new Thread(() =>
+        {
+            while (!_stopPump)
+            {
+                pw_thread_loop_lock(_loop);
+                try
+                {
+                    _gradient = true;
+                    _pts = 0;
+                    _corrupted = false;
+                    _ = pw_stream_trigger_process(_stream);
+                }
+                finally
+                {
+                    pw_thread_loop_unlock(_loop);
+                }
+
+                Thread.Sleep(16);
+            }
+        }) { IsBackground = true, Name = "PipeWire test source pump" };
+        _pump.Start();
+    }
+
     public void Dispose()
     {
+        _stopPump = true;
+        _pump?.Join();
+        _pump = null;
+
         if (_loop != 0)
         {
             pw_thread_loop_lock(_loop);

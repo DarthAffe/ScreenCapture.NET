@@ -10,6 +10,10 @@ namespace ScreenCapture.NET.Tests.Hardware;
 /// Wayland tests with the real ScreenCast portal: the compositor shows its share dialog, which the user has to answer (share at least one monitor).
 /// They only run on request: <c>dotnet test --filter TestCategory=Interactive</c>, one TFM at a time (<c>-f</c>), in a Wayland session.
 /// Not part of a <c>TestCategory=Hardware</c> run.
+/// <para>
+/// The restore token of the last session is stored in <c>$XDG_CACHE_HOME/ScreenCapture.NET.Tests/wayland-restore-token</c> (outside the repository):
+/// once a session was remembered, the tests restore it without the dialog. Delete the file (or revoke the permission in the settings of the desktop) to see the dialog again.
+/// </para>
 /// </summary>
 [TestClass]
 [TestCategory(HardwareTestHelper.INTERACTIVE_CATEGORY)]
@@ -17,16 +21,38 @@ namespace ScreenCapture.NET.Tests.Hardware;
 [SupportedOSPlatform("linux")]
 public sealed class WaylandInteractiveTests
 {
+    private static string TokenFile
+        => Path.Combine(Environment.GetEnvironmentVariable("XDG_CACHE_HOME") is { Length: > 0 } cache ? cache : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"),
+                        "ScreenCapture.NET.Tests", "wayland-restore-token");
+
+    [TestInitialize]
+    public void RequireWayland()
+    {
+        if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") == null)
+            Assert.Inconclusive("Not in a Wayland session.");
+    }
+
+    // With the stored restore token, which is replaced when the portal hands out a new one.
+    private static WaylandScreenCaptureService CreateService(bool drawCursor = false)
+    {
+        string? token = File.Exists(TokenFile) ? File.ReadAllText(TokenFile).Trim() : null;
+        WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { DrawCursor = drawCursor, RestoreToken = token });
+        service.RestoreTokenChanged += (_, args) =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(TokenFile)!);
+            File.WriteAllText(TokenFile, args.RestoreToken);
+        };
+
+        return service;
+    }
+
     /// <summary>
     /// <b>Shows the share dialog once</b>: share one or more monitors. Later calls return the same displays without a dialog.
     /// </summary>
     [TestMethod]
     public void DisplaysAreTheSharedMonitors()
     {
-        if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") == null)
-            Assert.Inconclusive("Not in a Wayland session.");
-
-        using WaylandScreenCaptureService service = new();
+        using WaylandScreenCaptureService service = CreateService();
         GraphicsCard graphicsCard = service.GetGraphicsCards().Single();
 
         List<Display> displays = [.. service.GetDisplays(graphicsCard)];
@@ -50,10 +76,7 @@ public sealed class WaylandInteractiveTests
     [DataRow(true)]
     public void SharedMonitorsAreCaptured(bool drawCursor)
     {
-        if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") == null)
-            Assert.Inconclusive("Not in a Wayland session.");
-
-        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { DrawCursor = drawCursor });
+        using WaylandScreenCaptureService service = CreateService(drawCursor);
         foreach (Display display in service.GetDisplays(service.GetGraphicsCards().Single()).ToList())
         {
             WaylandScreenCapture capture = service.GetScreenCapture(display);
@@ -66,5 +89,31 @@ public sealed class WaylandInteractiveTests
             Assert.IsTrue(pixels.Any(pixel => (pixel.R | pixel.G | pixel.B) != 0), $"{display.Id} is black.");
             Assert.IsTrue(pixels.All(pixel => pixel.A == byte.MaxValue), $"{display.Id} isn't opaque.");
         }
+    }
+
+    /// <summary>
+    /// <b>Shows the share dialog</b> unless a stored session is restored: share one or more monitors and let the desktop remember them (KDE: the checkbox).
+    /// A second service with the token the first one got starts without the dialog and shares the same monitors.
+    /// </summary>
+    [TestMethod]
+    public void RestoredSessionShowsNoDialog()
+    {
+        List<Display> displays;
+        string? token;
+        using (WaylandScreenCaptureService first = CreateService())
+        {
+            displays = [.. first.GetDisplays(first.GetGraphicsCards().Single())];
+            token = first.RestoreToken;
+        }
+
+        Assert.IsNotNull(token, "The portal returned no restore token (version 4 needed).");
+
+        using WaylandScreenCaptureService second = CreateService();
+        Assert.AreEqual(token, second.RestoreToken);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        List<Display> restored = [.. second.GetDisplays(second.GetGraphicsCards().Single())];
+        Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds, "The restored session showed the dialog (or the desktop didn't remember the selection).");
+        CollectionAssert.AreEqual(displays, restored);
     }
 }

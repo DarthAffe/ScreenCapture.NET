@@ -33,6 +33,9 @@ internal sealed class ScreenCastSession : IDisposable
 
     private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
 
+    // The version of the interface that has persist_mode and restore_token.
+    internal const uint RESTORE_VERSION = 4;
+
     // Disposing waits this long for the portal to confirm the end of the session; the connection is closed afterwards anyway.
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(1);
 
@@ -70,6 +73,11 @@ internal sealed class ScreenCastSession : IDisposable
     /// </summary>
     public bool IsStarted => _isStarted;
 
+    /// <summary>
+    /// Gets the token the portal returned to restore the session later; <c>null</c> if it returned none (e.g. without a persist mode, or before version 4).
+    /// </summary>
+    public string? RestoreToken { get; private set; }
+
     #endregion
 
     #region Constructors
@@ -94,8 +102,9 @@ internal sealed class ScreenCastSession : IDisposable
     /// Creates the session, lets the user choose the monitors to share and starts sharing them. Waits until the user answered the dialog of the compositor.
     /// </summary>
     /// <param name="options">The options of the session.</param>
+    /// <param name="restoreToken">The token of the session to restore; <c>null</c> for none.</param>
     /// <exception cref="InvalidOperationException">The portal isn't available, the user cancelled the dialog or the portal ended the session.</exception>
-    public async Task StartAsync(WaylandSessionOptions options)
+    public async Task StartAsync(WaylandSessionOptions options, string? restoreToken)
     {
         try
         {
@@ -107,17 +116,26 @@ internal sealed class ScreenCastSession : IDisposable
             _closedWatch = await _connection.WatchSignalAsync(PORTAL_NAME, sessionPath, SESSION_INTERFACE, "Closed", _ => _isClosed = true, ObserverFlags.None, false, null).ConfigureAwait(false);
             _sessionPath = sessionPath;
 
-            uint? cursorMode = GetCursorMode(options, await ReadAvailableCursorModesAsync().ConfigureAwait(false));
+            uint? cursorMode = GetCursorMode(options, await ReadPropertyAsync("AvailableCursorModes").ConfigureAwait(false));
+
+            // Before version 4 the portal can't restore sessions (the options would be ignored anyway).
+            bool canRestore = await ReadPropertyAsync("version").ConfigureAwait(false) >= RESTORE_VERSION;
             await RequestAsync("SelectSources", (ref MessageWriter writer) =>
             {
                 WriteOption(ref writer, "types", SOURCE_TYPE_MONITOR);
                 WriteOption(ref writer, "multiple", true);
                 if (cursorMode is { } mode)
                     WriteOption(ref writer, "cursor_mode", mode);
+
+                if (canRestore && (options.PersistMode != WaylandPersistMode.None))
+                    WriteOption(ref writer, "persist_mode", (uint)options.PersistMode);
+                if (canRestore && !string.IsNullOrEmpty(restoreToken))
+                    WriteOption(ref writer, "restore_token", restoreToken);
             }, sessionPath).ConfigureAwait(false);
 
             Dictionary<string, VariantValue> started = await RequestAsync("Start", null, sessionPath, parentWindow: string.Empty).ConfigureAwait(false);
             Streams = PortalStream.ReadStreams(started);
+            RestoreToken = started.TryGetValue("restore_token", out VariantValue token) && (token.Type == VariantValueType.String) && (token.GetString().Length > 0) ? token.GetString() : null;
             _isStarted = true;
         }
         catch (DBusExceptionBase ex)
@@ -186,8 +204,8 @@ internal sealed class ScreenCastSession : IDisposable
         return (availableCursorModes & mode) != 0 ? mode : null;
     }
 
-    // Version 1 of the interface has no cursor modes: the property doesn't exist.
-    private async Task<uint> ReadAvailableCursorModesAsync()
+    // A property of the ScreenCast interface; 0 if it doesn't exist (e.g. AvailableCursorModes before version 2).
+    private async Task<uint> ReadPropertyAsync(string name)
     {
         MessageWriter writer = _connection.GetMessageWriter();
         MessageBuffer call;
@@ -195,7 +213,7 @@ internal sealed class ScreenCastSession : IDisposable
         {
             writer.WriteMethodCallHeader(PORTAL_NAME, PORTAL_PATH, PROPERTIES_INTERFACE, "Get", "ss", MessageFlags.None);
             writer.WriteString(SCREEN_CAST_INTERFACE);
-            writer.WriteString("AvailableCursorModes");
+            writer.WriteString(name);
             call = writer.CreateMessage();
         }
         finally

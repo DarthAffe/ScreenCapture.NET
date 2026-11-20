@@ -114,6 +114,136 @@ public sealed class WaylandPortalTests
     }
 
     [TestMethod]
+    public void SessionIsRememberedByDefault()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+
+        using WaylandScreenCaptureService service = new();
+        List<string> changes = [];
+        service.RestoreTokenChanged += (_, args) => changes.Add(args.RestoreToken);
+        Assert.IsNull(service.RestoreToken);
+
+        _ = GetDisplays(service, service.GetGraphicsCards().Single());
+
+        Assert.AreEqual((uint)WaylandPersistMode.Persistent, portal.SelectSourcesOptions?["persist_mode"].GetUInt32());
+        Assert.IsFalse(portal.SelectSourcesOptions?.ContainsKey("restore_token") ?? true);
+        Assert.AreEqual("token-1", service.RestoreToken);
+        CollectionAssert.AreEqual(new[] { "token-1" }, changes);
+    }
+
+    [TestMethod]
+    [DataRow(WaylandPersistMode.WhileRunning)]
+    [DataRow(WaylandPersistMode.Persistent)]
+    public void PersistModeIsTheOneOfTheOptions(WaylandPersistMode persistMode)
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { PersistMode = persistMode });
+        _ = GetDisplays(service, service.GetGraphicsCards().Single());
+
+        Assert.AreEqual((uint)persistMode, portal.SelectSourcesOptions?["persist_mode"].GetUInt32());
+    }
+
+    [TestMethod]
+    public void NothingIsRememberedWithoutPersistMode()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { PersistMode = WaylandPersistMode.None });
+        bool changed = false;
+        service.RestoreTokenChanged += (_, _) => changed = true;
+
+        _ = GetDisplays(service, service.GetGraphicsCards().Single());
+
+        Assert.IsFalse(portal.SelectSourcesOptions?.ContainsKey("persist_mode") ?? true);
+        Assert.IsNull(service.RestoreToken);
+        Assert.IsFalse(changed);
+    }
+
+    /// <summary>
+    /// Like a later process with the token the first one stored: no dialog.
+    /// </summary>
+    [TestMethod]
+    public void TokenOfTheOptionsRestoresTheSession()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+
+        string token;
+        using (WaylandScreenCaptureService first = new())
+        {
+            _ = GetDisplays(first, first.GetGraphicsCards().Single());
+            token = first.RestoreToken!;
+        }
+
+        using WaylandScreenCaptureService second = new(sessionOptions: new WaylandSessionOptions { RestoreToken = token });
+        Assert.AreEqual(token, second.RestoreToken);
+
+        _ = GetDisplays(second, second.GetGraphicsCards().Single());
+
+        Assert.AreEqual(token, portal.SelectSourcesOptions?["restore_token"].GetString());
+        Assert.AreEqual(1, portal.Dialogs, "The second session showed the dialog.");
+        Assert.AreEqual("token-2", second.RestoreToken, "Not the new token (rotated).");
+    }
+
+    /// <summary>
+    /// A new session after the last one ended (in the same process) restores with the latest token on its own.
+    /// </summary>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void NextSessionRestoresWithTheLatestToken(bool rotatesTokens)
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+        portal.RotatesRestoreTokens = rotatesTokens;
+
+        using WaylandScreenCaptureService service = new();
+        List<string> changes = [];
+        service.RestoreTokenChanged += (_, args) => changes.Add(args.RestoreToken);
+        GraphicsCard graphicsCard = service.GetGraphicsCards().Single();
+        _ = GetDisplays(service, graphicsCard);
+
+        portal.CloseSessions();
+        Assert.IsTrue(SpinWait.SpinUntil(() => GetDisplays(service, graphicsCard).Any() && (portal.CountCalls("CreateSession") == 2), WaitTimeout), "No new session was started.");
+
+        Assert.AreEqual("token-1", portal.SelectSourcesOptions?["restore_token"].GetString());
+        Assert.AreEqual(1, portal.Dialogs, "The second session showed the dialog.");
+
+        // GNOME hands out a new token (the event tells), KDE keeps it (no event).
+        string[] expected = rotatesTokens ? ["token-1", "token-2"] : ["token-1"];
+        CollectionAssert.AreEqual(expected, changes);
+        Assert.AreEqual(expected[^1], service.RestoreToken);
+    }
+
+    [TestMethod]
+    public void InvalidTokenShowsTheDialog()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { RestoreToken = "revoked" });
+        _ = GetDisplays(service, service.GetGraphicsCards().Single());
+
+        Assert.AreEqual(1, portal.Dialogs);
+        Assert.AreEqual("token-1", service.RestoreToken);
+    }
+
+    /// <summary>
+    /// Before version 4 the portal has no restore tokens: they aren't sent.
+    /// </summary>
+    [TestMethod]
+    public void OldPortalGetsNoRestoreOptions()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+        portal.Version = 3;
+
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { RestoreToken = "saved" });
+        Assert.ContainsSingle(GetDisplays(service, service.GetGraphicsCards().Single()));
+
+        Assert.IsFalse(portal.SelectSourcesOptions?.ContainsKey("persist_mode") ?? true);
+        Assert.IsFalse(portal.SelectSourcesOptions?.ContainsKey("restore_token") ?? true);
+        Assert.AreEqual("saved", service.RestoreToken, "The token of the options stays.");
+    }
+
+    [TestMethod]
     public void ResponseBeforeTheReplyIsntMissed()
     {
         using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
