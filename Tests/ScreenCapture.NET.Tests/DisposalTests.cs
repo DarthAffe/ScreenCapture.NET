@@ -1,4 +1,5 @@
 extern alias WGC;
+extern alias Wayland;
 using System.Reflection;
 
 namespace ScreenCapture.NET.Tests;
@@ -12,7 +13,8 @@ public sealed class DisposalTests
         typeof(DX11ScreenCaptureService).Assembly,
         typeof(DX9ScreenCaptureService).Assembly,
         typeof(X11ScreenCaptureService).Assembly,
-        typeof(WGC::ScreenCapture.NET.WGCScreenCaptureService).Assembly
+        typeof(WGC::ScreenCapture.NET.WGCScreenCaptureService).Assembly,
+        typeof(Wayland::ScreenCapture.NET.WaylandScreenCaptureService).Assembly
     ];
 
     /// <summary>

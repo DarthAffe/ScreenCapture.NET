@@ -367,12 +367,14 @@ internal static unsafe partial class WGCInterop
 
         HStringHeader header;
         nint hstring;
-        fixed (char* name = className)
-            // A reference to the (null-terminated) string: nothing to free.
-            Check(WindowsCreateStringReference(name, (uint)className.Length, &header, &hstring));
-
         nint factory;
-        Check(RoGetActivationFactory(hstring, &iid, &factory));
+        fixed (char* name = className)
+        {
+            // A reference to the (null-terminated) string: nothing to free, but it's only valid while the string is pinned.
+            Check(WindowsCreateStringReference(name, (uint)className.Length, &header, &hstring));
+            Check(RoGetActivationFactory(hstring, &iid, &factory));
+        }
+
         return factory;
     }
 

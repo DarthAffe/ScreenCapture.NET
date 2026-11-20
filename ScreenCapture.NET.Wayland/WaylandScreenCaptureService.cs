@@ -62,6 +62,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// </summary>
     /// <remarks>
     /// Raised by <see cref="GetDisplays"/> (where sessions start) on its thread, after the session started and before it returns.
+    /// Exceptions thrown by a handler are ignored: <see cref="GetDisplays"/> returns the displays of the session anyway.
     /// </remarks>
     public event EventHandler<WaylandRestoreTokenChangedEventArgs>? RestoreTokenChanged;
 
@@ -126,7 +127,11 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
 
         // Outside the locks: the handler may call into the service.
         if (newRestoreToken != null)
-            RestoreTokenChanged?.Invoke(this, new WaylandRestoreTokenChangedEventArgs(newRestoreToken));
+            try
+            {
+                RestoreTokenChanged?.Invoke(this, new WaylandRestoreTokenChangedEventArgs(newRestoreToken));
+            }
+            catch { /* Exceptions of handlers aren't errors of the service: the session started, and the token is in RestoreToken. */ }
 
         return WaylandDisplays.GetDisplays(session.Streams, portal);
     }
