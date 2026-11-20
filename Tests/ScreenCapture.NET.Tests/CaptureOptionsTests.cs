@@ -93,7 +93,7 @@ public sealed class CaptureOptionsTests
     [TestMethod]
     public void DX9OptionsWithoutValuesAreAllEqual()
     {
-        // X11CaptureOptions (Linux-only assembly) is checked by X11HardwareTests.OptionsAreUsedForCaptures.
+        // X11CaptureOptions (Linux-only assembly) is checked by X11InteropTests and X11HardwareTests.OptionsAreUsedForCaptures.
         Assert.AreEqual(DX9CaptureOptions.Default, new DX9CaptureOptions());
     }
 }

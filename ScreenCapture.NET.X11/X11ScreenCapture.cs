@@ -7,7 +7,7 @@ using HPPH;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents a ScreenCapture using libX11.
+/// Represents a ScreenCapture using libX11, through shared memory (MIT-SHM) where the X server supports it (see <see cref="X11CaptureOptions.UseSharedMemory"/>).
 /// https://x.org/releases/current/doc/libX11/libX11/libX11.html#XGetImage
 /// </summary>
 /// <remarks>
@@ -35,7 +35,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private X11DisplayHandle? _display;
     private CULong _drawable;
 
-    // Only used under _captureLock. A restart reads the whole screen into it, so a new image already holds a frame.
+    // Only used under _captureLock. Holds the frame of the last capture.
     private X11ImageHandle? _image;
 
     private bool _isDisposed;
@@ -47,6 +47,18 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// Gets the options this capture was created with.
     /// </summary>
     public X11CaptureOptions Options { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the screen is read through shared memory (see <see cref="X11CaptureOptions.UseSharedMemory"/>); <c>false</c> while the capture isn't started.
+    /// </summary>
+    internal bool UsesSharedMemory
+    {
+        get
+        {
+            lock (_captureLock)
+                return _image?.IsShared ?? false;
+        }
+    }
 
     #endregion
 
@@ -83,16 +95,18 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 return RestartCapture();
 
             _display.ClearError();
-            nint result = X11.XGetSubImage(_display, _drawable, 0, 0, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0);
+            bool read = _image.IsShared
+                            ? X11.XShmGetImage(_display, _drawable, _image, 0, 0, X11.ALL_PLANES)
+                            : X11.XGetSubImage(_display, _drawable, 0, 0, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0) != 0;
 
             // E.g. BadMatch if the screen got smaller than the image. Starting over picks up the current state.
-            if ((result == 0) || (_display.LastError != null))
+            if (!read || (_display.LastError != null))
             {
-                ReportError(new InvalidOperationException($"XGetSubImage failed{FormatXError(_display.LastError)}."));
+                ReportError(new InvalidOperationException($"{(_image.IsShared ? "XShmGetImage" : "XGetSubImage")} failed{FormatXError(_display.LastError)}."));
                 return RestartCapture();
             }
 
-            // XGetSubImage has no change detection: every successful read counts as a new frame.
+            // X11 has no change detection: every successful read counts as a new frame.
             return CaptureResult.NewFrame;
         }
     }
@@ -173,11 +187,17 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 int width = X11.XWidthOfScreen(screen);
                 int height = X11.XHeightOfScreen(screen);
 
-                image = X11.XGetImage(display, drawable, 0, 0, (uint)width, (uint)height, X11.ALL_PLANES, X11.ZPIXMAP);
-                if (image.IsInvalid || (display.LastError != null))
-                    throw new InvalidOperationException($"XGetImage of the {width}x{height} screen failed{FormatXError(display.LastError)}.");
+                // Zones are only written after a capture read a frame (a restart isn't one), so the shared image is read by the first capture.
+                image = Options.UseSharedMemory ? X11ImageHandle.CreateShared(display, screen, width, height) : null;
+                if (image == null)
+                {
+                    image = X11.XGetImage(display, drawable, 0, 0, (uint)width, (uint)height, X11.ALL_PLANES, X11.ZPIXMAP);
+                    if (image.IsInvalid || (display.LastError != null))
+                        throw new InvalidOperationException($"XGetImage of the {width}x{height} screen failed{FormatXError(display.LastError)}.");
 
-                image.ReadDescription();
+                    image.ReadDescription();
+                }
+
                 if (!image.IsBGRA) throw new NotSupportedException($"The X server uses an unsupported pixel format ({image.Format}). Only 32 bits per pixel with 8-bit BGR channels is supported.");
 
                 _display = display;

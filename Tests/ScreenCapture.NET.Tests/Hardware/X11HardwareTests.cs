@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -369,6 +371,119 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SharedMemoryIsUsedByDefault(bool onXvfb)
+    {
+        using XvfbServer? server = onXvfb ? XvfbServer.Start() : null;
+        using X11ScreenCaptureService service = new(displayName: server?.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.IsTrue(screenCapture.UsesSharedMemory);
+
+        HardwareTestHelper.CaptureFrame(screenCapture);
+        Assert.IsTrue(screenCapture.UsesSharedMemory);
+        Assert.IsNull(screenCapture.LastError);
+    }
+
+    [TestMethod]
+    public void SharedMemoryCanBeTurnedOff()
+    {
+        using X11ScreenCaptureService service = new(new X11CaptureOptions { UseSharedMemory = false });
+        HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        Assert.IsFalse(service.GetScreenCapture(display).UsesSharedMemory);
+    }
+
+    /// <summary>
+    /// Captures the same patterns with and without shared memory. The second pattern shows that the segment gets the new frames.
+    /// </summary>
+    [TestMethod]
+    public void SharedMemoryCapturesTheSameAsWithout()
+    {
+        using XvfbServer server = XvfbServer.Start();
+        using X11ScreenCaptureService sharedService = new(displayName: server.DisplayName);
+        using X11ScreenCaptureService unsharedService = new(new X11CaptureOptions { UseSharedMemory = false }, server.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(sharedService);
+        X11ScreenCapture shared = sharedService.GetScreenCapture(display);
+        X11ScreenCapture unshared = unsharedService.GetScreenCapture(display);
+        Assert.IsTrue(shared.UsesSharedMemory);
+        Assert.IsFalse(unshared.UsesSharedMemory);
+
+        CaptureRegion region = new(0, 0, display.Width, display.Height);
+        CaptureZone<ColorBGRA> sharedZone = shared.RegisterCaptureZone(region);
+        CaptureZone<ColorBGRA> unsharedZone = unshared.RegisterCaptureZone(region);
+
+        ColorBGRA[]? previous = null;
+        foreach (int seed in (int[])[1, 2])
+        {
+            server.SetRootPattern(seed);
+            HardwareTestHelper.CaptureFrame(shared);
+            HardwareTestHelper.CaptureFrame(unshared);
+
+            ColorBGRA[] expected = HardwareTestHelper.GetPixels(unsharedZone);
+            CollectionAssert.AreEqual(expected, HardwareTestHelper.GetPixels(sharedZone), $"Pattern {seed} differs.");
+
+            if (previous != null)
+                CollectionAssert.AreNotEqual(previous, expected, "The patterns look the same.");
+            previous = expected;
+        }
+    }
+
+    /// <summary>
+    /// Like a remote server: without the extension, or with one that can't attach this process's segments (BadAccess), the capture reads without shared memory and reports nothing.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ServerWithoutSharedMemoryIsReadWithoutIt(bool ownIpcNamespace)
+    {
+        int segments = CountOwnSegments();
+
+        using XvfbServer server = XvfbServer.Start(sharedMemoryExtension: ownIpcNamespace, ownIpcNamespace: ownIpcNamespace);
+        server.SetRootPattern(1);
+        using X11ScreenCaptureService service = new(displayName: server.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
+
+        HardwareTestHelper.CaptureFrame(screenCapture);
+        Assert.IsFalse(screenCapture.UsesSharedMemory);
+        Assert.IsNull(screenCapture.LastError);
+        Assert.IsTrue(HardwareTestHelper.GetPixels(zone).Any(p => (p.R | p.G | p.B) != 0), "The pattern wasn't captured.");
+
+        // The segment the server couldn't attach is gone right away.
+        Assert.AreEqual(segments, CountOwnSegments(), "A segment is left.");
+    }
+
+    /// <summary>
+    /// Every restart creates a new segment: the old ones and the last one are removed once they're detached.
+    /// </summary>
+    [TestMethod]
+    public void SharedMemoryIsReleased()
+    {
+        int segments = CountOwnSegments();
+
+        using (X11ScreenCaptureService service = new())
+        {
+            (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+            X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+            Assert.IsTrue(screenCapture.UsesSharedMemory);
+
+            for (int i = 0; i < 5; i++)
+                screenCapture.Restart();
+
+            AssertOwnSegments(segments + 1);
+        }
+
+        AssertOwnSegments(segments);
+    }
+
+    [TestMethod]
     public void OutdatedDisplaySizeIsReadAgain()
     {
         using X11ScreenCaptureService service = new();
@@ -378,6 +493,27 @@ public sealed class X11HardwareTests
         Display outdated = display with { Width = display.Width + 16, Height = display.Height / 2 };
 
         HardwareTestHelper.AssertOutdatedDisplayIsReadAgain(display, outdated, d => new X11ScreenCapture(d, X11CaptureOptions.Default, null));
+    }
+
+    /// <summary>
+    /// Counts the System V shared memory segments this process created, including the removed ones that are still attached.
+    /// </summary>
+    private static int CountOwnSegments()
+    {
+        string processId = Environment.ProcessId.ToString(CultureInfo.InvariantCulture);
+
+        // Columns: key shmid perms size cpid ...
+        return File.ReadLines("/proc/sysvipc/shm").Skip(1).Count(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries)[4] == processId);
+    }
+
+    // The server detaches a segment when it gets to the request, after the capture closed its connection.
+    private static void AssertOwnSegments(int expected)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while ((CountOwnSegments() != expected) && (stopwatch.Elapsed < TimeSpan.FromSeconds(2)))
+            Thread.Sleep(10);
+
+        Assert.AreEqual(expected, CountOwnSegments(), "Shared memory segments of this process.");
     }
 
     private static void AssertNoHandles(X11ScreenCapture screenCapture)

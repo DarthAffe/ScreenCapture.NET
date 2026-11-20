@@ -76,6 +76,30 @@ public sealed class X11InteropTests
         Assert.AreEqual(80, (int)Marshal.OffsetOf<X11.XImage>(nameof(X11.XImage.obdata)));
     }
 
+    /// <summary>
+    /// Pins the layout of <see cref="X11.XShmSegmentInfo"/> to libXext's on 64-bit Linux (<c>ShmSeg</c> is an <c>unsigned long</c>).
+    /// </summary>
+    [TestMethod]
+    [OSCondition(OperatingSystems.Linux)]
+    public unsafe void XShmSegmentInfoMatchesXextLayoutOn64BitLinux()
+    {
+        if (!Environment.Is64BitProcess)
+            Assert.Inconclusive("The layout is pinned for 64-bit processes.");
+
+        Assert.AreEqual(8, (int)Marshal.OffsetOf<X11.XShmSegmentInfo>(nameof(X11.XShmSegmentInfo.shmid)));
+        Assert.AreEqual(16, (int)Marshal.OffsetOf<X11.XShmSegmentInfo>(nameof(X11.XShmSegmentInfo.shmaddr)));
+        Assert.AreEqual(24, (int)Marshal.OffsetOf<X11.XShmSegmentInfo>(nameof(X11.XShmSegmentInfo.readOnly)));
+        Assert.AreEqual(32, sizeof(X11.XShmSegmentInfo));
+    }
+
+    [TestMethod]
+    public void X11OptionsUseSharedMemoryByDefault()
+    {
+        Assert.IsTrue(X11CaptureOptions.Default.UseSharedMemory);
+        Assert.AreEqual(X11CaptureOptions.Default, new X11CaptureOptions());
+        Assert.AreNotEqual(X11CaptureOptions.Default, new X11CaptureOptions { UseSharedMemory = false });
+    }
+
     private static X11.XImage CreateImage(int bitsPerPixel = 32, int byteOrder = X11.LSB_FIRST, nuint redMask = 0xFF0000, nuint greenMask = 0xFF00, nuint blueMask = 0xFF)
         => new()
         {

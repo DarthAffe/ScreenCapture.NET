@@ -32,6 +32,15 @@ internal static partial class X11
     internal static partial CULong XRootWindowOfScreen(nint screen);
 
     [LibraryImport("libX11.so.6")]
+    internal static partial nint XDefaultVisualOfScreen(nint screen);
+
+    [LibraryImport("libX11.so.6")]
+    internal static partial int XDefaultDepthOfScreen(nint screen);
+
+    [LibraryImport("libX11.so.6")]
+    internal static partial int XSync(X11DisplayHandle display, [MarshalAs(UnmanagedType.Bool)] bool discard);
+
+    [LibraryImport("libX11.so.6")]
     internal static partial X11ImageHandle XGetImage(X11DisplayHandle display, CULong drawable, int x, int y, uint width, uint height, CULong planeMask, int format);
 
     [LibraryImport("libX11.so.6")]
@@ -51,7 +60,58 @@ internal static partial class X11
 
     [LibraryImport("libX11.so.6")]
     internal static partial int XCloseDisplay(nint display);
-    
+
+    #region MIT-SHM (libXext)
+
+    [LibraryImport("libXext.so.6")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool XShmQueryExtension(X11DisplayHandle display);
+
+    /// <summary>
+    /// Creates an image without pixel memory; the image keeps the pointer to <paramref name="segment"/> (<see cref="XImage.obdata"/>).
+    /// </summary>
+    [LibraryImport("libXext.so.6")]
+    internal static unsafe partial X11ImageHandle XShmCreateImage(X11DisplayHandle display, nint visual, uint depth, int format, nint data, XShmSegmentInfo* segment, uint width, uint height);
+
+    /// <summary>
+    /// Asks the server to attach the segment. Only returns <c>false</c> if the request couldn't be sent: a server that can't attach it reports BadAccess asynchronously.
+    /// </summary>
+    [LibraryImport("libXext.so.6")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static unsafe partial bool XShmAttach(X11DisplayHandle display, XShmSegmentInfo* segment);
+
+    // Takes the Display* itself: called while the image handle is released (see X11ImageHandle).
+    [LibraryImport("libXext.so.6")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static unsafe partial bool XShmDetach(nint display, XShmSegmentInfo* segment);
+
+    [LibraryImport("libXext.so.6")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool XShmGetImage(X11DisplayHandle display, CULong drawable, X11ImageHandle image, int x, int y, CULong planeMask);
+
+    #endregion
+
+    #region System V shared memory (libc)
+
+    internal const int IPC_PRIVATE = 0;
+    internal const int IPC_CREAT = 0x200; // 01000
+    internal const int IPC_RMID = 0;
+    internal const int SHM_MODE_OWNER_READ_WRITE = 0x180; // 0600
+
+    [LibraryImport("libc")]
+    internal static partial int shmget(int key, nuint size, int flags);
+
+    [LibraryImport("libc")]
+    internal static partial nint shmat(int id, nint address, int flags);
+
+    [LibraryImport("libc")]
+    internal static partial int shmdt(nint address);
+
+    [LibraryImport("libc")]
+    internal static partial int shmctl(int id, int command, nint buffer);
+
+    #endregion
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct XErrorEvent
     {
@@ -86,6 +146,17 @@ internal static partial class X11
         public CULong green_mask;
         public CULong blue_mask;
         public nint obdata;
+        // ReSharper restore MemberCanBePrivate.Global
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XShmSegmentInfo
+    {
+        // ReSharper disable MemberCanBePrivate.Global
+        public CULong shmseg;
+        public int shmid;
+        public byte* shmaddr;
+        public int readOnly;
         // ReSharper restore MemberCanBePrivate.Global
     }
 }
