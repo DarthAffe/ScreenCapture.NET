@@ -1,5 +1,7 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using HPPH;
 
 namespace ScreenCapture.NET.Tests;
 
@@ -31,6 +33,28 @@ public sealed class X11InteropTests
     [TestMethod]
     public void TenBitChannelsAreNotSupported()
         => Assert.IsFalse(X11ImageHandle.IsBGRAFormat(CreateImage(redMask: 0x3FF00000, greenMask: 0xFFC00, blueMask: 0x3FF)));
+
+    /// <summary>
+    /// Covers the vectorized blocks and the remainder for every length up to three blocks.
+    /// </summary>
+    [TestMethod]
+    public void SetOpaqueOnlyChangesTheAlpha()
+    {
+        Random random = new(42);
+
+        for (int length = 0; length <= ((3 * Vector<uint>.Count) + 1); length++)
+        {
+            ColorBGRA[] pixels = new ColorBGRA[length];
+            for (int i = 0; i < length; i++)
+                pixels[i] = new ColorBGRA((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(255));
+
+            ColorBGRA[] expected = [.. pixels.Select(p => new ColorBGRA(p.B, p.G, p.R, byte.MaxValue))];
+
+            X11ScreenCapture.SetOpaque(pixels);
+
+            CollectionAssert.AreEqual(expected, pixels, $"length {length}");
+        }
+    }
 
     /// <summary>
     /// Pins the layout of <see cref="X11.XImage"/> to Xlib's on 64-bit Linux, where <c>unsigned long</c> is 8 bytes.

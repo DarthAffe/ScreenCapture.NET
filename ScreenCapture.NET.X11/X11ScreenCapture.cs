@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using HPPH;
@@ -17,6 +18,9 @@ namespace ScreenCapture.NET;
 /// <para>
 /// A restart reads the size of the screen again (see <see cref="IScreenCapture.DisplayChanged"/>). A screen that got smaller makes the capture fail and restart on its own;
 /// one that got larger is captured with its previous size until <see cref="IScreenCapture.Restart"/> is called.
+/// </para>
+/// <para>
+/// The pixels of the zones are opaque: their alpha is always 255, whatever the X server stores in the padding byte of a depth-24 visual.
 /// </para>
 /// </remarks>
 // ReSharper disable once InconsistentNaming
@@ -108,8 +112,35 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             WriteCaptureZone(RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride), captureZone, buffer);
 
+            // On depth-24 visuals the fourth byte is padding: servers fill it as they like (e.g. Xvfb with 0) and XGetSubImage clears it. The screen is opaque.
+            SetOpaque(buffer);
+
             return true;
         }
+    }
+
+    /// <summary>
+    /// Sets the alpha of every pixel to 255.
+    /// </summary>
+    internal static void SetOpaque(Span<ColorBGRA> pixels)
+    {
+        // ColorBGRA is stored as the bytes B, G, R, A.
+        uint alpha = BitConverter.IsLittleEndian ? 0xFF000000 : 0xFF;
+        Span<uint> values = MemoryMarshal.Cast<ColorBGRA, uint>(pixels);
+
+        int i = 0;
+        if (Vector.IsHardwareAccelerated)
+        {
+            Vector<uint> alphaVector = new(alpha);
+            for (; i <= (values.Length - Vector<uint>.Count); i += Vector<uint>.Count)
+            {
+                Span<uint> block = values.Slice(i, Vector<uint>.Count);
+                (new Vector<uint>(block) | alphaVector).CopyTo(block);
+            }
+        }
+
+        for (; i < values.Length; i++)
+            values[i] |= alpha;
     }
 
     /// <inheritdoc />

@@ -342,6 +342,32 @@ public sealed class X11HardwareTests
         Assert.IsNull(display.LastError);
     }
 
+    /// <summary>
+    /// The fourth byte of a depth-24 visual is padding that every server fills as it likes (Xvfb: 0, xorgxrdp: 255),
+    /// and <c>XGetSubImage</c> sets it to 0 on every server (Xlib copies the pixels masked to the depth).
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, 0)]
+    [DataRow(false, 2)]
+    [DataRow(true, 0)]
+    [DataRow(true, 2)]
+    public void ZonesAreOpaque(bool onXvfb, int downscaleLevel)
+    {
+        using XvfbServer? server = onXvfb ? XvfbServer.Start() : null;
+        using X11ScreenCaptureService service = new(displayName: server?.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height), downscaleLevel);
+
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        using CaptureFrame<ColorBGRA> frame = zone.Lock();
+        Assert.IsGreaterThan(0, frame.Pixels.Length);
+        foreach (ColorBGRA pixel in frame.Pixels)
+            Assert.AreEqual(byte.MaxValue, pixel.A);
+    }
+
     [TestMethod]
     public void OutdatedDisplaySizeIsReadAgain()
     {
