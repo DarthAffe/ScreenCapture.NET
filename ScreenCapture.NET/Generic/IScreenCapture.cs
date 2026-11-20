@@ -29,7 +29,7 @@ namespace ScreenCapture.NET;
 /// </description></item>
 /// <item><description>
 /// <see cref="IDisposable.Dispose"/> can be called while other calls run: they finish, and the methods called afterwards throw an <see cref="ObjectDisposedException"/>
-/// (the properties and <see cref="ICaptureZone.AcquireFrame"/> keep working). Dispose waits until a running capture stopped using the backend's resources.
+/// (the properties and <see cref="ICaptureZone.AcquireFrame"/> keep working). Dispose waits until a running capture stopped using the backend's resources, and a concurrent second Dispose waits until the first one has released them.
 /// </description></item>
 /// </list>
 /// </remarks>

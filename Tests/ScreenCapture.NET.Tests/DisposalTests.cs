@@ -64,6 +64,45 @@ public sealed class DisposalTests
     }
 
     /// <summary>
+    /// A service releases the objects its captures share once their Dispose returned: a second Dispose must not return while the first still releases the backend.
+    /// </summary>
+    [TestMethod]
+    public void SecondDisposeWaitsForTheFirst()
+    {
+        using ManualResetEventSlim releasing = new();
+        using ManualResetEventSlim release = new();
+        BlockingScreenCapture screenCapture = new(releasing, release);
+
+        Task first = Task.Factory.StartNew(screenCapture.Dispose, TaskCreationOptions.LongRunning);
+        Assert.IsTrue(releasing.Wait(TimeSpan.FromSeconds(10)), "The first Dispose didn't release the backend.");
+
+        bool releasedBeforeReturn = false;
+        Task second = Task.Factory.StartNew(() =>
+        {
+            screenCapture.Dispose();
+            releasedBeforeReturn = release.IsSet;
+        }, TaskCreationOptions.LongRunning);
+
+        // Gives a second Dispose that doesn't wait the time to return.
+        Assert.IsFalse(second.Wait(TimeSpan.FromMilliseconds(200)), "The second Dispose returned while the first one still released the backend.");
+
+        release.Set();
+        Assert.IsTrue(Task.WaitAll([first, second], TimeSpan.FromSeconds(10)));
+        Assert.IsTrue(releasedBeforeReturn);
+    }
+
+    private sealed class BlockingScreenCapture(ManualResetEventSlim releasing, ManualResetEventSlim release) : TestScreenCapture
+    {
+        protected override void Dispose(bool disposing)
+        {
+            releasing.Set();
+            release.Wait();
+
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
     /// Follows the pattern documented on <see cref="AbstractScreenCapture{TColor}.Dispose(bool)"/>: no own flag, the base runs it once.
     /// </summary>
     private sealed class CountingScreenCapture : TestScreenCapture

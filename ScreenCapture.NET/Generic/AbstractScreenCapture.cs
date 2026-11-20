@@ -38,6 +38,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     private bool _isDisposed;
 
+    // Held while Dispose(bool) runs, so a second Dispose waits for the first. Only Dispose takes it, before any other lock.
+    private readonly Lock _disposeLock = new();
+
     /// <inheritdoc />
     /// <remarks>
     /// Set at the start of <see cref="Dispose()"/>, before the backend released its resources.
@@ -675,13 +678,22 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     protected abstract bool PerformRestart();
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A concurrent second call waits until the first one has released the resources of the backend.
+    /// </remarks>
     [SuppressMessage("Design", "CA1063:Implement IDisposable Correctly", Justification = "Dispose(bool) runs only once, so backends don't need their own flag; the flag is set before it runs, so a racing PerformRestart sees it.")]
     public void Dispose()
     {
-        // Set before the backend releases its resources: a restart racing the dispose sees it under the backend's lock.
-        if (Interlocked.Exchange(ref _isDisposed, true)) return;
+        // A second call waits for the first: e.g. a service releases the objects its captures share once the capture's Dispose returned.
+        lock (_disposeLock)
+        {
+            if (_isDisposed) return;
 
-        Dispose(true);
+            // Set before the backend releases its resources: a restart racing the dispose sees it under the backend's lock.
+            Volatile.Write(ref _isDisposed, true);
+            Dispose(true);
+        }
+
         GC.SuppressFinalize(this);
     }
 
