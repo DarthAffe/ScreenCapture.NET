@@ -33,6 +33,11 @@ internal abstract class ZoneBuffer
     public abstract ReadOnlySpan<byte> RawData { get; }
 
     /// <summary>
+    /// Gets the color format of the pixels.
+    /// </summary>
+    public abstract IColorFormat ColorFormat { get; }
+
+    /// <summary>
     /// Gets if a frame reads this buffer.
     /// </summary>
     public bool IsInUse => Volatile.Read(ref _readers) > 0;
@@ -58,6 +63,12 @@ internal abstract class ZoneBuffer
 
     public void RemoveReader() => Interlocked.Decrement(ref _readers);
 
+    /// <summary>
+    /// Executes <paramref name="operation"/> on the pixels, typed with their color format (for code that doesn't know it).
+    /// </summary>
+    public abstract TResult Execute<TOperation, TResult>(TOperation operation)
+        where TOperation : IImageOperation<TResult>, allows ref struct;
+
     #endregion
 }
 
@@ -73,6 +84,9 @@ internal sealed class ZoneBuffer<TColor> : ZoneBuffer
     /// <inheritdoc />
     public override ReadOnlySpan<byte> RawData => MemoryMarshal.AsBytes(Data.AsSpan());
 
+    /// <inheritdoc />
+    public override IColorFormat ColorFormat => TColor.ColorFormat;
+
     #endregion
 
     #region Constructors
@@ -82,6 +96,14 @@ internal sealed class ZoneBuffer<TColor> : ZoneBuffer
     {
         Data = new TColor[width * height];
     }
+
+    #endregion
+
+    #region Methods
+
+    /// <inheritdoc />
+    public override TResult Execute<TOperation, TResult>(TOperation operation)
+        => operation.Execute(RefImage<TColor>.Wrap((ReadOnlySpan<TColor>)Data, Width, Height));
 
     #endregion
 }

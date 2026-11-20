@@ -129,7 +129,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     public CaptureFrame<TColor> Lock() => new(AddFrontReader());
 
     /// <inheritdoc />
-    CaptureFrame ICaptureZone.Lock() => new(ColorDispatcher<TColor>.Instance, AddFrontReader());
+    CaptureFrame ICaptureZone.Lock() => new(AddFrontReader());
 
     private ZoneBuffer<TColor> AddFrontReader()
     {

@@ -23,14 +23,15 @@ public ref struct CaptureFrame
 {
     #region Properties & Fields
 
+    // The buffer stays for the typed access after the frame released it as a reader (_reader is cleared then).
+    private readonly ZoneBuffer _zoneBuffer;
     private ZoneBuffer? _reader;
-    private readonly ColorDispatcher _dispatcher;
     private readonly ReadOnlySpan<byte> _buffer;
 
     /// <summary>
     /// Gets the color format of the pixels.
     /// </summary>
-    public readonly IColorFormat ColorFormat => _dispatcher.ColorFormat;
+    public readonly IColorFormat ColorFormat => _zoneBuffer.ColorFormat;
 
     /// <summary>
     /// Gets the width of the frame in pixels.
@@ -59,9 +60,9 @@ public ref struct CaptureFrame
     /// <summary>
     /// Creates a frame that holds a reader of <paramref name="buffer"/> (already added by the caller).
     /// </summary>
-    internal CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer)
+    internal CaptureFrame(ZoneBuffer buffer)
     {
-        this._dispatcher = dispatcher;
+        this._zoneBuffer = buffer;
         this._reader = buffer;
         this._buffer = buffer.RawData;
         this.Width = buffer.Width;
@@ -82,7 +83,7 @@ public ref struct CaptureFrame
     public readonly RefImage<TColor> AsRefImage<TColor>()
         where TColor : unmanaged, IColor<TColor>
     {
-        if (_dispatcher is not ColorDispatcher<TColor>) throw new ArgumentException("The requested color format does not match the data.", nameof(TColor));
+        if (_zoneBuffer is not ZoneBuffer<TColor>) throw new ArgumentException("The requested color format does not match the data.", nameof(TColor));
 
         return RefImage<TColor>.Wrap(_buffer, Width, Height, Stride);
     }
@@ -100,7 +101,7 @@ public ref struct CaptureFrame
     {
         if (operation is null) throw new ArgumentNullException(nameof(operation));
 
-        return _dispatcher.Execute<TOperation, TResult>(operation, _buffer, Width, Height, Stride);
+        return _zoneBuffer.Execute<TOperation, TResult>(operation);
     }
 
     /// <summary>
@@ -117,7 +118,7 @@ public ref struct CaptureFrame
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        return _dispatcher.Execute<IImageOperation<TResult>, TResult>(operation, _buffer, Width, Height, Stride);
+        return _zoneBuffer.Execute<IImageOperation<TResult>, TResult>(operation);
     }
 
     /// <summary>
