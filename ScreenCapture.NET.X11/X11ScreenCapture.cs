@@ -61,18 +61,6 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// </summary>
     public X11CaptureOptions Options { get; }
 
-    /// <summary>
-    /// Gets a value indicating whether the screen is read through shared memory (see <see cref="X11CaptureOptions.UseSharedMemory"/>); <c>false</c> while the capture isn't started.
-    /// </summary>
-    internal bool UsesSharedMemory
-    {
-        get
-        {
-            lock (_captureLock)
-                return _image?.IsShared ?? false;
-        }
-    }
-
     #endregion
 
     #region Constructors

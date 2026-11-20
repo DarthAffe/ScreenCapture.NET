@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -426,21 +426,50 @@ public sealed partial class X11HardwareTests
             Assert.AreEqual(byte.MaxValue, pixel.A);
     }
 
+    /// <summary>
+    /// A local server attaches the segment, so the server can write into it.
+    /// </summary>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void SharedMemoryIsUsedByDefault(bool onXvfb)
+    public void SharedImageIsCreatedWhereTheServerCanShare(bool onXvfb)
     {
-        using XvfbServer? server = onXvfb ? XvfbServer.Start() : null;
-        using X11ScreenCaptureService service = X11DesktopServer.CreateService(displayName: server?.DisplayName);
+        using XvfbServer? server = onXvfb ? XvfbServer.Start("640x480x24") : null;
+        using X11DisplayHandle display = server == null ? X11DesktopServer.Open() : X11DisplayHandle.Open(server.DisplayName);
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
 
-        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
-        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
-        Assert.IsTrue(screenCapture.UsesSharedMemory);
+        nint screen = X11.XScreenOfDisplay(display, 0);
+        using X11ImageHandle? image = X11ImageHandle.CreateShared(display, screen, 320, 200);
+        Assert.IsNotNull(image, "The server didn't attach the segment.");
+        Assert.IsTrue(image.IsShared);
+        Assert.AreEqual(320, image.Width);
+        Assert.AreEqual(200, image.Height);
+        Assert.IsTrue(image.IsBGRA, $"Unexpected format: {image.Format}");
 
-        HardwareTestHelper.CaptureFrame(screenCapture);
-        Assert.IsTrue(screenCapture.UsesSharedMemory);
-        Assert.IsNull(screenCapture.LastError);
+        display.ClearError();
+        Assert.IsTrue(X11.XShmGetImage(display, X11.XRootWindowOfScreen(screen), image, 0, 0, X11.ALL_PLANES));
+        Assert.IsNull(display.LastError);
+    }
+
+    /// <summary>
+    /// Like a remote server: without the extension, or with one that can't attach this process's segments (BadAccess), there's no shared image, no error and no segment left.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SharedImageIsNotCreatedWhereTheServerCantShare(bool ownIpcNamespace)
+    {
+        int segments = CountOwnSegments();
+
+        using XvfbServer server = XvfbServer.Start(sharedMemoryExtension: ownIpcNamespace, ownIpcNamespace: ownIpcNamespace);
+        using X11DisplayHandle display = X11DisplayHandle.Open(server.DisplayName);
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
+
+        Assert.IsNull(X11ImageHandle.CreateShared(display, X11.XScreenOfDisplay(display, 0), 320, 200));
+        Assert.IsNull(display.LastError);
+
+        // The segment the server couldn't attach is gone right away.
+        Assert.AreEqual(segments, CountOwnSegments(), "A segment is left.");
     }
 
     [TestMethod]
@@ -448,13 +477,11 @@ public sealed partial class X11HardwareTests
     {
         using X11ScreenCaptureService service = X11DesktopServer.CreateService(new X11CaptureOptions { UseSharedMemory = false });
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center);
-
-        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
-        Assert.IsFalse(service.GetScreenCapture(display).UsesSharedMemory);
     }
 
     /// <summary>
     /// Captures the same patterns with and without shared memory. The second pattern shows that the segment gets the new frames.
+    /// Which call each option makes shows in the errors of <see cref="LostConnectionIsUnavailableUntilTheServerIsBack"/>.
     /// </summary>
     [TestMethod]
     public void SharedMemoryCapturesTheSameAsWithout()
@@ -466,8 +493,6 @@ public sealed partial class X11HardwareTests
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(sharedService);
         X11ScreenCapture shared = sharedService.GetScreenCapture(display);
         X11ScreenCapture unshared = unsharedService.GetScreenCapture(display);
-        Assert.IsTrue(shared.UsesSharedMemory);
-        Assert.IsFalse(unshared.UsesSharedMemory);
 
         CaptureRegion region = new(0, 0, display.Width, display.Height);
         CaptureZone<ColorBGRA> sharedZone = shared.RegisterCaptureZone(region);
@@ -490,15 +515,13 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
-    /// Like a remote server: without the extension, or with one that can't attach this process's segments (BadAccess), the capture reads without shared memory and reports nothing.
+    /// Like a remote server (see <see cref="SharedImageIsNotCreatedWhereTheServerCantShare"/>): the capture reads without shared memory and reports nothing.
     /// </summary>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     public void ServerWithoutSharedMemoryIsReadWithoutIt(bool ownIpcNamespace)
     {
-        int segments = CountOwnSegments();
-
         using XvfbServer server = XvfbServer.Start(sharedMemoryExtension: ownIpcNamespace, ownIpcNamespace: ownIpcNamespace);
         server.SetRootPattern(1);
         using X11ScreenCaptureService service = new(displayName: server.DisplayName);
@@ -508,12 +531,8 @@ public sealed partial class X11HardwareTests
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
 
         HardwareTestHelper.CaptureFrame(screenCapture);
-        Assert.IsFalse(screenCapture.UsesSharedMemory);
         Assert.IsNull(screenCapture.LastError);
         Assert.IsTrue(HardwareTestHelper.GetPixels(zone).Any(p => (p.R | p.G | p.B) != 0), "The pattern wasn't captured.");
-
-        // The segment the server couldn't attach is gone right away.
-        Assert.AreEqual(segments, CountOwnSegments(), "A segment is left.");
     }
 
     /// <summary>
@@ -528,7 +547,6 @@ public sealed partial class X11HardwareTests
         {
             (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
             X11ScreenCapture screenCapture = service.GetScreenCapture(display);
-            Assert.IsTrue(screenCapture.UsesSharedMemory);
 
             for (int i = 0; i < 5; i++)
                 screenCapture.Restart();
@@ -649,7 +667,6 @@ public sealed partial class X11HardwareTests
         foreach (Display monitor in displays.Where(d => d.DeviceName != "screen"))
         {
             X11ScreenCapture screenCapture = service.GetScreenCapture(monitor);
-            Assert.AreEqual(useSharedMemory, screenCapture.UsesSharedMemory);
 
             CollectionAssert.AreEqual(HardwareTestHelper.Crop(screenPixels, screen.Width, monitor.X, monitor.Y, monitor.Width, monitor.Height), CaptureWholeDisplay(screenCapture),
                                       $"{monitor.DeviceName} doesn't show its part of the screen.");
