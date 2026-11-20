@@ -64,12 +64,12 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     public static InvalidOperationException CreateOpenFailedException(string? displayName)
     {
         if (displayName != null)
-            return new InvalidOperationException($"Couldn't connect to the X server '{displayName}'. Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");
+            return new InvalidOperationException($"Couldn't connect to the X server '{displayName}'. Check that it's running and accessible. On Wayland, use ScreenCapture.NET.Wayland: XWayland doesn't show the Wayland desktop to X clients.");
 
         displayName = Environment.GetEnvironmentVariable("DISPLAY");
         return new InvalidOperationException(string.IsNullOrEmpty(displayName)
-                                                 ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, X11 capturing needs XWayland."
-                                                 : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible; on Wayland, X11 capturing needs XWayland.");
+                                                 ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, use ScreenCapture.NET.Wayland: XWayland doesn't show the Wayland desktop to X clients."
+                                                 : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible. On Wayland, use ScreenCapture.NET.Wayland: XWayland doesn't show the Wayland desktop to X clients.");
     }
 
     /// <summary>

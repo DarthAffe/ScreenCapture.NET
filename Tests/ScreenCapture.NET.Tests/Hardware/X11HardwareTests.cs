@@ -13,25 +13,17 @@ namespace ScreenCapture.NET.Tests.Hardware;
 [SupportedOSPlatform("linux")]
 public sealed class X11HardwareTests
 {
-    [TestInitialize]
-    public void RequireXServer()
-    {
-        // Without an X server the service throws (see X11NoServerTests).
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY")))
-            Assert.Inconclusive("No X server available ($DISPLAY is not set).");
-    }
-
     [TestMethod]
     public void EnumeratesDisplays()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertEnumeratesDisplays(service);
     }
 
     [TestMethod]
     public void DevicesHaveStableIds()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertDevicesHaveStableIds(service);
     }
 
@@ -39,7 +31,7 @@ public sealed class X11HardwareTests
     public void OptionsAreUsedForCaptures()
     {
         X11CaptureOptions options = new();
-        using X11ScreenCaptureService service = new(options);
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService(options);
         Assert.AreSame(options, service.Options);
         Assert.IsNull(service.DisplayName);
 
@@ -51,16 +43,17 @@ public sealed class X11HardwareTests
         Assert.AreSame(screenCapture, service.GetScreenCapture(display, new X11CaptureOptions()));
         Assert.ThrowsExactly<ArgumentNullException>(() => service.GetScreenCapture(display, null!));
 
-        using X11ScreenCaptureService defaultService = new();
+        using X11ScreenCaptureService defaultService = X11DesktopServer.CreateService();
         Assert.AreSame(X11CaptureOptions.Default, defaultService.Options);
     }
 
     [TestMethod]
     public void ServiceConnectsToTheGivenDisplay()
     {
+        X11DesktopServer.Require();
         string displayName = Environment.GetEnvironmentVariable("DISPLAY")!;
 
-        using X11ScreenCaptureService defaultService = new();
+        using X11ScreenCaptureService defaultService = X11DesktopServer.CreateService();
         using X11ScreenCaptureService service = new(displayName: displayName);
         Assert.AreEqual(displayName, service.DisplayName);
 
@@ -76,7 +69,7 @@ public sealed class X11HardwareTests
         const string displayName = ":4711";
 
         Display display;
-        using (X11ScreenCaptureService defaultService = new())
+        using (X11ScreenCaptureService defaultService = X11DesktopServer.CreateService())
             display = HardwareTestHelper.GetFirstDisplay(defaultService).display;
 
         using X11ScreenCaptureService service = new(displayName: displayName);
@@ -95,70 +88,70 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void DisplaysAreFoundById()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertDisplaysAreFoundById(service);
     }
 
     [TestMethod]
     public void DevicesAreLookedUpById()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertDevicesAreLookedUpById(service);
     }
 
     [TestMethod]
     public void DisposedCaptureIsReplaced()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertDisposedCaptureIsReplaced(service);
     }
 
     [TestMethod]
     public void ConcurrentRequestsGetTheSameCapture()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertConcurrentRequestsGetTheSameCapture(service);
     }
 
     [TestMethod]
     public void CapturesAreCachedById()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertCapturesAreCachedById(service);
     }
 
     [TestMethod]
     public void CapturesFullScreenZone()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.FullScreen);
     }
 
     [TestMethod]
     public void CapturesPartialZone()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center);
     }
 
     [TestMethod]
     public void CapturesDownscaledZone()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center, downscaleLevel: 2);
     }
 
     [TestMethod]
     public void MovedZoneCapturesNewPosition()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service);
     }
 
     [TestMethod]
     public void MovedDownscaledZoneCapturesNewPosition()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service, downscaleLevel: 2);
     }
 
@@ -167,35 +160,35 @@ public sealed class X11HardwareTests
     [DataRow(2)]
     public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
     }
 
     [TestMethod]
     public void ZoneShowsTheLatestFrame()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertZoneShowsTheLatestFrame(service);
     }
 
     [TestMethod]
     public void ZonesCanBeChangedWhileCapturing()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertZonesCanBeChangedWhileCapturing(service);
     }
 
     [TestMethod]
     public void DownscaledZonesCanBeChangedWhileCapturing()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertZonesCanBeChangedWhileCapturing(service, downscaleLevel: 2);
     }
 
     [TestMethod]
     public void ConcurrentCapturesWork()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertConcurrentCapturesWork(service);
     }
 
@@ -203,25 +196,25 @@ public sealed class X11HardwareTests
     public void ThreadSafetyContractHolds()
     {
         // Disposed by the test while everything runs; disposing it again is harmless.
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertThreadSafetyContract(service);
     }
 
     [TestMethod]
     public void EnumerationDuringDisposeIsSafe()
-        => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => new X11ScreenCaptureService());
+        => HardwareTestHelper.AssertEnumerationDuringDisposeIsSafe(() => X11DesktopServer.CreateService());
 
     [TestMethod]
     public void PartialZonesMatchFullScreen()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertPartialZonesMatchFullScreen(service);
     }
 
     [TestMethod]
     public void DisposeIsRepeatable()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         HardwareTestHelper.AssertDisposeIsRepeatable(service);
     }
 
@@ -229,8 +222,9 @@ public sealed class X11HardwareTests
     public void FailedRestartLeavesNoHandles()
     {
         // The display doesn't exist, so every restart fails after the connection was opened.
+        using XvfbServer server = XvfbServer.Start();
         Display display = HardwareTestHelper.CreateMissingDisplay();
-        X11ScreenCapture screenCapture = new(display, X11CaptureOptions.Default, null);
+        X11ScreenCapture screenCapture = new(display, X11CaptureOptions.Default, server.DisplayName);
         AssertNoHandles(screenCapture);
 
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
@@ -258,7 +252,7 @@ public sealed class X11HardwareTests
         const int restarts = 100;
         TimeSpan timeout = TimeSpan.FromSeconds(30);
 
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
         IScreenCapture screenCapture = service.GetScreenCapture(display);
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
@@ -306,7 +300,7 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void ImageDescriptionMatchesServer()
     {
-        using X11DisplayHandle display = X11DisplayHandle.Open(null);
+        using X11DisplayHandle display = X11DesktopServer.Open();
         Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
 
         CULong root = X11.XRootWindowOfScreen(X11.XScreenOfDisplay(display, 0));
@@ -330,7 +324,7 @@ public sealed class X11HardwareTests
         const byte badMatch = 8;
         const byte getImage = 73;
 
-        using X11DisplayHandle display = X11DisplayHandle.Open(null);
+        using X11DisplayHandle display = X11DesktopServer.Open();
         Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
 
         nint screen = X11.XScreenOfDisplay(display, 0);
@@ -356,7 +350,7 @@ public sealed class X11HardwareTests
     public void ZonesAreOpaque(bool onXvfb, int downscaleLevel)
     {
         using XvfbServer? server = onXvfb ? XvfbServer.Start() : null;
-        using X11ScreenCaptureService service = new(displayName: server?.DisplayName);
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService(displayName: server?.DisplayName);
 
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
         X11ScreenCapture screenCapture = service.GetScreenCapture(display);
@@ -376,7 +370,7 @@ public sealed class X11HardwareTests
     public void SharedMemoryIsUsedByDefault(bool onXvfb)
     {
         using XvfbServer? server = onXvfb ? XvfbServer.Start() : null;
-        using X11ScreenCaptureService service = new(displayName: server?.DisplayName);
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService(displayName: server?.DisplayName);
 
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
         X11ScreenCapture screenCapture = service.GetScreenCapture(display);
@@ -390,7 +384,7 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void SharedMemoryCanBeTurnedOff()
     {
-        using X11ScreenCaptureService service = new(new X11CaptureOptions { UseSharedMemory = false });
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService(new X11CaptureOptions { UseSharedMemory = false });
         HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.Center);
 
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
@@ -468,7 +462,7 @@ public sealed class X11HardwareTests
     {
         int segments = CountOwnSegments();
 
-        using (X11ScreenCaptureService service = new())
+        using (X11ScreenCaptureService service = X11DesktopServer.CreateService())
         {
             (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
             X11ScreenCapture screenCapture = service.GetScreenCapture(display);
@@ -486,7 +480,7 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void OutdatedDisplaySizeIsReadAgain()
     {
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
 
         // The capture reads the size of the screen when it starts. With the outdated size, XGetImage would fail with BadMatch (see XErrorIsRecordedInsteadOfTerminating).
@@ -707,7 +701,7 @@ public sealed class X11NoServerTests
             Assert.Inconclusive("libX11 isn't installed.");
         NativeLibrary.Free(library);
 
-        using X11ScreenCaptureService service = new();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
 
         InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(() => service.GetGraphicsCards());
         StringAssert.Contains(exception.Message, "$DISPLAY");

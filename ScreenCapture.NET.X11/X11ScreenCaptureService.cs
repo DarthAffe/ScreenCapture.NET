@@ -12,6 +12,10 @@ namespace ScreenCapture.NET;
 /// and passes errors of all other connections to the handler that was installed before.
 /// If other code installs its own handler afterwards without passing errors on, X errors of the capture are handled by that code.
 /// <para>Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, X11CaptureOptions)"/>.</para>
+/// <para>
+/// It captures X11 sessions. In a Wayland session, $DISPLAY is usually XWayland, whose root window doesn't show the Wayland desktop (only the windows of X clients, if anything):
+/// captures there fail or are black. Use ScreenCapture.NET.Wayland for Wayland desktops.
+/// </para>
 /// </remarks>
 public sealed class X11ScreenCaptureService : IScreenCaptureService
 {
