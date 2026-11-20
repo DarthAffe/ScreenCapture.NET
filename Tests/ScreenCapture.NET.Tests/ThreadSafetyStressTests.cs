@@ -73,7 +73,7 @@ public sealed class ThreadSafetyStressTests
         {
             // Holding a frame while capturing: the zone is written into its other buffer, or skips the capture.
             if ((i % 5) == 0)
-                using (second.Lock())
+                using (second.AcquireFrame())
                     screenCapture.CaptureScreen();
             else
                 screenCapture.CaptureScreen();
@@ -86,7 +86,7 @@ public sealed class ThreadSafetyStressTests
             int level = LEVELS[(i / REGIONS.Length) % LEVELS.Length];
 
             if ((i % 7) == 0)
-                using (zone.Lock())
+                using (zone.AcquireFrame())
                     screenCapture.UpdateCaptureZone(zone, region, level);
             else
                 screenCapture.UpdateCaptureZone(zone, region, level);
@@ -162,7 +162,7 @@ public sealed class ThreadSafetyStressTests
     /// </summary>
     private static void AssertFrame(CaptureZone<ColorARGB> zone, HashSet<(int Width, int Height)> sizes)
     {
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
 
         Assert.Contains((frame.Width, frame.Height), sizes, "The frame has a size the zone never had.");
         Assert.AreEqual(frame.Width * ColorARGB.ColorFormat.BytesPerPixel, frame.Stride);

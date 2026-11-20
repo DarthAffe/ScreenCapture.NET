@@ -69,7 +69,7 @@ internal static class HardwareTestHelper
         Assert.AreEqual(width >> zone.DownscaleLevel, zone.Width);
         Assert.AreEqual(height >> zone.DownscaleLevel, zone.Height);
 
-        using (CaptureFrame frame = zone.Lock())
+        using (CaptureFrame frame = zone.AcquireFrame())
         {
             Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);
             Assert.IsTrue(frame.RawBuffer.ContainsAnyExcept((byte)0), "Captured zone contains only zeros.");
@@ -103,9 +103,9 @@ internal static class HardwareTestHelper
         byte[] movedPixels;
         byte[] referencePixels;
         byte[] topLeftPixels;
-        using (CaptureFrame frame = moved.Lock()) movedPixels = frame.RawBuffer.ToArray();
-        using (CaptureFrame frame = reference.Lock()) referencePixels = frame.RawBuffer.ToArray();
-        using (CaptureFrame frame = topLeft.Lock()) topLeftPixels = frame.RawBuffer.ToArray();
+        using (CaptureFrame frame = moved.AcquireFrame()) movedPixels = frame.RawBuffer.ToArray();
+        using (CaptureFrame frame = reference.AcquireFrame()) referencePixels = frame.RawBuffer.ToArray();
+        using (CaptureFrame frame = topLeft.AcquireFrame()) topLeftPixels = frame.RawBuffer.ToArray();
 
         screenCapture.UnregisterCaptureZone(moved);
         screenCapture.UnregisterCaptureZone(reference);
@@ -146,10 +146,10 @@ internal static class HardwareTestHelper
         {
             for (int i = 0; i < iterations; i++)
             {
-                using (zone.Lock())
+                using (zone.AcquireFrame())
                     screenCapture.UpdateCaptureZone(zone, zone.Region with { X = i % 100, Width = 64 + (i % 2) });
 
-                using (zone.Lock())
+                using (zone.AcquireFrame())
                     screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 32, 32), downscaleLevel));
             }
         }, TaskCreationOptions.LongRunning);
@@ -373,7 +373,7 @@ internal static class HardwareTestHelper
 
     public static ColorBGRA[] GetPixels(ICaptureZone zone)
     {
-        using CaptureFrame frame = zone.Lock();
+        using CaptureFrame frame = zone.AcquireFrame();
         Assert.AreEqual(ColorBGRA.ColorFormat, frame.ColorFormat, "Only BGRA zones are supported.");
         return frame.AsRefImage<ColorBGRA>().ToArray();
     }
@@ -578,7 +578,7 @@ internal static class HardwareTestHelper
         stress.Run("capture", i =>
         {
             if ((i % 5) == 0)
-                using (second.Lock())
+                using (second.AcquireFrame())
                     screenCapture.CaptureScreen();
             else
                 screenCapture.CaptureScreen();
@@ -591,7 +591,7 @@ internal static class HardwareTestHelper
             int level = levels[(i / regions.Length) % levels.Length];
 
             if ((i % 7) == 0)
-                using (zone.Lock())
+                using (zone.AcquireFrame())
                     screenCapture.UpdateCaptureZone(zone, region, level);
             else
                 screenCapture.UpdateCaptureZone(zone, region, level);
@@ -662,7 +662,7 @@ internal static class HardwareTestHelper
 
     private static void AssertFrameSize(ICaptureZone zone, HashSet<(int Width, int Height)> sizes)
     {
-        using CaptureFrame frame = zone.Lock();
+        using CaptureFrame frame = zone.AcquireFrame();
 
         Assert.Contains((frame.Width, frame.Height), sizes, "The frame has a size the zone never had.");
         Assert.AreEqual(frame.Width * frame.ColorFormat.BytesPerPixel, frame.Stride);

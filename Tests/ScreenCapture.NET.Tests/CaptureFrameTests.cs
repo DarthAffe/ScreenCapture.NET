@@ -36,21 +36,21 @@ public sealed class CaptureFrameTests
 
         if (nonGeneric)
         {
-            using CaptureFrame frame = ((ICaptureZone)zone).Lock();
+            using CaptureFrame frame = ((ICaptureZone)zone).AcquireFrame();
 
             Assert.IsTrue(Task.Run(screenCapture.CaptureScreen).Wait(TIMEOUT), "The capture waited for the frame.");
             AssertAll(COLOR_A, frame.AsRefImage<ColorARGB>(), "The pixels of a held frame changed.");
         }
         else
         {
-            using CaptureFrame<ColorARGB> frame = zone.Lock();
+            using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
 
             Assert.IsTrue(Task.Run(screenCapture.CaptureScreen).Wait(TIMEOUT), "The capture waited for the frame.");
             AssertAll(COLOR_A, frame.Image, "The pixels of a held frame changed.");
         }
 
         Assert.AreEqual(1, updates, "The zone wasn't updated while a frame was held.");
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
             AssertAll(COLOR_B, frame.Image, "A new frame doesn't show the new pixels.");
     }
 
@@ -69,7 +69,7 @@ public sealed class CaptureFrameTests
         int updates = 0;
         zone.Updated += (_, _) => updates++;
 
-        CaptureFrame<ColorARGB> held = zone.Lock();
+        CaptureFrame<ColorARGB> held = zone.AcquireFrame();
         try
         {
             screenCapture.Pattern = (_, _) => COLOR_B;
@@ -90,14 +90,14 @@ public sealed class CaptureFrameTests
             held.Dispose();
         }
 
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
             AssertAll(COLOR_B, frame.Image, "The zone doesn't show the last written pixels.");
 
         screenCapture.CaptureScreen();
 
         Assert.AreEqual(2, updates, "The zone wasn't updated after the frame was disposed.");
         Assert.IsFalse(zone.IsUpdateRequested);
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
             AssertAll(COLOR_C, frame.Image, "The zone doesn't show the new pixels.");
     }
 
@@ -110,10 +110,10 @@ public sealed class CaptureFrameTests
         int updates = 0;
         zone.Updated += (_, _) => updates++;
 
-        CaptureFrame<ColorARGB> outer = zone.Lock();
+        CaptureFrame<ColorARGB> outer = zone.AcquireFrame();
         try
         {
-            CaptureFrame<ColorARGB> inner = zone.Lock();
+            CaptureFrame<ColorARGB> inner = zone.AcquireFrame();
             inner.Dispose();
             inner.Dispose();
 
@@ -148,7 +148,7 @@ public sealed class CaptureFrameTests
             screenCapture.CaptureScreen();
 
         Assert.AreEqual(0, updates, "The zone was reported as updated without new pixels.");
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
         AssertAll(COLOR_A, frame.Image, "The zone lost its pixels.");
     }
 
@@ -159,7 +159,7 @@ public sealed class CaptureFrameTests
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
 
         Assert.AreEqual(ColorARGB.ColorFormat, frame.ColorFormat);
         Assert.AreEqual((16, 8, 16 * 4), (frame.Width, frame.Height, frame.Stride));
@@ -185,16 +185,16 @@ public sealed class CaptureFrameTests
 
         Image<ColorARGB> image;
         IImage untypedImage;
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
             image = frame.CopyImage();
-        using (CaptureFrame frame = ((ICaptureZone)zone).Lock())
+        using (CaptureFrame frame = ((ICaptureZone)zone).AcquireFrame())
             untypedImage = frame.CopyImage();
 
         // Overwrites every buffer of the zone.
         screenCapture.Pattern = (_, _) => COLOR_A;
         screenCapture.CaptureScreen();
         screenCapture.CaptureScreen();
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
             AssertAll(COLOR_A, frame.Image, "The zone wasn't overwritten.");
 
         Assert.AreEqual(ColorARGB.ColorFormat, untypedImage.ColorFormat);
@@ -216,7 +216,7 @@ public sealed class CaptureFrameTests
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
         {
             screenCapture.UpdateCaptureZone(zone, zone.Region with { Width = 32, Height = 4 });
 
@@ -226,7 +226,7 @@ public sealed class CaptureFrameTests
             Assert.AreEqual(TestScreenCapture.GetColorFromLocation(15, 7), frame.Image[15, 7]);
         }
 
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
         {
             Assert.AreEqual((16, 8), (frame.Width, frame.Height), "The frame before the next capture doesn't show the last captured pixels.");
             Assert.AreEqual(TestScreenCapture.GetColorFromLocation(15, 7), frame.Image[15, 7]);
@@ -234,7 +234,7 @@ public sealed class CaptureFrameTests
 
         screenCapture.CaptureScreen();
 
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
         {
             Assert.AreEqual((32, 4, 32 * 4 * 4), (frame.Width, frame.Height, frame.RawBuffer.Length));
             Assert.AreEqual(TestScreenCapture.GetColorFromLocation(31, 3), frame.Image[31, 3]);
@@ -248,7 +248,7 @@ public sealed class CaptureFrameTests
         ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
-        using CaptureFrame frame = zone.Lock();
+        using CaptureFrame frame = zone.AcquireFrame();
 
         Assert.AreEqual(ColorARGB.ColorFormat, frame.ColorFormat);
         Assert.AreEqual((16, 8, 16 * 4), (frame.Width, frame.Height, frame.Stride));

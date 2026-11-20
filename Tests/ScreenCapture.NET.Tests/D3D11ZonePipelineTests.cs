@@ -46,7 +46,7 @@ public sealed class D3D11ZonePipelineTests
 
     private static ColorBGRA[] GetPixels(CaptureZone<ColorBGRA> zone)
     {
-        using CaptureFrame<ColorBGRA> frame = zone.Lock();
+        using CaptureFrame<ColorBGRA> frame = zone.AcquireFrame();
         return frame.Pixels.ToArray();
     }
 

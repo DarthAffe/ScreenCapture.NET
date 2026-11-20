@@ -302,7 +302,7 @@ public sealed class DisplayChangeTests
 
     private static ColorARGB GetFirstPixel(CaptureZone<ColorARGB> zone)
     {
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
         return frame.Pixels[0];
     }
 

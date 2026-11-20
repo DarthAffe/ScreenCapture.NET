@@ -182,7 +182,7 @@ public sealed class ZoneUpdateWithoutNewFrameTests
         screenCapture.Pattern = (_, _) => first;
         Capture(screenCapture, CaptureResult.NewFrame);
 
-        CaptureFrame<ColorARGB> frame = captureZone.Lock();
+        CaptureFrame<ColorARGB> frame = captureZone.AcquireFrame();
         try
         {
             screenCapture.Pattern = (_, _) => second;
@@ -202,7 +202,7 @@ public sealed class ZoneUpdateWithoutNewFrameTests
         Capture(screenCapture, CaptureResult.Timeout);
         Assert.AreEqual(3, zone.Writes);
 
-        using CaptureFrame<ColorARGB> current = captureZone.Lock();
+        using CaptureFrame<ColorARGB> current = captureZone.AcquireFrame();
         Assert.AreEqual(third, current.Pixels[0]);
     }
 

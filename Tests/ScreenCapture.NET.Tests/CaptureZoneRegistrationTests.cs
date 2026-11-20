@@ -17,7 +17,7 @@ public sealed class CaptureZoneRegistrationTests
         Assert.AreEqual(CaptureResult.NewFrame, screenCapture.CaptureScreen());
 
         Assert.AreEqual(1, updates);
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
         ReadOnlySpan<ColorARGB> pixels = frame.Pixels;
         for (int y = 0; y < frame.Height; y++)
             for (int x = 0; x < frame.Width; x++)
@@ -161,7 +161,7 @@ public sealed class CaptureZoneRegistrationTests
         public bool AutoUpdate { get; set; }
         public bool IsUpdateRequested => false;
         public event EventHandler? Updated { add { } remove { } }
-        public CaptureFrame Lock() => throw new NotSupportedException();
+        public CaptureFrame AcquireFrame() => throw new NotSupportedException();
         public void RequestUpdate() { }
     }
 }

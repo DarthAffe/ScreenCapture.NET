@@ -21,15 +21,15 @@ namespace ScreenCapture.NET;
 /// </description></item>
 /// <item><description>
 /// The events of the capture and its zones are raised by <see cref="CaptureScreen"/>, on its thread and with no lock of the library held.
-/// Handlers can use the capture and its zones (e.g. update a zone, lock its frame or register another one).
+/// Handlers can use the capture and its zones (e.g. update a zone, acquire its frame or register another one).
 /// </description></item>
 /// <item><description>
-/// Any member can be called while holding a frame of a zone (see <see cref="ICaptureZone.Lock"/>), including <see cref="CaptureScreen"/>.
+/// Any member can be called while holding a frame of a zone (see <see cref="ICaptureZone.AcquireFrame"/>), including <see cref="CaptureScreen"/>.
 /// Frames never make a capture wait, but a zone whose frames are held too long skips captures.
 /// </description></item>
 /// <item><description>
 /// <see cref="IDisposable.Dispose"/> can be called while other calls run: they finish, and the methods called afterwards throw an <see cref="ObjectDisposedException"/>
-/// (the properties and <see cref="ICaptureZone.Lock"/> keep working). Dispose waits until a running capture stopped using the backend's resources.
+/// (the properties and <see cref="ICaptureZone.AcquireFrame"/> keep working). Dispose waits until a running capture stopped using the backend's resources.
 /// </description></item>
 /// </list>
 /// </remarks>

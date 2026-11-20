@@ -349,7 +349,7 @@ public sealed class X11HardwareTests
 
         HardwareTestHelper.CaptureFrame(screenCapture);
 
-        using CaptureFrame<ColorBGRA> frame = zone.Lock();
+        using CaptureFrame<ColorBGRA> frame = zone.AcquireFrame();
         Assert.IsGreaterThan(0, frame.Pixels.Length);
         foreach (ColorBGRA pixel in frame.Pixels)
             Assert.AreEqual(byte.MaxValue, pixel.A);

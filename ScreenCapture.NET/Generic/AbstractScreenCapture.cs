@@ -13,7 +13,7 @@ namespace ScreenCapture.NET;
 /// All members can be used from any thread (see <see cref="IScreenCapture"/>); backends guard their resources as described on
 /// <see cref="PerformScreenCapture"/>, <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>.
 /// <para>
-/// Lock order: a zone lock (held while a zone is written, changed or unregistered; frames don't hold it, see <see cref="CaptureZone{TColor}.Lock"/>)
+/// Lock order: a zone lock (held while a zone is written, changed or unregistered; frames don't hold it, see <see cref="CaptureZone{TColor}.AcquireFrame"/>)
 /// is always acquired before any lock of the screen capture, and the library never acquires a zone lock while holding one of its own locks.
 /// </para>
 /// </remarks>

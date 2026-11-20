@@ -5,15 +5,15 @@ using HPPH;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents the pixels of a <see cref="CaptureZone{TColor}"/> while it's locked.
+/// Represents the pixels of a <see cref="CaptureZone{TColor}"/> while it's held.
 /// </summary>
 /// <remarks>
-/// Get it from <see cref="CaptureZone{TColor}.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer, and a frame held over two captures makes the zone skip a capture.
+/// Get it from <see cref="CaptureZone{TColor}.AcquireFrame"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer, and a frame held over two captures makes the zone skip a capture.
 /// <para>
 /// The pixels are only valid until the frame is disposed. Don't keep the spans or images obtained from it, use <see cref="CopyImage"/> to keep a copy.
 /// </para>
 /// <para>
-/// The frame is a view of the zone at the time it was locked and keeps its size if the zone is changed later. Dispose it exactly once and on the thread that locked it, and don't copy it.
+/// The frame is a view of the zone at the time it was acquired and keeps its size if the zone is changed later. Dispose it exactly once and on the thread that acquired it, and don't copy it.
 /// </para>
 /// </remarks>
 /// <typeparam name="TColor">The color format of the zone.</typeparam>

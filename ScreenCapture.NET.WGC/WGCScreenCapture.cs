@@ -211,7 +211,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
                 return RestartCapture();
             }
 
-            CaptureResult result = AcquireFrame(out timestamp);
+            CaptureResult result = AcquireNextFrame(out timestamp);
             if (result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout)
                 _zonePipeline.QueueZoneCopies(CaptureZones);
 
@@ -219,7 +219,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
-    private CaptureResult AcquireFrame(out long timestamp)
+    private CaptureResult AcquireNextFrame(out long timestamp)
     {
         timestamp = 0;
 

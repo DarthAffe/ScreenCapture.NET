@@ -24,7 +24,7 @@ public static class ScreenCaptureExtensions
     /// <code>
     /// await foreach (CaptureResult result in screenCapture.CaptureLoopAsync(60, cancellationToken))
     ///     if (result == CaptureResult.NewFrame)
-    ///         using (CaptureFrame frame = zone.Lock())
+    ///         using (CaptureFrame frame = zone.AcquireFrame())
     ///             ...
     /// </code>
     /// <see cref="IScreenCapture.CaptureScreen"/> runs on the thread pool, so the events of the capture and its zones are raised there.

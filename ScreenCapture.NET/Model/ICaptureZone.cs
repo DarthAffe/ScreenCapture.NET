@@ -12,10 +12,10 @@ namespace ScreenCapture.NET;
 /// <item><description>
 /// Every property returns a value the zone actually had: e.g. <see cref="Region"/> and <see cref="Display"/> never mix two changes.
 /// But properties read one after another can belong to different changes if another thread changes the zone meanwhile (e.g. <see cref="Region"/> and <see cref="Width"/>).
-/// The size of the pixels is reliable on a frame (see <see cref="Lock"/>), which keeps it while it's held.
+/// The size of the pixels is reliable on a frame (see <see cref="AcquireFrame"/>), which keeps it while it's held.
 /// </description></item>
 /// <item><description>
-/// A frame is used and disposed on the thread that locked it. Frames can be held by any number of threads at once, and holding one never makes another thread wait.
+/// A frame is used and disposed on the thread that acquired it. Frames can be held by any number of threads at once, and holding one never makes another thread wait.
 /// </description></item>
 /// <item><description>
 /// <see cref="Updated"/> is raised on the thread of the capture that wrote the zone, with no lock of the library held.
@@ -87,7 +87,7 @@ public interface ICaptureZone
     /// <remarks>
     /// Captures without a new frame (<see cref="CaptureResult.NoChange"/>, <see cref="CaptureResult.Timeout"/>) don't write the zone again,
     /// unless it doesn't show the last frame yet: it was registered or changed (<see cref="IScreenCapture.UpdateCaptureZone"/>) since,
-    /// or it missed the frame because a frame of the zone was still held (see <see cref="Lock"/>). So it's never left behind on a static screen.
+    /// or it missed the frame because a frame of the zone was still held (see <see cref="AcquireFrame"/>). So it's never left behind on a static screen.
     /// Invalid zones (see <see cref="IsValid"/>) aren't written.
     /// </remarks>
     bool AutoUpdate { get; set; }
@@ -103,9 +103,10 @@ public interface ICaptureZone
     event EventHandler? Updated;
 
     /// <summary>
-    /// Locks the current pixels of the zone. Release them by disposing the returned frame.
+    /// Acquires the current pixels of the zone. Release them by disposing the returned frame.
     /// </summary>
     /// <remarks>
+    /// Returns right away, with the pixels the last capture wrote: it doesn't wait for a capture or for other frames.
     /// The pixels of the frame don't change while it's held: the zone has two buffers, the capture writes the one no frame reads and never waits for frames.
     /// A frame that's still held when the capture after the next one starts makes the zone skip that capture (it's written by the next capture after the frame was disposed).
     /// <para>
@@ -114,7 +115,7 @@ public interface ICaptureZone
     /// </para>
     /// </remarks>
     /// <returns>The frame holding the pixels.</returns>
-    CaptureFrame Lock();
+    CaptureFrame AcquireFrame();
 
     /// <summary>
     /// Requests to update this <see cref="ICaptureZone"/> with the next capture, also if it has no new frame (from the last frame, which is still current).

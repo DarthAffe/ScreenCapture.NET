@@ -117,7 +117,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
             try
             {
-                CaptureResult result = AcquireFrame(_duplicatedOutput, out timestamp);
+                CaptureResult result = AcquireNextFrame(_duplicatedOutput, out timestamp);
                 if (result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout)
                     _zonePipeline.QueueZoneCopies(CaptureZones);
 
@@ -129,13 +129,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             {
                 ReportError(dxException);
 
-                // AcquireFrame released the frame (if it got one) before the restart disposes the duplication.
+                // AcquireNextFrame released the frame (if it got one) before the restart disposes the duplication.
                 return RestartCapture();
             }
         }
     }
 
-    private CaptureResult AcquireFrame(IDXGIOutputDuplication duplicatedOutput, out long timestamp)
+    private CaptureResult AcquireNextFrame(IDXGIOutputDuplication duplicatedOutput, out long timestamp)
     {
         timestamp = 0;
 

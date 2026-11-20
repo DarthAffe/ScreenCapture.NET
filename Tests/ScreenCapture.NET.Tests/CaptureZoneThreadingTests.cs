@@ -50,7 +50,7 @@ public sealed class CaptureZoneThreadingTests
         ColorARGB? pixelDuringUpdate = null;
         screenCapture.ZoneUpdating = z => lockedByOtherThread = Task.Run(() =>
         {
-            using CaptureFrame<ColorARGB> frame = z.Lock();
+            using CaptureFrame<ColorARGB> frame = z.AcquireFrame();
             pixelDuringUpdate = frame.Image[1, 1];
         }).Wait(TIMEOUT);
 
@@ -58,7 +58,7 @@ public sealed class CaptureZoneThreadingTests
 
         Assert.IsTrue(lockedByOtherThread, "Another thread couldn't lock the zone during its update.");
         Assert.AreEqual(TestScreenCapture.GetColorFromLocation(1, 1), pixelDuringUpdate, "The frame doesn't show the previous pixels.");
-        using (CaptureFrame<ColorARGB> frame = zone.Lock())
+        using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
             Assert.AreEqual(other, frame.Image[1, 1], "The update wasn't shown afterwards.");
     }
 
@@ -72,7 +72,7 @@ public sealed class CaptureZoneThreadingTests
         CaptureZone<ColorARGB>? added = null;
         zone.Updated += (_, _) =>
         {
-            using (other.Lock())
+            using (other.AcquireFrame())
                 screenCapture.UpdateCaptureZone(other, other.Region with { X = 8 });
 
             added = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4));
@@ -159,10 +159,10 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
-    /// The deadlock case: a user thread holds the zone lock and changes the zone while the capture thread wants to update it.
+    /// The deadlock case: a user thread holds a frame of the zone and changes the zone while the capture thread wants to update it.
     /// </summary>
     [TestMethod]
-    public void ZoneCanBeChangedWhileHoldingItsLock()
+    public void ZoneCanBeChangedWhileHoldingAFrame()
     {
         using TestScreenCapture screenCapture = new();
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
@@ -170,10 +170,10 @@ public sealed class CaptureZoneThreadingTests
         int i = 0;
         RunWhileCapturing(screenCapture, () =>
         {
-            using (zone.Lock())
+            using (zone.AcquireFrame())
                 screenCapture.UpdateCaptureZone(zone, zone.Region with { X = i++ % 10, Width = 16 + (i % 2) });
 
-            using (zone.Lock())
+            using (zone.AcquireFrame())
                 screenCapture.UnregisterCaptureZone(screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4)));
         });
     }
@@ -220,7 +220,7 @@ public sealed class CaptureZoneThreadingTests
             // keep reading until both kinds of change were seen. Only a capture or resize thread starved for TIMEOUT fails the test.
             Stopwatch stopwatch = Stopwatch.StartNew();
             for (int i = 0; (i < ITERATIONS) || (((sizeChanges <= 1) || (contentChanges <= 1)) && (stopwatch.Elapsed < TIMEOUT)); i++)
-                using (CaptureFrame<ColorARGB> frame = zone.Lock())
+                using (CaptureFrame<ColorARGB> frame = zone.AcquireFrame())
                 {
                     Assert.AreEqual(frame.Width * 2, frame.Height * 4, "Width and height don't belong to the same size.");
                     Assert.AreEqual(frame.Stride * frame.Height, frame.RawBuffer.Length);

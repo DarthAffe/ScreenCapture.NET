@@ -34,7 +34,7 @@ public sealed class CaptureZoneSizeTests
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(10, 20, 101, 51), 1);
 
         Assert.AreEqual(zone.Width * ColorARGB.ColorFormat.BytesPerPixel, zone.Stride);
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
         Assert.AreEqual((zone.Width, zone.Height, zone.Stride), (frame.Width, frame.Height, frame.Stride));
         Assert.AreEqual(zone.Stride * zone.Height, frame.RawBuffer.Length);
     }

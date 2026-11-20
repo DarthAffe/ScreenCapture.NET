@@ -109,9 +109,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     #region Methods
 
     /// <summary>
-    /// Locks the current pixels of the zone. Release them by disposing the returned frame.
+    /// Acquires the current pixels of the zone. Release them by disposing the returned frame.
     /// </summary>
     /// <remarks>
+    /// Returns right away, with the pixels the last capture wrote: it doesn't wait for a capture or for other frames.
     /// The pixels of the frame don't change while it's held: the zone has two buffers, the capture writes the one no frame reads and never waits for frames.
     /// A frame that's still held when the capture after the next one starts makes the zone skip that capture (it's written by the next capture after the frame was disposed).
     /// <para>
@@ -121,7 +122,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// </remarks>
     /// <example>
     /// <code>
-    /// using (CaptureFrame&lt;ColorBGRA&gt; frame = zone.Lock())
+    /// using (CaptureFrame&lt;ColorBGRA&gt; frame = zone.AcquireFrame())
     /// {
     ///     ReadOnlySpan&lt;ColorBGRA&gt; pixels = frame.Pixels;
     ///     // ...
@@ -129,10 +130,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// </code>
     /// </example>
     /// <returns>The frame holding the pixels.</returns>
-    public CaptureFrame<TColor> Lock() => new(AddFrontReader());
+    public CaptureFrame<TColor> AcquireFrame() => new(AddFrontReader());
 
     /// <inheritdoc />
-    CaptureFrame ICaptureZone.Lock() => new(AddFrontReader());
+    CaptureFrame ICaptureZone.AcquireFrame() => new(AddFrontReader());
 
     private ZoneBuffer<TColor> AddFrontReader()
     {

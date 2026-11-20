@@ -338,7 +338,7 @@ public sealed class WaylandCaptureTests
 
     private static void AssertPixels(CaptureZone<ColorBGRA> zone, ColorBGRA expected)
     {
-        using CaptureFrame<ColorBGRA> frame = zone.Lock();
+        using CaptureFrame<ColorBGRA> frame = zone.AcquireFrame();
         Assert.AreEqual(zone.Width * zone.Height, frame.Pixels.Length);
         foreach (ColorBGRA pixel in frame.Pixels)
             Assert.AreEqual(expected, pixel);

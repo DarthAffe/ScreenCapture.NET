@@ -23,7 +23,7 @@ public sealed class UpdateCaptureZoneTests
 
         // The buffers get the new size with the next capture.
         screenCapture.CaptureScreen();
-        using CaptureFrame<ColorARGB> frame = zone.Lock();
+        using CaptureFrame<ColorARGB> frame = zone.AcquireFrame();
         Assert.AreEqual((zone.Width, zone.Height, zone.Stride), (frame.Width, frame.Height, frame.Stride), "Frame size");
         Assert.AreEqual(zone.Stride * zone.Height, frame.RawBuffer.Length, "Buffer size");
     }
