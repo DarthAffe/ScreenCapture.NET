@@ -184,17 +184,19 @@ public sealed class D3D11ZonePipelineTests
         const float SDR_WHITE_LEVEL = 200;
         ColorBGRA[] colors = [.. Enumerable.Range(0, 256).Select(i => new ColorBGRA((byte)((i * 7) % 256), (byte)(255 - i), (byte)i, 255))];
         float scale = SDR_WHITE_LEVEL / HdrToneMapper.SCRGB_WHITE_NITS;
-        Half[] hdrFrame = [.. colors.SelectMany(c => new[] { (Half)(HdrToneMappingTests.SrgbToLinear(c.R) * scale), (Half)(HdrToneMappingTests.SrgbToLinear(c.G) * scale),
-                                                            (Half)(HdrToneMappingTests.SrgbToLinear(c.B) * scale), (Half)1 })];
 
-        capture.SetHdrFrame(hdrFrame, SDR_WHITE_LEVEL);
+        capture.SetHdrFrame(ToHdr(colors), SDR_WHITE_LEVEL);
         Assert.AreEqual(CaptureResult.NewFrame, capture.CaptureScreen());
         CollectionAssert.AreEqual(colors, GetPixels(zone), "first frame");
 
-        // Without a white level, the last one is kept.
-        capture.SetHdrFrame(hdrFrame, null);
+        // Without a white level (the frame goes through SetFrame like in the captures), the last one is kept. Other colors, so a frame that isn't tone mapped is detected.
+        ColorBGRA[] otherColors = [.. Enumerable.Reverse(colors)];
+        capture.SetHdrFrame(ToHdr(otherColors), null);
         Assert.AreEqual(CaptureResult.NewFrame, capture.CaptureScreen());
-        CollectionAssert.AreEqual(colors, GetPixels(zone), "white level kept");
+        CollectionAssert.AreEqual(otherColors, GetPixels(zone), "white level kept");
+
+        Half[] ToHdr(ColorBGRA[] sdr) => [.. sdr.SelectMany(c => new[] { (Half)(HdrToneMappingTests.SrgbToLinear(c.R) * scale), (Half)(HdrToneMappingTests.SrgbToLinear(c.G) * scale),
+                                                                         (Half)(HdrToneMappingTests.SrgbToLinear(c.B) * scale), (Half)1 })];
     }
 
     [TestMethod]
@@ -333,10 +335,11 @@ public sealed class D3D11ZonePipelineTests
             CaptureResult result = CaptureResult.NoChange;
             if (_nextFrame != null)
             {
-                if (_nextFrameIsHdr)
+                // Like the captures (SetFrame picks by the format), unless the test sets a white level (there's no monitor to read it from).
+                if (_nextFrameIsHdr && (_nextSdrWhiteLevel != null))
                     _zonePipeline.ToneMapFrame(_nextFrame, _nextSdrWhiteLevel);
                 else
-                    _zonePipeline.CopyFrame(_nextFrame);
+                    _zonePipeline.SetFrame(_nextFrame, null);
 
                 // The queued copy keeps the texture alive until the GPU did it.
                 _nextFrame.Dispose();

@@ -47,12 +47,12 @@ public sealed class CaptureOptionsTests
     [TestMethod]
     public void DX11TimeoutIsRoundedUpToMilliseconds()
     {
-        Assert.AreEqual(0, DX11CaptureOptions.ToMilliseconds(TimeSpan.Zero));
-        Assert.AreEqual(1, DX11CaptureOptions.ToMilliseconds(TimeSpan.FromTicks(1)));
-        Assert.AreEqual(1, DX11CaptureOptions.ToMilliseconds(TimeSpan.FromMilliseconds(1)));
-        Assert.AreEqual(2, DX11CaptureOptions.ToMilliseconds(TimeSpan.FromMilliseconds(1.5)));
-        Assert.AreEqual(1000, DX11CaptureOptions.ToMilliseconds(TimeSpan.FromSeconds(1)));
-        Assert.AreEqual(int.MaxValue, DX11CaptureOptions.ToMilliseconds(DX11CaptureOptions.MaxTimeout));
+        Assert.AreEqual(0, CaptureTimeout.ToMilliseconds(TimeSpan.Zero));
+        Assert.AreEqual(1, CaptureTimeout.ToMilliseconds(TimeSpan.FromTicks(1)));
+        Assert.AreEqual(1, CaptureTimeout.ToMilliseconds(TimeSpan.FromMilliseconds(1)));
+        Assert.AreEqual(2, CaptureTimeout.ToMilliseconds(TimeSpan.FromMilliseconds(1.5)));
+        Assert.AreEqual(1000, CaptureTimeout.ToMilliseconds(TimeSpan.FromSeconds(1)));
+        Assert.AreEqual(int.MaxValue, CaptureTimeout.ToMilliseconds(DX11CaptureOptions.MaxTimeout));
     }
 
     [TestMethod]

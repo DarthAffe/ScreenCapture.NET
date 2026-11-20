@@ -57,7 +57,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     public TimeSpan Timeout
     {
         get => TimeSpan.FromMilliseconds(_timeout);
-        set => _timeout = DX11CaptureOptions.ToMilliseconds(DX11CaptureOptions.ValidateTimeout(value));
+        set => _timeout = CaptureTimeout.ToMilliseconds(CaptureTimeout.Validate(value));
     }
 
     private readonly IDXGIFactory1 _factory;
@@ -95,7 +95,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         this._factory = factory;
         this.Options = options;
-        this._timeout = DX11CaptureOptions.ToMilliseconds(options.Timeout);
+        this._timeout = CaptureTimeout.ToMilliseconds(options.Timeout);
         this._zonePipeline = new D3D11ZonePipeline();
 
         Restart();
@@ -166,15 +166,9 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 return CaptureResult.NoChange;
             }
 
+            // HDR frames only come from DuplicateOutput1 (CaptureHdr) while the display shows HDR.
             using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
-            if (Options.CaptureHdr && (screenTexture.Description.Format == Format.R16G16B16A16_Float))
-            {
-                // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
-                float? sdrWhiteLevel = (_monitorTarget is { } monitorTarget) && monitorTarget.TryGetSdrWhiteLevel(out float whiteLevel) ? whiteLevel : null;
-                _zonePipeline.ToneMapFrame(screenTexture, sdrWhiteLevel);
-            }
-            else
-                _zonePipeline.CopyFrame(screenTexture);
+            _zonePipeline.SetFrame(screenTexture, _monitorTarget);
 
             timestamp = frameInfo.LastPresentTime;
 

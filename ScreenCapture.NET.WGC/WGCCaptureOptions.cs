@@ -17,7 +17,7 @@ public sealed record WGCCaptureOptions
     /// <summary>
     /// Gets the longest supported <see cref="Timeout"/> (<see cref="int.MaxValue"/> milliseconds, about 24.8 days).
     /// </summary>
-    public static TimeSpan MaxTimeout { get; } = TimeSpan.FromMilliseconds(int.MaxValue);
+    public static TimeSpan MaxTimeout => CaptureTimeout.Max;
 
     /// <summary>
     /// Gets the default options.
@@ -35,7 +35,7 @@ public sealed record WGCCaptureOptions
     public TimeSpan Timeout
     {
         get;
-        init => field = ValidateTimeout(value);
+        init => field = CaptureTimeout.Validate(value);
     } = TimeSpan.FromSeconds(1);
 
     /// <summary>
@@ -66,23 +66,6 @@ public sealed record WGCCaptureOptions
     /// Displays that don't show HDR are captured in 16 bits too and get the same colors as without it; that costs some GPU time per frame.
     /// </remarks>
     public bool CaptureHdr { get; init; }
-
-    #endregion
-
-    #region Methods
-
-    internal static TimeSpan ValidateTimeout(TimeSpan timeout)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero, nameof(Timeout));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(timeout, MaxTimeout, nameof(Timeout));
-
-        return timeout;
-    }
-
-    /// <summary>
-    /// Converts a validated timeout to whole milliseconds, rounded up.
-    /// </summary>
-    internal static int ToMilliseconds(TimeSpan timeout) => (int)Math.Ceiling(timeout.TotalMilliseconds);
 
     #endregion
 }

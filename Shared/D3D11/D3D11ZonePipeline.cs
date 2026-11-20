@@ -127,6 +127,24 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
+    /// Takes a frame of the capture into the capture texture: tone maps an HDR frame (<c>R16G16B16A16_Float</c>), copies any other (<c>B8G8R8A8_UNorm</c>).
+    /// Only queues the work on the GPU.
+    /// </summary>
+    /// <param name="frame">The frame: at least the size of the capture texture, its top left part is used (e.g. the content of a larger texture of a frame pool).</param>
+    /// <param name="monitorTarget">The monitor of the display, to read its SDR white level for HDR frames; <c>null</c> if it's unknown (the last white level is kept).</param>
+    public void SetFrame(ID3D11Texture2D frame, WindowsDisplayDevices.MonitorTarget? monitorTarget)
+    {
+        if (frame.Description.Format == Format.R16G16B16A16_Float)
+        {
+            // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
+            float? sdrWhiteLevel = (monitorTarget is { } target) && target.TryGetSdrWhiteLevel(out float whiteLevel) ? whiteLevel : null;
+            ToneMapFrame(frame, sdrWhiteLevel);
+        }
+        else
+            CopyFrame(frame);
+    }
+
+    /// <summary>
     /// Copies a frame (<c>B8G8R8A8_UNorm</c>) to the capture texture. Only queues the work on the GPU.
     /// </summary>
     /// <param name="frame">The frame: at least the size of the capture texture, its top left part is copied (e.g. the content of a larger texture of a frame pool).</param>
@@ -135,7 +153,7 @@ internal sealed class D3D11ZonePipeline
         ID3D11DeviceContext context = _context ?? throw CreateNotInitializedException();
 
         context.CopySubresourceRegion(_captureTexture!, 0, 0, 0, 0, frame, 0, _captureTextureBox);
-        SetFrame();
+        FrameCopied();
     }
 
     /// <summary>
@@ -155,10 +173,10 @@ internal sealed class D3D11ZonePipeline
             _hdrFrame.WhiteScale = HdrToneMapper.GetWhiteScale(whiteLevel);
 
         _hdrFrame.ToneMapper.Draw(context, _hdrFrame.TextureView, _hdrFrame.CaptureTextureTarget, _hdrFrame.Width, _hdrFrame.Height, _hdrFrame.WhiteScale);
-        SetFrame();
+        FrameCopied();
     }
 
-    private void SetFrame()
+    private void FrameCopied()
     {
         _hasFrame = true;
         _version++;

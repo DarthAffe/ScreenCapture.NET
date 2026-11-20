@@ -62,7 +62,7 @@ public sealed class WaylandScreenCapture : AbstractScreenCapture<ColorBGRA>
     public TimeSpan Timeout
     {
         get => TimeSpan.FromMilliseconds(_timeout);
-        set => _timeout = WaylandCaptureOptions.ToMilliseconds(WaylandCaptureOptions.ValidateTimeout(value));
+        set => _timeout = CaptureTimeout.ToMilliseconds(CaptureTimeout.Validate(value));
     }
 
     #endregion
@@ -74,7 +74,7 @@ public sealed class WaylandScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         this._service = service;
         this.Options = options;
-        this._timeout = WaylandCaptureOptions.ToMilliseconds(options.Timeout);
+        this._timeout = CaptureTimeout.ToMilliseconds(options.Timeout);
 
         Restart();
     }

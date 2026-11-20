@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\Common\*.cs" Link="Shared\Common\%(Filename)%(Extension)" />
     <Compile Include="..\Shared\Linux\*.cs" Link="Shared\Linux\%(Filename)%(Extension)" />
   </ItemGroup>
 

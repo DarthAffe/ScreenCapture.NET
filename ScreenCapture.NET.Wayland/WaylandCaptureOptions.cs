@@ -16,7 +16,7 @@ public sealed record WaylandCaptureOptions
     /// <summary>
     /// Gets the longest supported <see cref="Timeout"/> (<see cref="int.MaxValue"/> milliseconds, about 24.8 days).
     /// </summary>
-    public static TimeSpan MaxTimeout { get; } = TimeSpan.FromMilliseconds(int.MaxValue);
+    public static TimeSpan MaxTimeout => CaptureTimeout.Max;
 
     /// <summary>
     /// Gets the default options.
@@ -35,25 +35,8 @@ public sealed record WaylandCaptureOptions
     public TimeSpan Timeout
     {
         get;
-        init => field = ValidateTimeout(value);
+        init => field = CaptureTimeout.Validate(value);
     } = TimeSpan.FromSeconds(1);
-
-    #endregion
-
-    #region Methods
-
-    internal static TimeSpan ValidateTimeout(TimeSpan timeout)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero, nameof(Timeout));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(timeout, MaxTimeout, nameof(Timeout));
-
-        return timeout;
-    }
-
-    /// <summary>
-    /// Converts a validated timeout to whole milliseconds, rounded up.
-    /// </summary>
-    internal static int ToMilliseconds(TimeSpan timeout) => (int)Math.Ceiling(timeout.TotalMilliseconds);
 
     #endregion
 }

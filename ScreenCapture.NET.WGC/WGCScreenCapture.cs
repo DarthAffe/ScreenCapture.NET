@@ -90,7 +90,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
     public TimeSpan Timeout
     {
         get => TimeSpan.FromMilliseconds(_timeout);
-        set => _timeout = WGCCaptureOptions.ToMilliseconds(WGCCaptureOptions.ValidateTimeout(value));
+        set => _timeout = CaptureTimeout.ToMilliseconds(CaptureTimeout.Validate(value));
     }
 
     private readonly IDXGIFactory1 _factory;
@@ -151,7 +151,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
         this._factory = factory;
         this.Options = options;
         this.Window = WindowInterop.TryGetWindow(display.Id, out nint window) ? window : 0;
-        this._timeout = WGCCaptureOptions.ToMilliseconds(options.Timeout);
+        this._timeout = CaptureTimeout.ToMilliseconds(options.Timeout);
         this._zonePipeline = new D3D11ZonePipeline();
 
         Restart();
@@ -249,14 +249,8 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
                     // A frame the event took out of the frame pool right before its buffers got the new size of a resized window: it doesn't fit.
                     if ((texture.Description.Width < _frameSize.Width) || (texture.Description.Height < _frameSize.Height))
                         outdated = true;
-                    else if (texture.Description.Format == Format.R16G16B16A16_Float)
-                    {
-                        // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
-                        float? sdrWhiteLevel = (_monitorTarget is { } monitorTarget) && monitorTarget.TryGetSdrWhiteLevel(out float whiteLevel) ? whiteLevel : null;
-                        _zonePipeline.ToneMapFrame(texture, sdrWhiteLevel);
-                    }
                     else
-                        _zonePipeline.CopyFrame(texture);
+                        _zonePipeline.SetFrame(texture, _monitorTarget);
 
                 timestamp = ToStopwatchTimestamp(GetSystemRelativeTime(frame));
             }
