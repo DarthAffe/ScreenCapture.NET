@@ -61,6 +61,47 @@ internal static partial class X11
     [LibraryImport("libX11.so.6")]
     internal static partial int XCloseDisplay(nint display);
 
+    // Returns 0 (None) if the atom doesn't exist and onlyIfExists is set.
+    [LibraryImport("libX11.so.6", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial CULong XInternAtom(X11DisplayHandle display, string atomName, [MarshalAs(UnmanagedType.Bool)] bool onlyIfExists);
+
+    // The name is freed with XFree.
+    [LibraryImport("libX11.so.6")]
+    internal static partial nint XGetAtomName(X11DisplayHandle display, CULong atom);
+
+    [LibraryImport("libX11.so.6")]
+    internal static partial int XFree(nint data);
+
+    #region RandR (libXrandr)
+
+    internal const int SUCCESS = 0;
+    internal static readonly CULong ANY_PROPERTY_TYPE = new(0);
+
+    [LibraryImport("libXrandr.so.2")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool XRRQueryExtension(X11DisplayHandle display, out int eventBase, out int errorBase);
+
+    // Returns 0 on failure.
+    [LibraryImport("libXrandr.so.2")]
+    internal static partial int XRRQueryVersion(X11DisplayHandle display, out int major, out int minor);
+
+    /// <summary>
+    /// Gets the monitors of the screen of the given root window (RandR 1.5). The result is freed with <see cref="XRRFreeMonitors"/>; <c>null</c> on failure.
+    /// </summary>
+    [LibraryImport("libXrandr.so.2")]
+    internal static unsafe partial XRRMonitorInfo* XRRGetMonitors(X11DisplayHandle display, CULong window, [MarshalAs(UnmanagedType.Bool)] bool getActive, out int count);
+
+    [LibraryImport("libXrandr.so.2")]
+    internal static unsafe partial void XRRFreeMonitors(XRRMonitorInfo* monitors);
+
+    // length is in 32-bit units. The data is freed with XFree.
+    [LibraryImport("libXrandr.so.2")]
+    internal static partial int XRRGetOutputProperty(X11DisplayHandle display, CULong output, CULong property, CLong offset, CLong length,
+                                                     [MarshalAs(UnmanagedType.Bool)] bool delete, [MarshalAs(UnmanagedType.Bool)] bool pending, CULong requestedType,
+                                                     out CULong actualType, out int actualFormat, out CULong itemCount, out CULong bytesAfter, out nint data);
+
+    #endregion
+
     #region MIT-SHM (libXext)
 
     [LibraryImport("libXext.so.6")]
@@ -146,6 +187,24 @@ internal static partial class X11
         public CULong green_mask;
         public CULong blue_mask;
         public nint obdata;
+        // ReSharper restore MemberCanBePrivate.Global
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XRRMonitorInfo
+    {
+        // ReSharper disable MemberCanBePrivate.Global
+        public CULong name;
+        public int primary;
+        public int automatic;
+        public int noutput;
+        public int x;
+        public int y;
+        public int width;
+        public int height;
+        public int mwidth;
+        public int mheight;
+        public CULong* outputs;
         // ReSharper restore MemberCanBePrivate.Global
     }
 

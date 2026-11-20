@@ -228,7 +228,7 @@ public sealed class X11HardwareTests
     [TestMethod]
     public void FailedRestartLeavesNoHandles()
     {
-        // The screen doesn't exist, so every restart fails after the connection was opened.
+        // The display doesn't exist, so every restart fails after the connection was opened.
         Display display = HardwareTestHelper.CreateMissingDisplay();
         X11ScreenCapture screenCapture = new(display, X11CaptureOptions.Default, null);
         AssertNoHandles(screenCapture);
@@ -240,7 +240,7 @@ public sealed class X11HardwareTests
         AssertNoHandles(screenCapture);
 
         InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
-        StringAssert.Contains(error.Message, "no screen 99");
+        StringAssert.Contains(error.Message, "'missing' isn't connected");
 
         Assert.IsTrue(screenCapture.UnregisterCaptureZone(zone));
 
@@ -514,6 +514,167 @@ public sealed class X11HardwareTests
             Thread.Sleep(10);
 
         Assert.AreEqual(expected, CountOwnSegments(), "Shared memory segments of this process.");
+    }
+
+    /// <summary>
+    /// Every RandR monitor is a display (incl. monitors without output, as <c>xrandr --setmonitor</c> defines them), with its name and its position on the screen.
+    /// </summary>
+    [TestMethod]
+    public void DisplaysAreTheMonitors()
+    {
+        using XvfbServer server = XvfbServer.Start("640x480x24");
+        server.Xrandr("--setmonitor", "left", "320/1x480/1+0+0", "none");
+        server.Xrandr("--setmonitor", "corner", "160/1x120/1+480+360", "none");
+        using X11ScreenCaptureService service = new(displayName: server.DisplayName);
+
+        GraphicsCard graphicsCard = service.GetGraphicsCards().Single();
+        Assert.AreEqual(new GraphicsCard(server.DisplayName, 0, server.DisplayName, 0, 0), graphicsCard);
+
+        List<Display> displays = [.. service.GetDisplays(graphicsCard)];
+        CollectionAssert.AreEqual(Enumerable.Range(0, displays.Count).ToList(), displays.Select(d => d.Index).ToList(), "The indices aren't the positions.");
+
+        Display Expected(string name, int x, int y, int width, int height)
+            => new($"{server.DisplayName}/0/{name}", 0, name, string.Empty, x, y, width, height, ImageRotation.None, graphicsCard);
+
+        // Xvfb's own monitor is called "screen".
+        CollectionAssert.AreEquivalent(new[] { Expected("left", 0, 0, 320, 480), Expected("corner", 480, 360, 160, 120), Expected("screen", 0, 0, 640, 480) },
+                                       displays.Select(d => d with { Index = 0 }).ToList());
+    }
+
+    [TestMethod]
+    public void ServerWithoutMonitorsHasOneDisplayPerScreen()
+    {
+        using XvfbServer server = XvfbServer.Start("640x480x24", randrExtension: false);
+        server.SetRootPattern(1);
+        using X11ScreenCaptureService service = new(displayName: server.DisplayName);
+
+        GraphicsCard graphicsCard = service.GetGraphicsCards().Single();
+        Display display = Assert.ContainsSingle(service.GetDisplays(graphicsCard));
+        Assert.AreEqual(new Display($"{server.DisplayName}/0", 0, "Screen 0", string.Empty, 0, 0, 640, 480, ImageRotation.None, graphicsCard), display);
+
+        HardwareTestHelper.AssertCapturesZone(service, HardwareTestHelper.FullScreen);
+    }
+
+    [TestMethod]
+    public void FriendlyNameIsTheMonitorNameOfTheEdid()
+    {
+        using XvfbServer server = XvfbServer.Start();
+        server.SetMonitorName("Test Panel");
+        using X11ScreenCaptureService service = new(displayName: server.DisplayName);
+
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+        Assert.AreEqual("screen", display.DeviceName);
+        Assert.AreEqual("Test Panel", display.FriendlyName);
+
+        // The capture finds the same display, so its restart doesn't change it.
+        X11ScreenCapture screenCapture = service.GetScreenCapture(display);
+        Assert.AreEqual(display, screenCapture.Display);
+    }
+
+    /// <summary>
+    /// A monitor is captured from its rectangle of the screen: compared to the capture of the whole screen (Xvfb's own monitor).
+    /// </summary>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void MonitorsAreReadFromTheirPosition(bool useSharedMemory)
+    {
+        using XvfbServer server = XvfbServer.Start("640x480x24");
+        server.Xrandr("--setmonitor", "left", "320/1x480/1+0+0", "none");
+        server.Xrandr("--setmonitor", "inner", "200/1x150/1+100+50", "none");
+        server.Xrandr("--setmonitor", "corner", "160/1x120/1+480+360", "none");
+        server.SetRootPattern(1);
+        using X11ScreenCaptureService service = new(new X11CaptureOptions { UseSharedMemory = useSharedMemory }, server.DisplayName);
+
+        List<Display> displays = [.. HardwareTestHelper.GetAllDisplays(service)];
+        Display screen = displays.Single(d => d.DeviceName == "screen");
+        ColorBGRA[] screenPixels = CaptureWholeDisplay(service.GetScreenCapture(screen));
+
+        foreach (Display monitor in displays.Where(d => d.DeviceName != "screen"))
+        {
+            X11ScreenCapture screenCapture = service.GetScreenCapture(monitor);
+            Assert.AreEqual(useSharedMemory, screenCapture.UsesSharedMemory);
+
+            CollectionAssert.AreEqual(HardwareTestHelper.Crop(screenPixels, screen.Width, monitor.X, monitor.Y, monitor.Width, monitor.Height), CaptureWholeDisplay(screenCapture),
+                                      $"{monitor.DeviceName} doesn't show its part of the screen.");
+        }
+    }
+
+    /// <summary>
+    /// Monitors defined by a client change without any event (measured), so the capture notices it by checking the monitor with every capture.
+    /// </summary>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ChangedMonitorRestartsWithIt(bool useSharedMemory)
+    {
+        using XvfbServer server = XvfbServer.Start("640x480x24");
+        server.Xrandr("--setmonitor", "box", "200/1x100/1+0+0", "none");
+        server.SetRootPattern(1);
+        using X11ScreenCaptureService service = new(new X11CaptureOptions { UseSharedMemory = useSharedMemory }, server.DisplayName);
+
+        List<Display> displays = [.. HardwareTestHelper.GetAllDisplays(service)];
+        ColorBGRA[] screenPixels = CaptureWholeDisplay(service.GetScreenCapture(displays.Single(d => d.DeviceName == "screen")));
+        Display box = displays.Single(d => d.DeviceName == "box");
+
+        X11ScreenCapture screenCapture = service.GetScreenCapture(box);
+        List<ScreenCaptureDisplayChangedEventArgs> changes = [];
+        screenCapture.DisplayChanged += (_, e) => changes.Add(e);
+
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 200, 100));
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        // Moved.
+        server.Xrandr("--delmonitor", "box");
+        server.Xrandr("--setmonitor", "box", "200/1x100/1+300+200", "none");
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        Display moved = box with { X = 300, Y = 200 };
+        CollectionAssert.AreEqual(new[] { new ScreenCaptureDisplayChangedEventArgs(box, moved) }, changes);
+        CollectionAssert.AreEqual(HardwareTestHelper.Crop(screenPixels, 640, 300, 200, 200, 100), HardwareTestHelper.GetPixels(zone), "The capture doesn't show the moved monitor.");
+
+        // Resized: the zone doesn't fit anymore.
+        server.Xrandr("--delmonitor", "box");
+        server.Xrandr("--setmonitor", "box", "100/1x50/1+300+200", "none");
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        Assert.AreEqual(moved with { Width = 100, Height = 50 }, screenCapture.Display);
+        Assert.HasCount(2, changes);
+        Assert.IsFalse(zone.IsValid);
+    }
+
+    [TestMethod]
+    public void RemovedMonitorIsUnavailableUntilItsBack()
+    {
+        using XvfbServer server = XvfbServer.Start("640x480x24");
+        server.Xrandr("--setmonitor", "box", "200/1x100/1+100+100", "none");
+        using X11ScreenCaptureService service = new(displayName: server.DisplayName);
+
+        Display box = HardwareTestHelper.GetAllDisplays(service).Single(d => d.DeviceName == "box");
+        X11ScreenCapture screenCapture = service.GetScreenCapture(box);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 200, 100));
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        server.Xrandr("--delmonitor", "box");
+        Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
+
+        InvalidOperationException error = Assert.IsInstanceOfType<InvalidOperationException>(screenCapture.LastError);
+        StringAssert.Contains(error.Message, $"'{box.Id}' isn't connected");
+
+        server.Xrandr("--setmonitor", "box", "200/1x100/1+100+100", "none");
+        HardwareTestHelper.CaptureFrame(screenCapture);
+        Assert.AreEqual(box, screenCapture.Display);
+    }
+
+    private static ColorBGRA[] CaptureWholeDisplay(X11ScreenCapture screenCapture)
+    {
+        Display display = screenCapture.Display;
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height));
+        HardwareTestHelper.CaptureFrame(screenCapture);
+
+        ColorBGRA[] pixels = HardwareTestHelper.GetPixels(zone);
+        screenCapture.UnregisterCaptureZone(zone);
+        return pixels;
     }
 
     private static void AssertNoHandles(X11ScreenCapture screenCapture)

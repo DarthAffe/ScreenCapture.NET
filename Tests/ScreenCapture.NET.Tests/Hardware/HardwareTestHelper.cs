@@ -378,7 +378,7 @@ internal static class HardwareTestHelper
         return frame.AsRefImage<ColorBGRA>().ToArray();
     }
 
-    private static ColorBGRA[] Crop(ColorBGRA[] pixels, int stride, int x, int y, int width, int height)
+    public static ColorBGRA[] Crop(ColorBGRA[] pixels, int stride, int x, int y, int width, int height)
     {
         ColorBGRA[] result = new ColorBGRA[width * height];
         for (int row = 0; row < height; row++)

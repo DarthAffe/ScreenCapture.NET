@@ -92,6 +92,97 @@ public sealed class X11InteropTests
         Assert.AreEqual(32, sizeof(X11.XShmSegmentInfo));
     }
 
+    /// <summary>
+    /// Pins the layout of <see cref="X11.XRRMonitorInfo"/> to libXrandr's on 64-bit Linux (<c>Atom</c> is an <c>unsigned long</c>, <c>outputs</c> is aligned to 8 bytes).
+    /// </summary>
+    [TestMethod]
+    [OSCondition(OperatingSystems.Linux)]
+    public unsafe void XRRMonitorInfoMatchesXrandrLayoutOn64BitLinux()
+    {
+        if (!Environment.Is64BitProcess)
+            Assert.Inconclusive("The layout is pinned for 64-bit processes.");
+
+        Assert.AreEqual(8, (int)Marshal.OffsetOf<X11.XRRMonitorInfo>(nameof(X11.XRRMonitorInfo.primary)));
+        Assert.AreEqual(16, (int)Marshal.OffsetOf<X11.XRRMonitorInfo>(nameof(X11.XRRMonitorInfo.noutput)));
+        Assert.AreEqual(20, (int)Marshal.OffsetOf<X11.XRRMonitorInfo>(nameof(X11.XRRMonitorInfo.x)));
+        Assert.AreEqual(32, (int)Marshal.OffsetOf<X11.XRRMonitorInfo>(nameof(X11.XRRMonitorInfo.height)));
+        Assert.AreEqual(48, (int)Marshal.OffsetOf<X11.XRRMonitorInfo>(nameof(X11.XRRMonitorInfo.outputs)));
+        Assert.AreEqual(56, sizeof(X11.XRRMonitorInfo));
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(1)]
+    [DataRow(3)]
+    public void MonitorNameIsReadFromItsDescriptor(int descriptor)
+    {
+        byte[] edid = CreateEdid();
+        SetDescriptor(edid, descriptor, 0xFC, "DELL U2720Q\n ");
+
+        Assert.AreEqual("DELL U2720Q", X11Displays.GetMonitorName(edid));
+    }
+
+    /// <summary>
+    /// A name of 13 characters has no line feed; some monitors also pad shorter names with spaces only.
+    /// </summary>
+    [TestMethod]
+    [DataRow("ABCDEFGHIJKLM", "ABCDEFGHIJKLM")]
+    [DataRow("SHORT        ", "SHORT")]
+    public void MonitorNameWithoutLineFeedIsTrimmed(string text, string name)
+    {
+        byte[] edid = CreateEdid();
+        SetDescriptor(edid, 1, 0xFC, text);
+
+        Assert.AreEqual(name, X11Displays.GetMonitorName(edid));
+    }
+
+    [TestMethod]
+    public void OtherDescriptorsAreNoMonitorName()
+    {
+        byte[] edid = CreateEdid();
+        SetDescriptor(edid, 1, 0xFF, "SERIAL123\n   "); // serial number
+        SetDescriptor(edid, 2, 0xFE, "TEXT\n        "); // unspecified text
+
+        // A detailed timing that happens to have 0xFC at the tag position.
+        SetDescriptor(edid, 3, 0xFC, "TIMING\n      ");
+        edid[54 + (3 * 18)] = 0x01;
+
+        Assert.AreEqual(string.Empty, X11Displays.GetMonitorName(edid));
+    }
+
+    [TestMethod]
+    public void InvalidEdidsHaveNoMonitorName()
+    {
+        byte[] edid = CreateEdid();
+        SetDescriptor(edid, 1, 0xFC, "NAME\n        ");
+        Assert.AreEqual("NAME", X11Displays.GetMonitorName(edid));
+
+        Assert.AreEqual(string.Empty, X11Displays.GetMonitorName(edid.AsSpan(0, 127)), "too short");
+        Assert.AreEqual(string.Empty, X11Displays.GetMonitorName([]), "empty");
+
+        edid[7] = 0x01;
+        Assert.AreEqual(string.Empty, X11Displays.GetMonitorName(edid), "wrong header");
+    }
+
+    // The base block with its header; every descriptor is a detailed timing (pixel clock != 0).
+    private static byte[] CreateEdid()
+    {
+        byte[] edid = new byte[128];
+        ((ReadOnlySpan<byte>)[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00]).CopyTo(edid);
+        for (int i = 0; i < 4; i++)
+            edid[54 + (i * 18)] = 0x01;
+
+        return edid;
+    }
+
+    private static void SetDescriptor(byte[] edid, int index, byte tag, string text)
+    {
+        Span<byte> descriptor = edid.AsSpan(54 + (index * 18), 18);
+        descriptor.Clear();
+        descriptor[3] = tag;
+        System.Text.Encoding.ASCII.GetBytes(text, descriptor[5..]);
+    }
+
     [TestMethod]
     public void X11OptionsUseSharedMemoryByDefault()
     {

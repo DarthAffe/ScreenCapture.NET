@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 
 namespace ScreenCapture.NET.Tests.Hardware;
@@ -9,7 +11,7 @@ namespace ScreenCapture.NET.Tests.Hardware;
 /// A private Xvfb server (virtual framebuffer X server) for X11 tests that need a server with known behavior, e.g. one that leaves the padding byte of its pixels 0.
 /// The test is inconclusive if Xvfb isn't installed.
 /// </summary>
-internal sealed class XvfbServer : IDisposable
+internal sealed partial class XvfbServer : IDisposable
 {
     #region Properties & Fields
 
@@ -40,13 +42,16 @@ internal sealed class XvfbServer : IDisposable
     /// <param name="screen">The size and depth of the screen (<c>WxHxD</c>).</param>
     /// <param name="sharedMemoryExtension">Whether the server offers MIT-SHM.</param>
     /// <param name="ownIpcNamespace">Whether the server runs in its own IPC namespace (<c>unshare</c>): it offers MIT-SHM but can't attach this process's segments, like a remote server.</param>
-    public static XvfbServer Start(string screen = "640x480x24", bool sharedMemoryExtension = true, bool ownIpcNamespace = false)
+    /// <param name="randrExtension">Whether the server offers RandR (its screen has one monitor named <c>screen</c>).</param>
+    public static XvfbServer Start(string screen = "640x480x24", bool sharedMemoryExtension = true, bool ownIpcNamespace = false, bool randrExtension = true)
     {
         // -displayfd picks a free display number (both TFM test processes run at once) and writes it once the server is ready.
         // Without -noreset the server resets (e.g. its root background) whenever its last client disconnects.
         List<string> arguments = ["-displayfd", "1", "-screen", "0", screen, "-nolisten", "tcp", "-noreset"];
         if (!sharedMemoryExtension)
             arguments.AddRange(["-extension", "MIT-SHM"]);
+        if (!randrExtension)
+            arguments.AddRange(["-extension", "RANDR"]);
 
         // -r maps the user to root in a new user namespace, which allows the IPC namespace without privileges.
         ProcessStartInfo startInfo = ownIpcNamespace ? new ProcessStartInfo("unshare", ["-r", "--ipc", "Xvfb", .. arguments]) : new ProcessStartInfo("Xvfb", arguments);
@@ -90,6 +95,33 @@ internal sealed class XvfbServer : IDisposable
     }
 
     /// <summary>
+    /// Runs <c>xrandr</c> on the server (the test is inconclusive if it isn't installed), e.g. <c>--setmonitor left 320/1x480/1+0+0 none</c> to add a monitor without output.
+    /// Monitors can't be redefined: remove one with <c>--delmonitor</c> before setting it again.
+    /// </summary>
+    public void Xrandr(params string[] arguments) => Run("xrandr", ["-display", DisplayName, .. arguments]);
+
+    private static void Run(string fileName, IEnumerable<string> arguments)
+    {
+        Process? process = null;
+        try
+        {
+            process = Process.Start(new ProcessStartInfo(fileName, arguments) { UseShellExecute = false, RedirectStandardError = true });
+        }
+        catch (Win32Exception)
+        {
+            Assert.Inconclusive($"{fileName} isn't installed.");
+        }
+
+        using (process)
+        {
+            Assert.IsNotNull(process, $"{fileName} didn't start.");
+            string errors = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Assert.AreEqual(0, process.ExitCode, $"{fileName} {string.Join(' ', arguments)} failed: {errors}");
+        }
+    }
+
+    /// <summary>
     /// Tiles the root window with a random two-colored pattern (<c>xsetroot</c>, the test is inconclusive if it isn't installed).
     /// The tile is 61x37 pixels, so a capture from a wrong offset or with a wrong stride shows other pixels.
     /// </summary>
@@ -107,22 +139,7 @@ internal sealed class XvfbServer : IDisposable
 
         try
         {
-            Process? xsetroot = null;
-            try
-            {
-                xsetroot = Process.Start(new ProcessStartInfo("xsetroot", ["-display", DisplayName, "-bitmap", path, "-fg", Color(random), "-bg", Color(random)]) { UseShellExecute = false });
-            }
-            catch (Win32Exception)
-            {
-                Assert.Inconclusive("xsetroot isn't installed.");
-            }
-
-            using (xsetroot)
-            {
-                Assert.IsNotNull(xsetroot, "xsetroot didn't start.");
-                xsetroot.WaitForExit();
-                Assert.AreEqual(0, xsetroot.ExitCode, "xsetroot failed.");
-            }
+            Run("xsetroot", ["-display", DisplayName, "-bitmap", path, "-fg", Color(random), "-bg", Color(random)]);
         }
         finally
         {
@@ -131,6 +148,60 @@ internal sealed class XvfbServer : IDisposable
 
         static string Color(Random random) => string.Create(CultureInfo.InvariantCulture, $"#{random.Next(0x1000000):x6}");
     }
+
+    /// <summary>
+    /// Sets the EDID of the output of the server's automatic monitor <c>screen</c> to a base block with the given monitor name (display descriptor 0xFC, up to 13 characters).
+    /// </summary>
+    [SupportedOSPlatform("linux")]
+    public unsafe void SetMonitorName(string monitorName)
+    {
+        const int xaInteger = 19;
+        const int propModeReplace = 0;
+
+        byte[] edid = new byte[128];
+        ((ReadOnlySpan<byte>)[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00]).CopyTo(edid);
+
+        // The first descriptor is a detailed timing (pixel clock != 0), the name is in the second.
+        edid[54] = 0x01;
+        edid[72 + 3] = 0xFC;
+        // Ended by a line feed if shorter than 13 characters, then padded with spaces.
+        Span<byte> text = edid.AsSpan(72 + 5, 13);
+        text.Fill((byte)' ');
+        int length = System.Text.Encoding.ASCII.GetBytes(monitorName, text);
+        if (length < text.Length)
+            text[length] = (byte)'\n';
+
+        using X11DisplayHandle display = X11DisplayHandle.Open(DisplayName);
+        Assert.IsFalse(display.IsInvalid, "Couldn't open the display.");
+
+        CULong root = X11.XRootWindowOfScreen(X11.XScreenOfDisplay(display, 0));
+        X11.XRRMonitorInfo* monitors = X11.XRRGetMonitors(display, root, getActive: true, out int count);
+        try
+        {
+            CULong output = default;
+            for (int i = 0; i < count; i++)
+                if (monitors[i].noutput > 0)
+                    output = monitors[i].outputs[0];
+
+            Assert.AreNotEqual(0u, (uint)output.Value, "The server has no monitor with an output.");
+
+            fixed (byte* data = edid)
+                XRRChangeOutputProperty(display, output, X11.XInternAtom(display, "EDID", onlyIfExists: false), new CULong(xaInteger), 8, propModeReplace, data, edid.Length);
+
+            // Sent and checked before the connection is closed.
+            display.ClearError();
+            _ = X11.XSync(display, false);
+            Assert.IsNull(display.LastError, "Setting the EDID failed.");
+        }
+        finally
+        {
+            if (monitors != null)
+                X11.XRRFreeMonitors(monitors);
+        }
+    }
+
+    [LibraryImport("libXrandr.so.2")]
+    private static unsafe partial void XRRChangeOutputProperty(X11DisplayHandle display, CULong output, CULong property, CULong type, int format, int mode, byte* data, int itemCount);
 
     /// <inheritdoc />
     public void Dispose()

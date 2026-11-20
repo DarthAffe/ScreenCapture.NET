@@ -16,7 +16,12 @@ namespace ScreenCapture.NET;
 /// and passes errors of all other connections to the handler that was installed before.
 /// If other code installs its own handler afterwards without passing errors on, X errors of the capture are handled by that code.
 /// <para>
-/// A restart reads the size of the screen again (see <see cref="IScreenCapture.DisplayChanged"/>). A screen that got smaller makes the capture fail and restart on its own;
+/// A display is a RandR monitor, a rectangle of an X screen (see <see cref="X11ScreenCaptureService.GetDisplays"/>), and only that rectangle is read.
+/// Every capture checks where the monitor is (one more round trip to the server): a monitor that was moved or resized makes the capture restart with it
+/// (see <see cref="IScreenCapture.DisplayChanged"/>); one that was removed or turned off makes it unavailable (<see cref="CaptureResult.Unavailable"/>) until it's back.
+/// </para>
+/// <para>
+/// A display that is a whole X screen (a server without RandR monitors) is read again by a restart: a screen that got smaller makes the capture fail and restart on its own;
 /// one that got larger is captured with its previous size until <see cref="IScreenCapture.Restart"/> is called.
 /// </para>
 /// <para>
@@ -37,6 +42,11 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     // Only used under _captureLock. Holds the frame of the last capture.
     private X11ImageHandle? _image;
+
+    // Only used under _captureLock. Where the display is on its X screen, and its RandR monitor (0 for a whole screen).
+    private int _x;
+    private int _y;
+    private CULong _monitor;
 
     private bool _isDisposed;
 
@@ -94,10 +104,14 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             if ((_display == null) || (_image == null))
                 return RestartCapture();
 
+            // A monitor is only a rectangle of the screen: reading it after it was moved, resized or removed would succeed with the wrong pixels.
+            if ((_monitor.Value != 0) && !IsMonitorUnchanged(_display, _drawable, _monitor, new CaptureRegion(_x, _y, _image.Width, _image.Height)))
+                return RestartCapture();
+
             _display.ClearError();
             bool read = _image.IsShared
-                            ? X11.XShmGetImage(_display, _drawable, _image, 0, 0, X11.ALL_PLANES)
-                            : X11.XGetSubImage(_display, _drawable, 0, 0, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0) != 0;
+                            ? X11.XShmGetImage(_display, _drawable, _image, _x, _y, X11.ALL_PLANES)
+                            : X11.XGetSubImage(_display, _drawable, _x, _y, (uint)_image.Width, (uint)_image.Height, X11.ALL_PLANES, X11.ZPIXMAP, _image, 0, 0) != 0;
 
             // E.g. BadMatch if the screen got smaller than the image. Starting over picks up the current state.
             if (!read || (_display.LastError != null))
@@ -110,6 +124,9 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             return CaptureResult.NewFrame;
         }
     }
+
+    private static bool IsMonitorUnchanged(X11DisplayHandle display, CULong root, CULong monitor, CaptureRegion region)
+        => X11Displays.TryGetMonitorRegion(display, root, monitor, out CaptureRegion current) && (current == region);
 
     private static string FormatXError(X11Error? error) => error == null ? string.Empty : $" with {error}";
 
@@ -175,25 +192,20 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 display = X11DisplayHandle.Open(_displayName);
                 if (display.IsInvalid) throw X11DisplayHandle.CreateOpenFailedException(_displayName);
 
-                // XScreenOfDisplay doesn't check the index.
-                int screenCount = X11.XScreenCount(display);
-                if ((Display.Index < 0) || (Display.Index >= screenCount))
-                    throw new InvalidOperationException($"The X server has no screen {Display.Index} (it has {screenCount}).");
+                // Read from the new connection: the display might have another position or size by now (e.g. after an XRandR mode change).
+                X11Display found = X11Displays.Find(display, Display.Id) ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+                Display current = found.Display;
 
-                nint screen = X11.XScreenOfDisplay(display, Display.Index);
+                nint screen = X11.XScreenOfDisplay(display, found.Screen);
                 CULong drawable = X11.XRootWindowOfScreen(screen);
 
-                // Read from the new connection: the screen might have another size by now (e.g. after an XRandR mode change).
-                int width = X11.XWidthOfScreen(screen);
-                int height = X11.XHeightOfScreen(screen);
-
                 // Zones are only written after a capture read a frame (a restart isn't one), so the shared image is read by the first capture.
-                image = Options.UseSharedMemory ? X11ImageHandle.CreateShared(display, screen, width, height) : null;
+                image = Options.UseSharedMemory ? X11ImageHandle.CreateShared(display, screen, current.Width, current.Height) : null;
                 if (image == null)
                 {
-                    image = X11.XGetImage(display, drawable, 0, 0, (uint)width, (uint)height, X11.ALL_PLANES, X11.ZPIXMAP);
+                    image = X11.XGetImage(display, drawable, current.X, current.Y, (uint)current.Width, (uint)current.Height, X11.ALL_PLANES, X11.ZPIXMAP);
                     if (image.IsInvalid || (display.LastError != null))
-                        throw new InvalidOperationException($"XGetImage of the {width}x{height} screen failed{FormatXError(display.LastError)}.");
+                        throw new InvalidOperationException($"XGetImage of the {current.Width}x{current.Height} display at {current.X}, {current.Y} failed{FormatXError(display.LastError)}.");
 
                     image.ReadDescription();
                 }
@@ -203,10 +215,13 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 _display = display;
                 _drawable = drawable;
                 _image = image;
+                _x = current.X;
+                _y = current.Y;
+                _monitor = found.Monitor;
                 display = null;
                 image = null;
 
-                SetDisplay(Display with { Width = width, Height = height });
+                SetDisplay(current);
 
                 return true;
             }
@@ -244,6 +259,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         _display?.Dispose();
         _display = null;
         _drawable = default;
+        _monitor = default;
     }
 
     #endregion

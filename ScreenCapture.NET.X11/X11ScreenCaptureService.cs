@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using HPPH;
 
 namespace ScreenCapture.NET;
 
@@ -55,46 +53,38 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     #region Methods
 
     /// <inheritdoc />
+    /// <remarks>
+    /// X11 doesn't tell which graphics card shows a screen, so the X server is the only graphics card.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">No connection to an X server could be opened.</exception>
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
         ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
         using X11DisplayHandle display = OpenDisplay();
-
-        string name = GetDisplayName(display);
-        return [new GraphicsCard(name, 0, name, 0, 0)];
+        return [X11Displays.GetGraphicsCard(display)];
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The displays are the active monitors of the X server as RandR 1.5 reports them (what <c>xrandr --listmonitors</c> shows, incl. monitors defined with <c>xrandr --setmonitor</c>),
+    /// with their position on the X screen. A screen without monitors (or a server without RandR 1.5 or without libXrandr) is one display.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">No connection to an X server could be opened.</exception>
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
         ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
 
         using X11DisplayHandle display = OpenDisplay();
+        if (!string.Equals(graphicsCard.Id, X11Displays.GetGraphicsCard(display).Id, StringComparison.Ordinal)) return [];
 
-        string name = GetDisplayName(display);
-        if (!string.Equals(graphicsCard.Id, name, StringComparison.Ordinal)) return [];
+        List<X11Display> displays = X11Displays.GetDisplays(display);
+        List<Display> result = new(displays.Count);
+        foreach (X11Display x11Display in displays)
+            result.Add(x11Display.Display);
 
-        graphicsCard = graphicsCard with { Index = 0 };
-
-        int screenCount = X11.XScreenCount(display);
-        List<Display> displays = new(screenCount);
-        for (int screenNumber = 0; screenNumber < screenCount; screenNumber++)
-        {
-            nint screen = X11.XScreenOfDisplay(display, screenNumber);
-            int screenWidth = X11.XWidthOfScreen(screen);
-            int screenHeight = X11.XHeightOfScreen(screen);
-
-            // DarthAffe 10.09.2023: Emulate DX-Displaynames for no real reason ¯\(°_o)/¯
-            displays.Add(new Display($"{name}/{screenNumber}", screenNumber, @$"\\.\DISPLAY{screenNumber + 1}", string.Empty, 0, 0, screenWidth, screenHeight, ImageRotation.None, graphicsCard));
-        }
-
-        return displays;
+        return result;
     }
-
-    private static string GetDisplayName(X11DisplayHandle display) => Marshal.PtrToStringAnsi(X11.XDisplayString(display)) ?? string.Empty;
 
     // The enumeration is eager, so the connection is closed before the caller sees the results and a missing X server throws right away.
     private X11DisplayHandle OpenDisplay()

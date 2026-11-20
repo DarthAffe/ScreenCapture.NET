@@ -21,18 +21,22 @@ namespace ScreenCapture.NET;
 /// <para>
 /// A window captured by the Windows.Graphics.Capture backend has the id <c>window:0x</c> followed by its handle; it's only valid while the window exists.
 /// </para>
-/// <para>On X11 it's the name of the X display and the screen number (e.g. <c>:0/0</c>).</para>
+/// <para>
+/// On X11 it's the name of the X display, the screen number and the name of the RandR monitor (e.g. <c>:0/0/DP-1</c>). The monitor name is the connector,
+/// so connecting the monitor to another port changes it. A screen of a server without RandR monitors is one display with the id <c>:0/0</c>.
+/// </para>
 /// </param>
 /// <param name="Index">The index of the display in the backend. It can change when devices are added or removed.</param>
-/// <param name="DeviceName">The device name of the display (e.g. <c>\\.\DISPLAY1</c>).</param>
-/// <param name="FriendlyName">The name of the monitor (e.g. its model, as Windows shows it in the display settings). Empty if unknown, which is always the case on X11.</param>
-/// <param name="X">The x-position of the display on the desktop, in pixels. The primary display is at 0, displays left of it are negative. Always 0 on X11, where every screen has its own coordinates.</param>
-/// <param name="Y">The y-position of the display on the desktop, in pixels. The primary display is at 0, displays above it are negative. Always 0 on X11, where every screen has its own coordinates.</param>
+/// <param name="DeviceName">The device name of the display (e.g. <c>\\.\DISPLAY1</c>; on X11 the name of the RandR monitor, e.g. <c>DP-1</c>).</param>
+/// <param name="FriendlyName">The name of the monitor (e.g. its model, as Windows shows it in the display settings). On X11 it's the monitor name from its EDID. Empty if unknown.</param>
+/// <param name="X">The x-position of the display on the desktop, in pixels. The primary display is at 0, displays left of it are negative. On X11 it's the position on the X screen, whose left edge is 0.</param>
+/// <param name="Y">The y-position of the display on the desktop, in pixels. The primary display is at 0, displays above it are negative. On X11 it's the position on the X screen, whose top edge is 0.</param>
 /// <param name="Width">The width of the display on the desktop, in pixels (rotation already applied).</param>
 /// <param name="Height">The height of the display on the desktop, in pixels (rotation already applied).</param>
 /// <param name="Rotation">
 /// How the display is rotated, clockwise (on Windows: the orientation set in the display settings).
 /// Zones are always in the orientation of the display: a backend that captures the output in its native orientation (DX11) rotates the pixels by this.
+/// Always <see cref="ImageRotation.None"/> on X11, which delivers the pixels already rotated.
 /// </param>
 /// <param name="GraphicsCard">The <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.</param>
 public readonly record struct Display(string Id, int Index, string DeviceName, string FriendlyName, int X, int Y, int Width, int Height, ImageRotation Rotation, GraphicsCard GraphicsCard);
