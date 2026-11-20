@@ -411,7 +411,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
             PwBuffer* buffer;
             while ((buffer = pw_stream_dequeue_buffer(stream._stream)) != null)
             {
-                if (stream.TryReadFrame(buffer, out PipeWireFrame bufferFrame))
+                if (TryReadFrame(buffer, stream._width, stream._height, stream._videoFormat, out PipeWireFrame bufferFrame))
                 {
                     if (newest != null)
                         _ = pw_stream_queue_buffer(stream._stream, newest);
@@ -443,13 +443,25 @@ internal sealed unsafe class PipeWireStream : IDisposable
         }
     }
 
-    // A buffer without (valid) pixels is no frame: e.g. one the compositor marked as corrupted, or (with cursor metadata) one that only moved the pointer.
-    private bool TryReadFrame(PwBuffer* buffer, out PipeWireFrame frame)
+    /// <summary>
+    /// Reads the frame of a buffer of the stream, checking that the pixels lie within its mapped memory.
+    /// </summary>
+    /// <remarks>
+    /// A buffer without (valid) pixels is no frame: e.g. one the compositor marked as corrupted, or (with cursor metadata) one that only moved the pointer.
+    /// The buffer is described by the producer: its chunk (offset and stride) is checked against the size of the memory, so a malformed one can't make the frame reach past it.
+    /// </remarks>
+    /// <param name="buffer">The dequeued buffer.</param>
+    /// <param name="width">The negotiated width of the frames.</param>
+    /// <param name="height">The negotiated height of the frames.</param>
+    /// <param name="videoFormat">The negotiated video format (<see cref="SPA_VIDEO_FORMAT_BGRA"/> or <see cref="SPA_VIDEO_FORMAT_BGRx"/>).</param>
+    /// <param name="frame">The frame; <c>default</c> if there's none.</param>
+    /// <returns><c>true</c> if the buffer holds a frame.</returns>
+    internal static bool TryReadFrame(PwBuffer* buffer, int width, int height, uint videoFormat, out PipeWireFrame frame)
     {
         frame = default;
 
         SpaBuffer* spaBuffer = buffer->buffer;
-        if ((spaBuffer == null) || (spaBuffer->n_datas < 1) || (_width <= 0) || (_height <= 0)) return false;
+        if ((spaBuffer == null) || (spaBuffer->n_datas < 1) || (spaBuffer->datas == null) || (width <= 0) || (height <= 0)) return false;
 
         SpaData* spaData = spaBuffer->datas;
         if ((spaData->data == null) || (spaData->chunk == null)) return false;
@@ -457,12 +469,13 @@ internal sealed unsafe class PipeWireStream : IDisposable
         SpaChunk chunk = *spaData->chunk;
         if (((chunk.flags & SPA_CHUNK_FLAG_CORRUPTED) != 0) || (chunk.size == 0)) return false;
 
-        int rowSize = _width * 4;
-        int stride = chunk.stride > 0 ? chunk.stride : rowSize;
-        if ((stride < rowSize) || ((chunk.offset + ((long)stride * (_height - 1)) + rowSize) > spaData->maxsize)) return false;
+        // The last row may end without padding.
+        long rowSize = (long)width * 4;
+        long stride = chunk.stride > 0 ? chunk.stride : rowSize;
+        if ((stride < rowSize) || ((chunk.offset + (stride * (height - 1)) + rowSize) > spaData->maxsize)) return false;
 
         long pts = 0;
-        for (uint i = 0; i < spaBuffer->n_metas; i++)
+        for (uint i = 0; (i < spaBuffer->n_metas) && (spaBuffer->metas != null); i++)
         {
             SpaMeta meta = spaBuffer->metas[i];
             if ((meta.type != SPA_META_Header) || (meta.data == null) || (meta.size < sizeof(SpaMetaHeader))) continue;
@@ -473,7 +486,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
             pts = header->pts;
         }
 
-        frame = new PipeWireFrame((nint)(spaData->data + chunk.offset), _width, _height, stride, _videoFormat == SPA_VIDEO_FORMAT_BGRA, ToStopwatchTimestamp(pts));
+        frame = new PipeWireFrame((nint)(spaData->data + chunk.offset), width, height, (int)stride, videoFormat == SPA_VIDEO_FORMAT_BGRA, ToStopwatchTimestamp(pts));
         return true;
     }
 
