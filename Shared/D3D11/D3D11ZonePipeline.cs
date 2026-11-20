@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using HPPH;
 using Vortice.Direct3D11;
@@ -27,8 +26,6 @@ internal sealed class D3D11ZonePipeline
 {
     #region Properties & Fields
 
-    private readonly ID3D11ZonePipelineHost _host;
-
     // Guards _textures. Acquired after the capture lock; RemoveZone takes only this one.
     private readonly Lock _texturesLock = new();
     private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
@@ -40,11 +37,9 @@ internal sealed class D3D11ZonePipeline
     private ID3D11Texture2D? _captureTexture;
     private Box _captureTextureBox;
 
-    // The display shown by the capture texture, the rotation that turns the capture texture into its orientation,
-    // and the display with that rotation (what GetSourceRegion expects).
+    // The display shown by the capture texture and the rotation that turns the capture texture into its orientation.
     private Display _display;
     private ImageRotation _sourceRotation;
-    private Display _sourceDisplay;
 
     // If _captureTexture holds a frame: a new one is empty until the first frame is copied to it.
     private bool _hasFrame;
@@ -64,19 +59,6 @@ internal sealed class D3D11ZonePipeline
     /// Gets a value indicating whether the capture texture holds a frame the zones can be written from.
     /// </summary>
     public bool HasFrame => _hasFrame;
-
-    #endregion
-
-    #region Constructors
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="D3D11ZonePipeline"/> class.
-    /// </summary>
-    /// <param name="host">The capture whose zones are written.</param>
-    public D3D11ZonePipeline(ID3D11ZonePipelineHost host)
-    {
-        this._host = host;
-    }
 
     #endregion
 
@@ -117,7 +99,6 @@ internal sealed class D3D11ZonePipeline
         _context = context;
         _display = display;
         _sourceRotation = sourceRotation;
-        _sourceDisplay = display with { Rotation = sourceRotation };
     }
 
     /// <summary>
@@ -196,14 +177,15 @@ internal sealed class D3D11ZonePipeline
     /// Only zones that already have textures of their size are copied here: new and resized zones get their textures, and their copy, when they're written.
     /// </para>
     /// </remarks>
-    public void QueueZoneCopies()
+    /// <param name="captureZones">The zones of the capture (its snapshot).</param>
+    public void QueueZoneCopies(IReadOnlyList<CaptureZone<ColorBGRA>> captureZones)
     {
         if (!_hasFrame || (_context == null) || (_captureTexture == null)) return;
 
         bool queued = false;
 
         lock (_texturesLock)
-            foreach (CaptureZone<ColorBGRA> captureZone in _host.CaptureZones)
+            foreach (CaptureZone<ColorBGRA> captureZone in captureZones)
             {
                 // Zones that aren't written by this capture (not updated automatically, already showing this frame) skip the copy.
                 if (!captureZone.IsValid || !(captureZone.AutoUpdate || captureZone.IsUpdateRequested)) continue;
@@ -226,11 +208,11 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Writes a zone from the current frame. Called under the zone lock (and the capture lock).
+    /// Writes a zone from the current frame. Called under the zone lock (and the capture lock), only for registered zones.
     /// </summary>
     /// <param name="captureZone">The zone.</param>
     /// <param name="buffer">The buffer of the zone (see <see cref="AbstractScreenCapture{TColor}.PerformCaptureZoneUpdate"/>).</param>
-    /// <returns><c>true</c> if the zone was written; <c>false</c> if there's no frame, the zone doesn't lie within it or the zone was unregistered.</returns>
+    /// <returns><c>true</c> if the zone was written; <c>false</c> if there's no frame or the zone doesn't lie within it.</returns>
     public bool WriteZone(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
     {
         lock (_texturesLock)
@@ -242,8 +224,7 @@ internal sealed class D3D11ZonePipeline
             if (!captureZone.Region.IsWithin(_display.Width, _display.Height)) return false;
 
             CaptureRegion region = captureZone.Region;
-            ZoneTextures? textures = GetTextures(captureZone);
-            if (textures == null) return false;
+            ZoneTextures textures = GetTextures(captureZone);
 
             // Usually queued by QueueZoneCopies. Not if the zone is new, changed since, or wasn't expected to be written (e.g. an update requested meanwhile).
             if (!textures.HoldsCopy(_version, region))
@@ -255,7 +236,7 @@ internal sealed class D3D11ZonePipeline
             {
                 // The staging texture is the downscaled region in the orientation of the capture texture; only the rotation is left.
                 ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
-                _host.WriteCaptureZoneFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, mapSource.RowPitch), captureZone, buffer, _sourceRotation);
+                CaptureZoneWriter.WriteFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, mapSource.RowPitch), captureZone, buffer, _sourceRotation);
             }
             finally
             {
@@ -267,7 +248,7 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Disposes the textures of an unregistered zone. Called after the zone was removed from <see cref="ID3D11ZonePipelineHost.CaptureZones"/>, without the capture lock.
+    /// Disposes the textures of an unregistered zone. Called after the zone was unregistered (no capture writes it anymore), without the capture lock.
     /// </summary>
     public void RemoveZone(CaptureZone<ColorBGRA> captureZone)
     {
@@ -281,7 +262,7 @@ internal sealed class D3D11ZonePipeline
     /// </summary>
     private void CopyToStaging(ID3D11DeviceContext context, ID3D11Texture2D captureTexture, ZoneTextures textures, CaptureRegion region)
     {
-        CaptureRegion source = _host.GetSourceRegion(region, _sourceDisplay);
+        CaptureRegion source = CaptureZoneWriter.GetSourceRegion(region, _display.Width, _display.Height, _sourceRotation);
         Box sourceBox = new(source.X, source.Y, 0, source.X + source.Width, source.Y + source.Height, 1);
         if (textures.ScalingTexture != null)
         {
@@ -301,10 +282,11 @@ internal sealed class D3D11ZonePipeline
     /// <remarks>
     /// Called under the zone lock, the capture lock and <see cref="_texturesLock"/>: the region and the size of the zone belong together (and to its buffer).
     /// Creating them here instead of on register/update means a capture never sees a zone without textures or with textures of the wrong size.
+    /// The zone is registered (unregistering it waits for the zone lock), and <see cref="RemoveZone"/> disposes the textures after it was unregistered, so none are left behind.
     /// </remarks>
     /// <param name="captureZone">The zone.</param>
-    /// <returns>The textures, or <c>null</c> if the zone was unregistered.</returns>
-    private ZoneTextures? GetTextures(CaptureZone<ColorBGRA> captureZone)
+    /// <returns>The textures.</returns>
+    private ZoneTextures GetTextures(CaptureZone<ColorBGRA> captureZone)
     {
         CaptureRegion region = captureZone.Region;
         int downscaleLevel = captureZone.DownscaleLevel;
@@ -316,10 +298,6 @@ internal sealed class D3D11ZonePipeline
             textures.Dispose();
             _textures.Remove(captureZone);
         }
-
-        // A running capture can still hold an unregistered zone in its snapshot. Unregistering disposes the textures after removing
-        // the zone (RemoveZone, under _texturesLock), so creating them only for registered zones means none are left behind.
-        if (!_host.CaptureZones.Contains(captureZone)) return null;
 
         textures = CreateTextures(region, captureZone.Width, captureZone.Height, downscaleLevel);
         _textures.Add(captureZone, textures);

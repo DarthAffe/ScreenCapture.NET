@@ -3,7 +3,7 @@ using HPPH;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// <see cref="AbstractScreenCapture{TColor}.WriteCaptureZone"/>: which pixels of the frame end up in the zone, at which size.
+/// <see cref="CaptureZoneWriter.Write{TColor}"/>: which pixels of the frame end up in the zone, at which size.
 /// The averaging itself is HPPH's: the frames consist of uniform blocks, so every average is exact.
 /// </summary>
 [TestClass]
@@ -27,7 +27,7 @@ public sealed class WriteCaptureZoneTests
     private static ColorARGB[] Write(RefImage<ColorARGB> frame, CaptureZone<ColorARGB> zone)
     {
         ColorARGB[] buffer = new ColorARGB[zone.Width * zone.Height];
-        TestScreenCapture.Write(frame, zone, buffer);
+        CaptureZoneWriter.Write(frame, zone, buffer);
 
         return buffer;
     }
@@ -113,7 +113,7 @@ public sealed class WriteCaptureZoneTests
         ColorARGB[] buffer = new ColorARGB[(zone.Width * zone.Height) - 1];
         try
         {
-            TestScreenCapture.Write(frame, zone, buffer);
+            CaptureZoneWriter.Write(frame, zone, buffer);
             Assert.Fail("No exception.");
         }
         catch (ArgumentException) { }
@@ -127,7 +127,7 @@ public sealed class WriteCaptureZoneTests
 
         try
         {
-            TestScreenCapture.Write(frame, null!, buffer);
+            CaptureZoneWriter.Write(frame, null!, buffer);
             Assert.Fail("No exception.");
         }
         catch (ArgumentNullException) { }

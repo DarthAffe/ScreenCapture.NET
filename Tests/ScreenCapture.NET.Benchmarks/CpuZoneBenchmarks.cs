@@ -5,7 +5,7 @@ using HPPH;
 namespace ScreenCapture.NET.Benchmarks;
 
 /// <summary>
-/// The CPU zone update used by DX9 and X11 (<c>AbstractScreenCapture.WriteCaptureZone</c>): a copy for downscale level 0, HPPH's <c>Downscale</c> otherwise.
+/// The CPU zone update used by DX9 and X11 (<c>CaptureZoneWriter.Write</c>): a copy for downscale level 0, HPPH's <c>Downscale</c> otherwise.
 /// With a rotation the frame is in the native orientation of the output and the result is rotated as well (downscaled first).
 /// </summary>
 [SimpleJob(RuntimeMoniker.Net10_0)]
@@ -56,7 +56,7 @@ public class CpuZoneBenchmarks
     public void Cleanup() => _capture?.Dispose();
 
     [Benchmark]
-    public void UpdateFullScreenZone() => BenchmarkScreenCapture.Write(RefImage<ColorBGRA>.Wrap(_frame, _frameWidth, _frameHeight, _stride), _zone!, _buffer, Rotation);
+    public void UpdateFullScreenZone() => CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(_frame, _frameWidth, _frameHeight, _stride), _zone!, _buffer, Rotation);
 
     #endregion
 }

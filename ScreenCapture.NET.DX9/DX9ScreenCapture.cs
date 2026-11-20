@@ -126,7 +126,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
             FrameBuffer? frame = _frame;
             if ((frame == null) || !frame.HasData || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
-            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(frame.Data, frame.Width, frame.Height), captureZone, buffer);
+            CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(frame.Data, frame.Width, frame.Height), captureZone, buffer);
 
             return true;
         }

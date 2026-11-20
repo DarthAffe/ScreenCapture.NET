@@ -74,7 +74,7 @@ public class DX11RotationBenchmarks
     public void Cleanup() => _capture?.Dispose();
 
     [Benchmark]
-    public void CopyRotate() => BenchmarkScreenCapture.WriteFromScaled(RefImage<ColorBGRA>.Wrap(_source, _sourceWidth, _sourceHeight, _sourceStride), _zone!, _target, Rotation);
+    public void CopyRotate() => CaptureZoneWriter.WriteFromScaled(RefImage<ColorBGRA>.Wrap(_source, _sourceWidth, _sourceHeight, _sourceStride), _zone!, _target, Rotation);
 
     #endregion
 }

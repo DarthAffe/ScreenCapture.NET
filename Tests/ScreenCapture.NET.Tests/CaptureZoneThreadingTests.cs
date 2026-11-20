@@ -102,6 +102,63 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
+    /// A zone unregistered while a capture runs (after it took its snapshot) isn't written by that capture: backends never see unregistered zones.
+    /// </summary>
+    [TestMethod]
+    public void ZoneUnregisteredDuringACaptureIsNotWritten()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureZone<ColorARGB> first = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+        CaptureZone<ColorARGB> second = screenCapture.RegisterCaptureZone(new CaptureRegion(16, 0, 16, 8));
+
+        List<CaptureZone<ColorARGB>> written = [];
+        screenCapture.ZoneUpdating = zone =>
+        {
+            written.Add(zone);
+            if (zone == first)
+                Assert.IsTrue(Task.Run(() => screenCapture.UnregisterCaptureZone(second)).Wait(TIMEOUT), "Unregistering a zone waited for the write of another one.");
+        };
+
+        int updates = 0;
+        second.Updated += (_, _) => updates++;
+
+        screenCapture.CaptureScreen();
+
+        CollectionAssert.AreEqual(new[] { first }, written);
+        Assert.AreEqual(0, updates);
+    }
+
+    /// <summary>
+    /// Unregistering waits for a capture that writes the zone: once it returned, no capture writes it anymore (so a backend can release the zone's resources).
+    /// </summary>
+    [TestMethod]
+    public void UnregisterWaitsForTheWriteOfTheZone()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
+
+        using ManualResetEventSlim writing = new();
+        using ManualResetEventSlim release = new();
+        screenCapture.ZoneUpdating = _ =>
+        {
+            writing.Set();
+            release.Wait(TIMEOUT);
+        };
+
+        Task<CaptureResult> capture = Task.Run(screenCapture.CaptureScreen);
+        Assert.IsTrue(writing.Wait(TIMEOUT));
+
+        Task<bool> unregister = Task.Run(() => screenCapture.UnregisterCaptureZone(zone));
+        Assert.IsFalse(unregister.Wait(100), "Unregistering didn't wait for the write of the zone.");
+
+        release.Set();
+
+        Assert.IsTrue(unregister.Wait(TIMEOUT));
+        Assert.IsTrue(unregister.Result);
+        Assert.IsTrue(capture.Wait(TIMEOUT));
+    }
+
+    /// <summary>
     /// The deadlock case: a user thread holds the zone lock and changes the zone while the capture thread wants to update it.
     /// </summary>
     [TestMethod]

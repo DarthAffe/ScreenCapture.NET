@@ -140,7 +140,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             X11ImageHandle? image = _image;
             if ((image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
 
-            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride), captureZone, buffer);
+            CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride), captureZone, buffer);
 
             // On depth-24 visuals the fourth byte is padding: servers fill it as they like (e.g. Xvfb with 0) and XGetSubImage clears it. The screen is opaque.
             OpaquePixels.SetOpaque(buffer);

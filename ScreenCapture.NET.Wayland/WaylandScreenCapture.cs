@@ -140,7 +140,7 @@ public sealed class WaylandScreenCapture : AbstractScreenCapture<ColorBGRA>
                 if ((_stream.CurrentFrame is not { } frame) || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
                 ReadOnlySpan<byte> pixels = new((void*)frame.Data, (frame.Stride * (frame.Height - 1)) + (frame.Width * 4));
-                WriteCaptureZone(RefImage<ColorBGRA>.Wrap(pixels, frame.Width, frame.Height, frame.Stride), captureZone, buffer);
+                CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(pixels, frame.Width, frame.Height, frame.Stride), captureZone, buffer);
                 hasAlpha = frame.HasAlpha;
             }
 

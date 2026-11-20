@@ -33,6 +33,9 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     // 1 while an update is requested; taken by the capture that writes the zone.
     private int _updateRequested;
 
+    // Set under the zone lock when the zone is unregistered: captures that hold it in their snapshot don't write it anymore.
+    private bool _isUnregistered;
+
     /// <inheritdoc />
     public Display Display => Volatile.Read(ref _layout).Display;
 
@@ -202,6 +205,16 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// Records that the zone was written with the given frame. Called under <see cref="EnterUpdateScope"/>.
     /// </summary>
     internal void SetWritten(long frameNumber) => Volatile.Write(ref _writtenFrameNumber, frameNumber);
+
+    /// <summary>
+    /// Gets if the zone was unregistered from its capture. Read under <see cref="EnterUpdateScope"/>.
+    /// </summary>
+    internal bool IsUnregistered => _isUnregistered;
+
+    /// <summary>
+    /// Marks the zone as unregistered: no capture writes it anymore. Called under <see cref="EnterUpdateScope"/>.
+    /// </summary>
+    internal void SetUnregistered() => _isUnregistered = true;
 
     internal void RaiseUpdated()
     {

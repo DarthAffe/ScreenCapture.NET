@@ -4,7 +4,7 @@ using HPPH;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// The zone writes of <see cref="AbstractScreenCapture{TColor}"/> for sources in the native orientation of the output: which pixels end up in the zone, in which order.
+/// The zone writes of <see cref="CaptureZoneWriter"/> for sources in the native orientation of the output: which pixels end up in the zone, in which order.
 /// The reference is the same zone written from the frame in the orientation of the display (see <see cref="WriteCaptureZoneTests"/>).
 /// </summary>
 [TestClass]
@@ -72,7 +72,7 @@ public sealed class RotatedCaptureZoneTests
     [DataRow(ImageRotation.Rotate270, 1080 - 20 - 400, 10, 400, 300)]
     public void SourceRegion(ImageRotation rotation, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
         => Assert.AreEqual(new CaptureRegion(expectedX, expectedY, expectedWidth, expectedHeight),
-                           TestScreenCapture.SourceRegion(new CaptureRegion(10, 20, 300, 400), TestScreenCapture.CreateDisplay(1920, 1080, rotation)));
+                           CaptureZoneWriter.GetSourceRegion(new CaptureRegion(10, 20, 300, 400), TestScreenCapture.CreateDisplay(1920, 1080, rotation)));
 
     /// <summary>
     /// Every region at every level shows the same pixels, whether the frame or the downscaled region is in the native orientation and rotated by the helper
@@ -100,14 +100,14 @@ public sealed class RotatedCaptureZoneTests
                             CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(x, y, width, height), level);
                             string name = $"Zone ({x}, {y}, {width}, {height}) at level {level}";
 
-                            ColorARGB[] expected = Write(zone, buffer => TestScreenCapture.Write(RefImage<ColorARGB>.Wrap(displayFrame, DISPLAY_WIDTH, DISPLAY_HEIGHT), zone, buffer));
+                            ColorARGB[] expected = Write(zone, buffer => CaptureZoneWriter.Write(RefImage<ColorARGB>.Wrap(displayFrame, DISPLAY_WIDTH, DISPLAY_HEIGHT), zone, buffer));
 
-                            ColorARGB[] fromFrame = Write(zone, buffer => TestScreenCapture.Write(RefImage<ColorARGB>.Wrap(nativeFrame, nativeWidth, nativeHeight), zone, buffer, rotation));
+                            ColorARGB[] fromFrame = Write(zone, buffer => CaptureZoneWriter.Write(RefImage<ColorARGB>.Wrap(nativeFrame, nativeWidth, nativeHeight), zone, buffer, rotation));
                             CollectionAssert.AreEqual(expected, fromFrame, $"{name}, from the frame.");
 
                             ColorARGB[] scaled = Rotate(expected, zone.Width, zone.Height, Inverse(rotation));
                             (int scaledWidth, int scaledHeight) = PixelHelper.GetRotatedSize(zone.Width, zone.Height, rotation);
-                            ColorARGB[] fromScaled = Write(zone, buffer => TestScreenCapture.WriteFromScaled(RefImage<ColorARGB>.Wrap(scaled, scaledWidth, scaledHeight), zone, buffer, rotation));
+                            ColorARGB[] fromScaled = Write(zone, buffer => CaptureZoneWriter.WriteFromScaled(RefImage<ColorARGB>.Wrap(scaled, scaledWidth, scaledHeight), zone, buffer, rotation));
                             CollectionAssert.AreEqual(expected, fromScaled, $"{name}, from the scaled region.");
 
                             screenCapture.UnregisterCaptureZone(zone);
@@ -138,7 +138,7 @@ public sealed class RotatedCaptureZoneTests
         for (int i = 0; i < expected.Length; i++)
             expected[i] = S(expectedRowsAndColumns[i * 2], expectedRowsAndColumns[(i * 2) + 1]);
 
-        CollectionAssert.AreEqual(expected, Write(zone, buffer => TestScreenCapture.WriteFromScaled(RefImage<ColorARGB>.Wrap(padded, columns, rows, stride), zone, buffer, rotation)));
+        CollectionAssert.AreEqual(expected, Write(zone, buffer => CaptureZoneWriter.WriteFromScaled(RefImage<ColorARGB>.Wrap(padded, columns, rows, stride), zone, buffer, rotation)));
 
         static ColorARGB S(int row, int column) => new(255, (byte)column, (byte)row, 0x42);
     }
@@ -156,7 +156,7 @@ public sealed class RotatedCaptureZoneTests
 
         try
         {
-            Write(zone, buffer => TestScreenCapture.Write(RefImage<ColorARGB>.Wrap(frame, 6, 4), zone, buffer, ImageRotation.Rotate90));
+            Write(zone, buffer => CaptureZoneWriter.Write(RefImage<ColorARGB>.Wrap(frame, 6, 4), zone, buffer, ImageRotation.Rotate90));
             Assert.Fail("No exception.");
         }
         catch (ArgumentOutOfRangeException) { }
@@ -172,7 +172,7 @@ public sealed class RotatedCaptureZoneTests
 
         try
         {
-            Write(zone, buffer => TestScreenCapture.WriteFromScaled(RefImage<ColorARGB>.Wrap(scaled, 6, 3), zone, buffer, ImageRotation.Rotate270));
+            Write(zone, buffer => CaptureZoneWriter.WriteFromScaled(RefImage<ColorARGB>.Wrap(scaled, 6, 3), zone, buffer, ImageRotation.Rotate270));
             Assert.Fail("No exception.");
         }
         catch (ArgumentException) { }

@@ -14,7 +14,7 @@ namespace ScreenCapture.NET;
 /// </description></item>
 /// <item><description>
 /// Zones can be registered, unregistered and changed while a capture runs. A capture writes a changed zone with its new region (and size) as soon as it's changed.
-/// A capture that started before a zone was unregistered may still write it and raise its <see cref="ICaptureZone.Updated"/>.
+/// Once <see cref="UnregisterCaptureZone"/> returned, no capture writes the zone anymore (it waits for a capture writing it); a capture that wrote it just before may still raise its <see cref="ICaptureZone.Updated"/>.
 /// </description></item>
 /// <item><description>
 /// <see cref="Restart"/> can be called while a capture runs: that capture doesn't write its zones from the restarted backend's resources before they hold a frame.

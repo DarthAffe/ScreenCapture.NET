@@ -12,7 +12,7 @@ namespace ScreenCapture.NET;
 /// All members can be used from any thread (see <see cref="IScreenCapture"/>); backends guard their resources as described on
 /// <see cref="PerformScreenCapture"/>, <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>.
 /// <para>
-/// Lock order: a zone lock (held while a zone is written or changed; frames don't hold it, see <see cref="CaptureZone{TColor}.Lock"/>)
+/// Lock order: a zone lock (held while a zone is written, changed or unregistered; frames don't hold it, see <see cref="CaptureZone{TColor}.Lock"/>)
 /// is always acquired before any lock of the screen capture, and the library never acquires a zone lock while holding one of its own locks.
 /// </para>
 /// </remarks>
@@ -318,7 +318,8 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             using (captureZone.EnterUpdateScope())
             {
-                if (!captureZone.IsValid) return false;
+                // Unregistered while this capture held it in its snapshot.
+                if (!captureZone.IsValid || captureZone.IsUnregistered) return false;
 
                 ZoneBuffer<TColor>? buffer = captureZone.BeginWrite();
                 if (buffer == null) return false;
@@ -374,8 +375,9 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Performs an update of the given capture zone.
     /// </summary>
     /// <remarks>
-    /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update.
-    /// The zone might have been unregistered since the capture started.
+    /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update,
+    /// and only for registered zones: the zone isn't unregistered before this returned.
+    /// Use <see cref="CaptureZoneWriter"/> to write zones in software.
     /// <para>
     /// <see cref="CaptureScreen"/> can run on several threads at once, and <see cref="Restart"/> on any thread: this can run while <see cref="PerformScreenCapture"/>
     /// or <see cref="PerformRestart"/> run on other threads. Read the frame under the lock those use, so it isn't overwritten or released meanwhile
@@ -401,138 +403,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <param name="buffer">The buffer to write the pixels of the capture zone to.</param>
     /// <returns><c>true</c> if <paramref name="buffer"/> was filled; <c>false</c> if there was nothing to write (e.g. no captured frame yet), so the zone keeps its pixels.</returns>
     protected abstract bool PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<TColor> buffer);
-
-    /// <summary>
-    /// Writes the pixels of a zone from a captured frame into its buffer: the zone's region, downscaled by its level and rotated into the orientation of the display.
-    /// </summary>
-    /// <remarks>
-    /// For backends that capture the whole frame into memory; call it from <see cref="PerformCaptureZoneUpdate"/>.
-    /// A zone goes through crop, downscale and rotation in this order. This does all three; if the hardware already cropped and downscaled the region,
-    /// use <see cref="WriteCaptureZoneFromScaled"/> instead.
-    /// <para>
-    /// Downscaling averages blocks of 2^level x 2^level pixels, starting at the top left of the region on the display;
-    /// columns on the right and rows at the bottom (on the display) that don't fill a whole block are ignored. A region smaller than a block is averaged as one block.
-    /// </para>
-    /// </remarks>
-    /// <param name="frame">The captured frame. Rotated by <paramref name="rotation"/> it covers the display: the region of the zone is in these coordinates.</param>
-    /// <param name="captureZone">The zone to write.</param>
-    /// <param name="buffer">The buffer passed to <see cref="PerformCaptureZoneUpdate"/>.</param>
-    /// <param name="rotation">
-    /// How <paramref name="frame"/> is rotated (clockwise) into the orientation of the display: <see cref="Display.Rotation"/> for a frame in the native orientation of the output,
-    /// <see cref="ImageRotation.None"/> for a frame that already is in the orientation of the display.
-    /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The region of <paramref name="captureZone"/> doesn't lie within <paramref name="frame"/> (rotated by <paramref name="rotation"/>).</exception>
-    /// <exception cref="ArgumentException"><paramref name="buffer"/> is too small for the zone.</exception>
-    protected static void WriteCaptureZone(RefImage<TColor> frame, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
-    {
-        ArgumentNullException.ThrowIfNull(captureZone);
-
-        CaptureRegion region = captureZone.Region;
-        (int frameWidth, int frameHeight) = PixelHelper.GetRotatedSize(frame.Width, frame.Height, rotation);
-        if (!region.IsWithin(frameWidth, frameHeight))
-            throw new ArgumentOutOfRangeException(nameof(captureZone), region, $"The region of the zone doesn't lie within the frame ({frameWidth}x{frameHeight} in the orientation of the display).");
-
-        CaptureRegion source = GetSourceRegion(region, frameWidth, frameHeight, rotation);
-        WriteRegion(frame[source.X, source.Y, source.Width, source.Height], region.Width, region.Height, captureZone, buffer, rotation);
-    }
-
-    /// <summary>
-    /// Writes the pixels of a zone from its already cropped and downscaled region into its buffer: rotated into the orientation of the display.
-    /// </summary>
-    /// <remarks>
-    /// For backends whose hardware crops and downscales the region (e.g. DX11, from a frame in the native orientation of the output).
-    /// </remarks>
-    /// <param name="scaled">The downscaled region of the zone, rotated by <paramref name="rotation"/> it has the size of the zone.</param>
-    /// <param name="captureZone">The zone to write.</param>
-    /// <param name="buffer">The buffer passed to <see cref="PerformCaptureZoneUpdate"/>.</param>
-    /// <param name="rotation">How <paramref name="scaled"/> is rotated (clockwise) into the orientation of the display (see <see cref="WriteCaptureZone"/>).</param>
-    /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="scaled"/> (rotated by <paramref name="rotation"/>) doesn't have the size of the zone, or <paramref name="buffer"/> is too small for the zone.
-    /// </exception>
-    protected static void WriteCaptureZoneFromScaled(RefImage<TColor> scaled, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation = ImageRotation.None)
-    {
-        ArgumentNullException.ThrowIfNull(captureZone);
-
-        (int width, int height) = PixelHelper.GetRotatedSize(scaled.Width, scaled.Height, rotation);
-        if ((width != captureZone.Width) || (height != captureZone.Height))
-            throw new ArgumentException($"The image has a size of {width}x{height} (in the orientation of the display), but the zone has {captureZone.Width}x{captureZone.Height}.", nameof(scaled));
-
-        scaled.Rotate(rotation, buffer);
-    }
-
-    /// <summary>
-    /// Gets the region of a frame in the native orientation of the output that is shown at <paramref name="region"/> on the rotated display.
-    /// </summary>
-    /// <remarks>
-    /// For backends whose hardware crops the zone's region out of a frame in the native orientation of the output
-    /// (the size of the frame is the one of the display rotated back, see <see cref="PixelHelper.GetRotatedSize"/>).
-    /// </remarks>
-    /// <param name="region">The region on the display.</param>
-    /// <param name="display">The display, its <see cref="Display.Rotation"/> is the one of the frame.</param>
-    /// <returns>The region in the coordinates of the frame.</returns>
-    protected static CaptureRegion GetSourceRegion(CaptureRegion region, Display display)
-        => GetSourceRegion(region, display.Width, display.Height, display.Rotation);
-
-    // A pixel at (x, y) of an area of width x height pixels (after the rotation) is at
-    // None: (x, y); Rotate90: (y, width - 1 - x); Rotate180: (width - 1 - x, height - 1 - y); Rotate270: (height - 1 - y, x) before it.
-    private static CaptureRegion GetSourceRegion(CaptureRegion region, int width, int height, ImageRotation rotation)
-        => rotation switch
-        {
-            ImageRotation.Rotate90 => new CaptureRegion(region.Y, width - region.X - region.Width, region.Height, region.Width),
-            ImageRotation.Rotate180 => new CaptureRegion(width - region.X - region.Width, height - region.Y - region.Height, region.Width, region.Height),
-            ImageRotation.Rotate270 => new CaptureRegion(height - region.Y - region.Height, region.X, region.Height, region.Width),
-            _ => region
-        };
-
-    // source is the region of the zone before the rotation; width x height is its size after it (the size of the zone's region).
-    private static void WriteRegion(RefImage<TColor> source, int width, int height, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation)
-    {
-        int factor = 1 << captureZone.DownscaleLevel;
-        (int scaledWidth, int scaledHeight) = PixelHelper.GetDownscaledSize(width, height, factor);
-
-        if (rotation == ImageRotation.None)
-        {
-            if (factor == 1)
-                source.CopyTo(buffer);
-            else
-                source.Downscale(factor, buffer);
-        }
-        else if (factor == 1)
-            source.Rotate(rotation, buffer);
-        else
-            DownscaleAndRotate(source, width, height, factor, scaledWidth, scaledHeight, buffer, rotation);
-    }
-
-    // Downscales before rotating, so only the smaller image is rotated.
-    // The blocks are the ones of the display: the region is cut to whole blocks there (dropping its right and bottom), which is another side before the rotation.
-    private static void DownscaleAndRotate(RefImage<TColor> source, int width, int height, int factor, int scaledWidth, int scaledHeight,
-                                           Span<TColor> buffer, ImageRotation rotation)
-    {
-        // Like HPPH: a region smaller than a block is one block.
-        int blockWidth = Math.Min(factor, width);
-        int blockHeight = Math.Min(factor, height);
-
-        CaptureRegion blocks = GetSourceRegion(new CaptureRegion(0, 0, scaledWidth * blockWidth, scaledHeight * blockHeight), width, height, rotation);
-        bool swapped = rotation is ImageRotation.Rotate90 or ImageRotation.Rotate270;
-        (int factorX, int factorY) = swapped ? (blockHeight, blockWidth) : (blockWidth, blockHeight);
-
-        (int unrotatedWidth, int unrotatedHeight) = PixelHelper.GetRotatedSize(scaledWidth, scaledHeight, rotation);
-        int length = unrotatedWidth * unrotatedHeight;
-
-        TColor[] scaled = ArrayPool<TColor>.Shared.Rent(length);
-        try
-        {
-            Span<TColor> pixels = scaled.AsSpan(0, length);
-            source[blocks.X, blocks.Y, blocks.Width, blocks.Height].Downscale(factorX, factorY, pixels);
-            RefImage<TColor>.Wrap(pixels, unrotatedWidth, unrotatedHeight).Rotate(rotation, buffer);
-        }
-        finally
-        {
-            ArrayPool<TColor>.Shared.Return(scaled);
-        }
-    }
 
     /// <summary>
     /// Raises the <see cref="Updated"/>-event.
@@ -650,23 +520,31 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     bool IScreenCapture.UnregisterCaptureZone(ICaptureZone captureZone) => UnregisterCaptureZone(AsCaptureZone(captureZone));
 
     /// <inheritdoc cref="IScreenCapture.UnregisterCaptureZone" />
+    /// <remarks>
+    /// Overrides release the backend's resources of the zone after the base implementation returned <c>true</c>:
+    /// from then on, <see cref="PerformCaptureZoneUpdate"/> isn't called for the zone anymore.
+    /// </remarks>
     public virtual bool UnregisterCaptureZone(CaptureZone<TColor> captureZone)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        lock (_captureZonesLock)
-        {
-            int index = Array.IndexOf(_captureZones, captureZone);
-            if (index < 0) return false;
+        // Zone lock first (see the lock order in the class remarks): waits for a capture writing the zone, later captures skip it.
+        using (captureZone.EnterUpdateScope())
+            lock (_captureZonesLock)
+            {
+                int index = Array.IndexOf(_captureZones, captureZone);
+                if (index < 0) return false;
 
-            CaptureZone<TColor>[] captureZones = new CaptureZone<TColor>[_captureZones.Length - 1];
-            _captureZones.AsSpan(0, index).CopyTo(captureZones);
-            _captureZones.AsSpan(index + 1).CopyTo(captureZones.AsSpan(index));
-            Volatile.Write(ref _captureZones, captureZones);
+                CaptureZone<TColor>[] captureZones = new CaptureZone<TColor>[_captureZones.Length - 1];
+                _captureZones.AsSpan(0, index).CopyTo(captureZones);
+                _captureZones.AsSpan(index + 1).CopyTo(captureZones.AsSpan(index));
+                Volatile.Write(ref _captureZones, captureZones);
 
-            return true;
-        }
+                captureZone.SetUnregistered();
+
+                return true;
+            }
     }
 
     /// <inheritdoc />

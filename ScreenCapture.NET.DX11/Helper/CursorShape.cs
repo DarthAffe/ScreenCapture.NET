@@ -160,7 +160,7 @@ internal sealed class CursorShape
     /// Draws the pointer into the pixels of a zone.
     /// </summary>
     /// <remarks>
-    /// The blocks of a downscaled zone are the ones of <see cref="AbstractScreenCapture{TColor}.WriteCaptureZone"/>: 2^level x 2^level pixels from the top left of the region,
+    /// The blocks of a downscaled zone are the ones of <see cref="CaptureZoneWriter.Write{TColor}"/>: 2^level x 2^level pixels from the top left of the region,
     /// a region smaller than a block is one block. The pointer is averaged over each block it covers (pixels it doesn't cover are kept) and blended into the zone's pixel,
     /// which is close to downscaling the frame with the pointer drawn into it.
     /// </remarks>

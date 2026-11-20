@@ -151,23 +151,6 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
         }
     }
 
-    /// <summary>
-    /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZone"/>.
-    /// </summary>
-    public static void Write(RefImage<ColorARGB> frame, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)
-        => WriteCaptureZone(frame, captureZone, buffer, rotation);
-
-    /// <summary>
-    /// Calls <see cref="AbstractScreenCapture{TColor}.WriteCaptureZoneFromScaled"/>.
-    /// </summary>
-    public static void WriteFromScaled(RefImage<ColorARGB> scaled, CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer, ImageRotation rotation = ImageRotation.None)
-        => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
-
-    /// <summary>
-    /// Calls <see cref="AbstractScreenCapture{TColor}.GetSourceRegion"/>.
-    /// </summary>
-    public static CaptureRegion SourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
-
     public static ColorARGB GetColorFromLocation(int x, int y)
     {
         byte[] xBytes = BitConverter.GetBytes((short)x);

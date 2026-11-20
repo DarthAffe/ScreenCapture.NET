@@ -8,7 +8,7 @@ namespace ScreenCapture.NET.Tests;
 
 /// <summary>
 /// <see cref="D3D11ZonePipeline"/>: zones written from frames on the GPU, run on WARP (Direct3D's software rasterizer, available on every Windows, also without a GPU).
-/// The reference is the CPU zone write of <see cref="AbstractScreenCapture{TColor}"/> from the same frame.
+/// The reference is the CPU zone write of <see cref="CaptureZoneWriter"/> from the same frame.
 /// </summary>
 [TestClass]
 [OSCondition(OperatingSystems.Windows)]
@@ -229,7 +229,7 @@ public sealed class D3D11ZonePipelineTests
     /// <summary>
     /// A capture of frames set by the test, written through a <see cref="D3D11ZonePipeline"/> on a WARP device (like <see cref="DX11ScreenCapture"/> without the duplication).
     /// </summary>
-    private sealed class WarpScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11ZonePipelineHost
+    private sealed class WarpScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         #region Properties & Fields
 
@@ -257,7 +257,7 @@ public sealed class D3D11ZonePipelineTests
             _device = device!;
             _context = _device.ImmediateContext;
 
-            _zonePipeline = new D3D11ZonePipeline(this);
+            _zonePipeline = new D3D11ZonePipeline();
             _zonePipeline.Initialize(_device, _context, display, display.Rotation);
         }
 
@@ -322,7 +322,7 @@ public sealed class D3D11ZonePipelineTests
         {
             (int width, int height) = PixelHelper.GetRotatedSize(display.Width, display.Height, display.Rotation);
             ColorBGRA[] buffer = new ColorBGRA[zone.Width * zone.Height];
-            WriteCaptureZone(RefImage<ColorBGRA>.Wrap(frame, width, height), zone, buffer, display.Rotation);
+            CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(frame, width, height), zone, buffer, display.Rotation);
             return buffer;
         }
 
@@ -344,7 +344,7 @@ public sealed class D3D11ZonePipelineTests
                 result = CaptureResult.NewFrame;
             }
 
-            _zonePipeline.QueueZoneCopies();
+            _zonePipeline.QueueZoneCopies(CaptureZones);
             CopiesQueued?.Invoke();
 
             return result;
@@ -371,17 +371,6 @@ public sealed class D3D11ZonePipelineTests
             _context.Dispose();
             _device.Dispose();
         }
-
-        #endregion
-
-        #region ID3D11ZonePipelineHost
-
-        IReadOnlyList<CaptureZone<ColorBGRA>> ID3D11ZonePipelineHost.CaptureZones => CaptureZones;
-
-        CaptureRegion ID3D11ZonePipelineHost.GetSourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
-
-        void ID3D11ZonePipelineHost.WriteCaptureZoneFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation)
-            => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
 
         #endregion
     }

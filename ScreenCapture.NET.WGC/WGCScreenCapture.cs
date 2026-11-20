@@ -34,7 +34,7 @@ namespace ScreenCapture.NET;
 /// </para>
 /// </remarks>
 // ReSharper disable once InconsistentNaming
-public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11ZonePipelineHost
+public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
     #region Constants
 
@@ -154,7 +154,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
         this.Options = options;
         this.Window = WindowInterop.TryGetWindow(display.Id, out nint window) ? window : 0;
         this._timeout = WGCCaptureOptions.ToMilliseconds(options.Timeout);
-        this._zonePipeline = new D3D11ZonePipeline(this);
+        this._zonePipeline = new D3D11ZonePipeline();
 
         Restart();
     }
@@ -215,7 +215,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
 
             CaptureResult result = AcquireFrame(out timestamp);
             if (result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout)
-                _zonePipeline.QueueZoneCopies();
+                _zonePipeline.QueueZoneCopies(CaptureZones);
 
             return result;
         }
@@ -559,17 +559,6 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>, ID3D11Z
         _monitorTarget = null;
         _monitor = 0;
     }
-
-    #endregion
-
-    #region ID3D11ZonePipelineHost
-
-    IReadOnlyList<CaptureZone<ColorBGRA>> ID3D11ZonePipelineHost.CaptureZones => CaptureZones;
-
-    CaptureRegion ID3D11ZonePipelineHost.GetSourceRegion(CaptureRegion region, Display display) => GetSourceRegion(region, display);
-
-    void ID3D11ZonePipelineHost.WriteCaptureZoneFromScaled(RefImage<ColorBGRA> scaled, CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer, ImageRotation rotation)
-        => WriteCaptureZoneFromScaled(scaled, captureZone, buffer, rotation);
 
     #endregion
 }
