@@ -115,15 +115,6 @@ public sealed class WaylandContractTests
     }
 
     [TestMethod]
-    [DataRow(0)]
-    [DataRow(2)]
-    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
-    {
-        using WaylandScreenCaptureService service = CreateService();
-        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
-    }
-
-    [TestMethod]
     public void ZoneShowsTheLatestFrame()
     {
         using WaylandScreenCaptureService service = CreateService();

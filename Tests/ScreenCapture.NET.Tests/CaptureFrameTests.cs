@@ -4,7 +4,7 @@ namespace ScreenCapture.NET.Tests;
 
 /// <summary>
 /// The pixels of a zone are only reachable through a <see cref="CaptureFrame{TColor}"/>/<see cref="CaptureFrame"/>, and they don't change while the frame is held.
-/// Double-buffered zones are written into a second buffer meanwhile, single-buffered zones make the capture wait.
+/// The capture writes the zone's second buffer meanwhile.
 /// </summary>
 [TestClass]
 public sealed class CaptureFrameTests
@@ -12,7 +12,6 @@ public sealed class CaptureFrameTests
     #region Constants
 
     private static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan BLOCKED = TimeSpan.FromMilliseconds(200);
 
     private static readonly ColorARGB COLOR_A = new(255, 1, 2, 3);
     private static readonly ColorARGB COLOR_B = new(255, 4, 5, 6);
@@ -23,21 +22,9 @@ public sealed class CaptureFrameTests
     #region Methods
 
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public void ZonesAreDoubleBufferedByDefault(bool doubleBuffered)
-    {
-        using TestScreenCapture screenCapture = new();
-
-        Assert.IsTrue(screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8)).IsDoubleBuffered);
-        Assert.AreEqual(doubleBuffered, screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered).IsDoubleBuffered);
-        Assert.AreEqual(doubleBuffered, ((IScreenCapture)screenCapture).RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered).IsDoubleBuffered);
-    }
-
-    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void HeldFrameDoesNotBlockCaptureOfDoubleBufferedZone(bool nonGeneric)
+    public void HeldFrameDoesNotBlockTheCapture(bool nonGeneric)
     {
         using TestScreenCapture screenCapture = new() { Pattern = (_, _) => COLOR_A };
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
@@ -115,7 +102,7 @@ public sealed class CaptureFrameTests
     }
 
     [TestMethod]
-    public void DisposingTwiceReleasesOnlyOnceInDoubleBufferedZone()
+    public void DisposingTwiceReleasesOnlyOnce()
     {
         using TestScreenCapture screenCapture = new();
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
@@ -143,86 +130,14 @@ public sealed class CaptureFrameTests
         Assert.AreEqual(2, updates, "The buffer wasn't released.");
     }
 
-    [TestMethod]
-    public void HeldFrameBlocksCaptureOfSingleBufferedZone()
-    {
-        using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
-
-        int updates = 0;
-        screenCapture.ZoneUpdating = _ => Interlocked.Increment(ref updates);
-
-        CaptureFrame<ColorARGB> frame = zone.Lock();
-        Task<CaptureResult> capture;
-        try
-        {
-            capture = Task.Run(screenCapture.CaptureScreen);
-
-            Assert.IsFalse(capture.Wait(BLOCKED), "The capture finished while a frame was held.");
-            Assert.AreEqual(0, Volatile.Read(ref updates), "The zone was updated while a frame was held.");
-        }
-        finally
-        {
-            frame.Dispose();
-        }
-
-        Assert.IsTrue(capture.Wait(TIMEOUT), "The capture didn't continue after the frame was disposed.");
-        Assert.AreEqual(CaptureResult.NewFrame, capture.Result);
-        Assert.AreEqual(1, updates);
-    }
-
-    [TestMethod]
-    public void NonGenericFrameHoldsTheLockOfSingleBufferedZone()
-    {
-        using TestScreenCapture screenCapture = new();
-        ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
-
-        CaptureFrame frame = zone.Lock();
-        try
-        {
-            Assert.IsFalse(CanCaptureFromOtherThread(screenCapture, BLOCKED), "The capture finished while a frame was held.");
-        }
-        finally
-        {
-            frame.Dispose();
-        }
-
-        Assert.IsTrue(CanCaptureFromOtherThread(screenCapture, TIMEOUT), "The lock wasn't released.");
-    }
-
-    [TestMethod]
-    public void DisposingTwiceReleasesOnlyOnceInSingleBufferedZone()
-    {
-        using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
-
-        CaptureFrame<ColorARGB> outer = zone.Lock();
-        try
-        {
-            CaptureFrame<ColorARGB> inner = zone.Lock();
-            inner.Dispose();
-            inner.Dispose();
-
-            Assert.IsFalse(CanCaptureFromOtherThread(screenCapture, BLOCKED), "Disposing the inner frame twice released the lock of the outer one.");
-        }
-        finally
-        {
-            outer.Dispose();
-        }
-
-        Assert.IsTrue(CanCaptureFromOtherThread(screenCapture, TIMEOUT), "The lock wasn't released.");
-    }
-
     /// <summary>
-    /// For a double-buffered zone, the back buffer would contain an older frame (or zeros), so it must not be shown.
+    /// The back buffer would contain an older frame (or zeros), so it must not be shown.
     /// </summary>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public void UpdateWithoutPixelsKeepsTheZone(bool doubleBuffered)
+    public void UpdateWithoutPixelsKeepsTheZone()
     {
         using TestScreenCapture screenCapture = new() { Pattern = (_, _) => COLOR_A };
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         int updates = 0;
@@ -262,12 +177,10 @@ public sealed class CaptureFrameTests
     }
 
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public void CopyImageIsACopy(bool doubleBuffered)
+    public void CopyImageIsACopy()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         Image<ColorARGB> image;
@@ -297,12 +210,10 @@ public sealed class CaptureFrameTests
     /// and new frames show the last captured pixels (in the old size) until the next capture.
     /// </summary>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public void FrameKeepsItsSizeWhenTheZoneIsResized(bool doubleBuffered)
+    public void FrameKeepsItsSizeWhenTheZoneIsResized()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
         screenCapture.CaptureScreen();
 
         using (CaptureFrame<ColorARGB> frame = zone.Lock())
@@ -356,9 +267,6 @@ public sealed class CaptureFrameTests
         Assert.AreEqual(expected, frame.Execute<DescribeOperation, (Type, int, int, IColor)>(default));
         Assert.AreEqual(expected, frame.Execute(new DescribeOperation()));
     }
-
-    private static bool CanCaptureFromOtherThread(TestScreenCapture screenCapture, TimeSpan timeout)
-        => Task.Run(screenCapture.CaptureScreen).Wait(timeout);
 
     private static void AssertAll(ColorARGB expected, RefImage<ColorARGB> image, string message)
     {

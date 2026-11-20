@@ -459,72 +459,6 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// Zones changed while a capture runs (after it got its frame, before it wrote them) are written with their new region and size.
-    /// DX11 queues the copies of the zones when it gets the frame: those of the old regions must not be used.
-    /// </summary>
-    /// <remarks>
-    /// The capture is held at the first zone (single-buffered, its frame held by this thread) while the other zones are changed.
-    /// The capture mustn't wait long for a frame (DX11: set a short timeout in <paramref name="beforeHeldCapture"/>), or the zones may be changed
-    /// before it got one (the test then passes without checking anything).
-    /// </remarks>
-    /// <param name="service">The service.</param>
-    /// <param name="downscaleLevel">The downscale level of the compared zones.</param>
-    /// <param name="beforeHeldCapture">Called after the first frame was captured, before the capture that's held.</param>
-    public static void AssertZonesChangedDuringACaptureShowTheChange(IScreenCaptureService service, int downscaleLevel = 0, Action<IScreenCapture>? beforeHeldCapture = null)
-    {
-        (_, Display display) = GetFirstDisplay(service);
-        IScreenCapture screenCapture = service.GetScreenCapture(display);
-
-        const int size = 64;
-        CaptureRegion topLeftRegion = new(0, 0, size, size);
-        CaptureRegion center = new((display.Width - size) / 2, (display.Height - size) / 2, size, size);
-        CaptureRegion largerCenter = center with { Width = size * 2, Height = size * 2 };
-
-        // Registered first, so the capture writes it first.
-        ICaptureZone blocker = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 8, 8), doubleBuffered: false);
-        ICaptureZone moved = screenCapture.RegisterCaptureZone(topLeftRegion, downscaleLevel);
-        ICaptureZone resized = screenCapture.RegisterCaptureZone(topLeftRegion, downscaleLevel);
-        ICaptureZone reference = screenCapture.RegisterCaptureZone(center, downscaleLevel);
-        ICaptureZone largerReference = screenCapture.RegisterCaptureZone(largerCenter, downscaleLevel);
-        ICaptureZone topLeft = screenCapture.RegisterCaptureZone(topLeftRegion, downscaleLevel);
-
-        // Every zone shows a frame now (DX11: the staging textures of moved and resized hold their old regions).
-        CaptureFrame(screenCapture);
-        beforeHeldCapture?.Invoke(screenCapture);
-
-        // Written by the next capture even without a new frame, so all zones show the same frame.
-        foreach (ICaptureZone zone in new[] { blocker, reference, largerReference, topLeft })
-            zone.RequestUpdate();
-
-        Task<CaptureResult> capture;
-        using (blocker.Lock())
-        {
-            capture = Task.Run(screenCapture.CaptureScreen);
-
-            // The capture gets its frame and waits at the blocker.
-            Thread.Sleep(500);
-            Assert.IsFalse(capture.IsCompleted, $"The capture didn't wait for the held frame of the first zone ({(capture.IsCompleted ? capture.Result : default)}).");
-
-            screenCapture.UpdateCaptureZone(moved, center);
-            screenCapture.UpdateCaptureZone(resized, largerCenter);
-        }
-
-        Assert.IsTrue(capture.Wait(TimeSpan.FromSeconds(10)), "The capture didn't finish.");
-        Assert.IsTrue(capture.Result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout, $"The capture failed ({capture.Result}).");
-
-        ColorBGRA[] referencePixels = GetPixels(reference);
-        bool movable = !GetPixels(topLeft).AsSpan().SequenceEqual(referencePixels);
-
-        Assert.AreEqual(largerReference.Width, resized.Width);
-        Assert.IsTrue(GetPixels(resized).AsSpan().SequenceEqual(GetPixels(largerReference)), "The resized zone doesn't show the pixels of its new region.");
-
-        if (!movable)
-            Assert.Inconclusive("The top-left corner and the center of the screen look the same, so a move can't be detected.");
-
-        Assert.IsTrue(GetPixels(moved).AsSpan().SequenceEqual(referencePixels), "The moved zone doesn't show the pixels at its new position.");
-    }
-
-    /// <summary>
     /// A zone that was written with earlier frames shows the current one: it matches a zone registered now for the same region, written by the same capture.
     /// DX11 keeps a copy of each zone's region on the GPU: one from an older frame must not be used.
     /// </summary>
@@ -569,7 +503,7 @@ internal static class HardwareTestHelper
         [
             screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height)),
             screenCapture.RegisterCaptureZone(new CaptureRegion(display.Width / 4, display.Height / 4, display.Width / 2, display.Height / 2), downscaleLevel: 2),
-            screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64), doubleBuffered: false)
+            screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64))
         ];
 
         System.Collections.Concurrent.ConcurrentQueue<Exception> errors = new();
@@ -623,17 +557,17 @@ internal static class HardwareTestHelper
         HashSet<CaptureRegion> regionSet = [.. regions];
         HashSet<(int Width, int Height)> sizes = [.. regions.SelectMany(r => levels.Select(l => StressRun.ScaledSize(r, l)))];
 
-        ICaptureZone doubleBuffered = screenCapture.RegisterCaptureZone(regions[0]);
-        ICaptureZone singleBuffered = screenCapture.RegisterCaptureZone(regions[1], 1, doubleBuffered: false);
+        ICaptureZone first = screenCapture.RegisterCaptureZone(regions[0]);
+        ICaptureZone second = screenCapture.RegisterCaptureZone(regions[1], 1);
         ICaptureZone small = screenCapture.RegisterCaptureZone(regions[2], 3);
-        ICaptureZone[] zones = [doubleBuffered, singleBuffered, small];
+        ICaptureZone[] zones = [first, second, small];
 
         System.Collections.Concurrent.ConcurrentQueue<Exception> errors = new();
         screenCapture.ErrorOccurred += (_, e) => errors.Enqueue(e.Exception);
 
         System.Collections.Concurrent.ConcurrentDictionary<CaptureResult, int> results = new();
         screenCapture.Updated += (_, e) => results.AddOrUpdate(e.Result, 1, (_, count) => count + 1);
-        singleBuffered.Updated += (_, _) => stress.Check("zone handler", () => AssertFrameSize(doubleBuffered, sizes));
+        second.Updated += (_, _) => stress.Check("zone handler", () => AssertFrameSize(first, sizes));
 
         CaptureFrame(screenCapture);
 
@@ -644,7 +578,7 @@ internal static class HardwareTestHelper
         stress.Run("capture", i =>
         {
             if ((i % 5) == 0)
-                using (singleBuffered.Lock())
+                using (second.Lock())
                     screenCapture.CaptureScreen();
             else
                 screenCapture.CaptureScreen();
@@ -652,7 +586,7 @@ internal static class HardwareTestHelper
 
         stress.Run("update", i =>
         {
-            ICaptureZone zone = (i % 2) == 0 ? doubleBuffered : singleBuffered;
+            ICaptureZone zone = (i % 2) == 0 ? first : second;
             CaptureRegion region = regions[i % regions.Length];
             int level = levels[(i / regions.Length) % levels.Length];
 
@@ -674,7 +608,7 @@ internal static class HardwareTestHelper
 
         stress.Run("register", i =>
         {
-            ICaptureZone zone = screenCapture.RegisterCaptureZone(regions[i % regions.Length], levels[i % levels.Length], doubleBuffered: (i % 2) == 0);
+            ICaptureZone zone = screenCapture.RegisterCaptureZone(regions[i % regions.Length], levels[i % levels.Length]);
             Thread.Sleep(1);
             screenCapture.UnregisterCaptureZone(zone);
         });

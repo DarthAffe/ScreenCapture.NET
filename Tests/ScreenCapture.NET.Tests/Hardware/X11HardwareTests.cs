@@ -156,15 +156,6 @@ public sealed class X11HardwareTests
     }
 
     [TestMethod]
-    [DataRow(0)]
-    [DataRow(2)]
-    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
-    {
-        using X11ScreenCaptureService service = X11DesktopServer.CreateService();
-        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
-    }
-
-    [TestMethod]
     public void ZoneShowsTheLatestFrame()
     {
         using X11ScreenCaptureService service = X11DesktopServer.CreateService();

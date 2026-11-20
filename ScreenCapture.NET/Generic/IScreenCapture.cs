@@ -25,7 +25,7 @@ namespace ScreenCapture.NET;
 /// </description></item>
 /// <item><description>
 /// Any member can be called while holding a frame of a zone (see <see cref="ICaptureZone.Lock"/>), including <see cref="CaptureScreen"/>.
-/// A frame of a single-buffered zone makes captures on other threads wait for it, so release frames quickly.
+/// Frames never make a capture wait, but a zone whose frames are held too long skips captures.
 /// </description></item>
 /// <item><description>
 /// <see cref="IDisposable.Dispose"/> can be called while other calls run: they finish, and the methods called afterwards throw an <see cref="ObjectDisposedException"/>
@@ -126,14 +126,10 @@ public interface IScreenCapture : IDisposable
     /// The level of downscaling applied to the image of this region before copying to local memory (must be &gt;= 0). The calculation is (width and height)/2^downscaleLevel.
     /// Levels the region is too small for are reduced, see <see cref="ICaptureZone.DownscaleLevel"/>.
     /// </param>
-    /// <param name="doubleBuffered">
-    /// <c>true</c> (default) to let the capture write a second buffer while frames of the zone are held (see <see cref="ICaptureZone.Lock"/>);
-    /// <c>false</c> to make it wait for them instead, which saves the memory of the second buffer for very large zones.
-    /// </param>
     /// <returns>The new <see cref="ICaptureZone"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="region"/> is empty or doesn't lie within the display, or <paramref name="downscaleLevel"/> is negative.</exception>
     /// <exception cref="ObjectDisposedException">The screen capture is disposed.</exception>
-    ICaptureZone RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0, bool doubleBuffered = true);
+    ICaptureZone RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0);
 
     /// <summary>
     /// Removes the given <see cref="ICaptureZone"/> from the <see cref="IScreenCapture"/>.

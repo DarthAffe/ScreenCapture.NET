@@ -36,21 +36,7 @@ public sealed class CaptureZoneThreadingTests
     }
 
     [TestMethod]
-    public void SingleBufferedZoneCantBeLockedDuringItsUpdate()
-    {
-        using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: false);
-
-        bool? lockedByOtherThread = null;
-        screenCapture.ZoneUpdating = z => lockedByOtherThread = Task.Run(() => { using (z.Lock()) { } }).Wait(TimeSpan.FromMilliseconds(100));
-
-        screenCapture.CaptureScreen();
-
-        Assert.IsFalse(lockedByOtherThread, "Another thread could lock the zone during its update.");
-    }
-
-    [TestMethod]
-    public void DoubleBufferedZoneShowsThePreviousPixelsDuringItsUpdate()
+    public void ZoneShowsThePreviousPixelsDuringItsUpdate()
     {
         using TestScreenCapture screenCapture = new();
         CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
@@ -140,12 +126,10 @@ public sealed class CaptureZoneThreadingTests
     /// Every frame must show the pixels of exactly one capture in one size, and they must not change while it's held.
     /// </summary>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public void FramesNeverTear(bool doubleBuffered)
+    public void FramesNeverTear()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8), doubleBuffered: doubleBuffered);
+        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 8));
 
         int captureNumber = 0;
         ColorARGB color = default;
@@ -175,7 +159,7 @@ public sealed class CaptureZoneThreadingTests
             int contentChanges = 0;
             (int width, ColorARGB first) previous = default;
 
-            // Under load the other threads can get the zone lock late (single-buffered frames hold it), so after ITERATIONS frames
+            // Under load the other threads can be scheduled late, so after ITERATIONS frames
             // keep reading until both kinds of change were seen. Only a capture or resize thread starved for TIMEOUT fails the test.
             Stopwatch stopwatch = Stopwatch.StartNew();
             for (int i = 0; (i < ITERATIONS) || (((sizeChanges <= 1) || (contentChanges <= 1)) && (stopwatch.Elapsed < TIMEOUT)); i++)

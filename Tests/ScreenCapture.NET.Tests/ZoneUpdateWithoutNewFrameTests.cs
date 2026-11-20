@@ -165,7 +165,7 @@ public sealed class ZoneUpdateWithoutNewFrameTests
     }
 
     /// <summary>
-    /// A held frame makes a double-buffered zone skip a new frame. If the screen then stays static,
+    /// A held frame makes a zone skip a new frame. If the screen then stays static,
     /// the zone must still get that frame, or it shows an old one until the screen changes.
     /// </summary>
     [TestMethod]
@@ -176,7 +176,7 @@ public sealed class ZoneUpdateWithoutNewFrameTests
         ColorARGB third = new(255, 3, 0, 0);
 
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> captureZone = screenCapture.RegisterCaptureZone(REGION, doubleBuffered: true);
+        CaptureZone<ColorARGB> captureZone = screenCapture.RegisterCaptureZone(REGION);
         WriteCounter zone = new(captureZone);
 
         screenCapture.Pattern = (_, _) => first;
@@ -237,42 +237,6 @@ public sealed class ZoneUpdateWithoutNewFrameTests
         zone.Zone.AutoUpdate = true;
         Capture(screenCapture, CaptureResult.Timeout);
         Assert.AreEqual(1, zone.Writes);
-    }
-
-    /// <summary>
-    /// A single-buffered zone that's up to date isn't written, so a capture without a new frame doesn't wait for its held frame.
-    /// </summary>
-    [TestMethod]
-    public void UpToDateSingleBufferedZoneDoesntWaitForItsFrame()
-    {
-        using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(REGION, doubleBuffered: false);
-
-        Capture(screenCapture, CaptureResult.NewFrame);
-
-        using ManualResetEventSlim held = new();
-        using ManualResetEventSlim release = new();
-        Task holder = Task.Run(() =>
-        {
-            using CaptureFrame<ColorARGB> frame = zone.Lock();
-            held.Set();
-            release.Wait();
-        });
-
-        try
-        {
-            held.Wait();
-
-            screenCapture.Result = CaptureResult.NoChange;
-            Task<CaptureResult> capture = Task.Run(screenCapture.CaptureScreen);
-            Assert.IsTrue(capture.Wait(TimeSpan.FromSeconds(5)), "The capture waited for the held frame.");
-            Assert.AreEqual(CaptureResult.NoChange, capture.Result);
-        }
-        finally
-        {
-            release.Set();
-            holder.Wait();
-        }
     }
 
     private static void Capture(TestScreenCapture screenCapture, CaptureResult result)

@@ -298,17 +298,6 @@ public sealed class WGCHardwareTests
     }
 
     [TestMethod]
-    [DataRow(0)]
-    [DataRow(2)]
-    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
-    {
-        using WGCScreenCaptureService service = new();
-
-        // The held capture doesn't wait for a frame: the zones are changed after it got one.
-        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel, c => ((WGCScreenCapture)c).Timeout = TimeSpan.Zero);
-    }
-
-    [TestMethod]
     public void ZoneShowsTheLatestFrame()
     {
         using WGCScreenCaptureService service = new();

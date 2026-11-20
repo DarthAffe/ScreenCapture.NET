@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET;
@@ -9,7 +8,7 @@ namespace ScreenCapture.NET;
 /// Represents the pixels of a <see cref="CaptureZone{TColor}"/> while it's locked.
 /// </summary>
 /// <remarks>
-/// Get it from <see cref="CaptureZone{TColor}.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer or, if the zone isn't double-buffered, waits for it.
+/// Get it from <see cref="CaptureZone{TColor}.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer, and a frame held over two captures makes the zone skip a capture.
 /// <para>
 /// The pixels are only valid until the frame is disposed. Don't keep the spans or images obtained from it, use <see cref="CopyImage"/> to keep a copy.
 /// </para>
@@ -23,7 +22,6 @@ public ref struct CaptureFrame<TColor>
 {
     #region Properties & Fields
 
-    private Lock.Scope _scope;
     private ZoneBuffer? _reader;
     private readonly ReadOnlySpan<TColor> _pixels;
 
@@ -67,23 +65,11 @@ public ref struct CaptureFrame<TColor>
     #region Constructors
 
     /// <summary>
-    /// Creates a frame of a single-buffered zone that holds the zone lock.
-    /// </summary>
-    internal CaptureFrame(ZoneBuffer<TColor> buffer, Lock.Scope scope)
-        : this(buffer, scope, null)
-    { }
-
-    /// <summary>
-    /// Creates a frame of a double-buffered zone that holds a reader of <paramref name="buffer"/> (already added by the caller).
+    /// Creates a frame that holds a reader of <paramref name="buffer"/> (already added by the caller).
     /// </summary>
     internal CaptureFrame(ZoneBuffer<TColor> buffer)
-        : this(buffer, default, buffer)
-    { }
-
-    private CaptureFrame(ZoneBuffer<TColor> buffer, Lock.Scope scope, ZoneBuffer? reader)
     {
-        this._scope = scope;
-        this._reader = reader;
+        this._reader = buffer;
         this._pixels = buffer.Data;
         this.Width = buffer.Width;
         this.Height = buffer.Height;
@@ -109,8 +95,6 @@ public ref struct CaptureFrame<TColor>
     /// </summary>
     public void Dispose()
     {
-        _scope.Dispose();
-
         ZoneBuffer? reader = _reader;
         _reader = null;
         reader?.RemoveReader();

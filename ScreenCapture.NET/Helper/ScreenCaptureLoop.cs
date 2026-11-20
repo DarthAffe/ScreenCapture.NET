@@ -167,10 +167,6 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// <remarks>
     /// The loop ends after the current capture, which can take up to the timeout of the capture (DX11) or its restart backoff (up to 2 s).
     /// Called on the thread of the loop (e.g. from an <see cref="IScreenCapture.Updated"/> handler) it doesn't wait: the loop ends when the handler returned.
-    /// <para>
-    /// Don't call it while holding a frame of a single-buffered zone of the capture (see <see cref="ICaptureZone.Lock"/>):
-    /// the current capture may wait for that frame, so this would wait forever. Use <see cref="StopAsync"/> there.
-    /// </para>
     /// </remarks>
     public void Stop()
     {

@@ -165,26 +165,30 @@ public sealed class ScreenCaptureLoopTests
     }
 
     [TestMethod]
-    public void StopAsyncDoesntWaitForAHeldFrame()
+    public void StopAsyncDoesntWaitForTheRunningCapture()
     {
         using TestScreenCapture screenCapture = new();
-        CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4), doubleBuffered: false);
-        CaptureCounter counter = new(screenCapture);
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4));
+
+        using ManualResetEventSlim capturing = new();
+        using ManualResetEventSlim release = new();
+        screenCapture.ZoneUpdating = _ =>
+        {
+            capturing.Set();
+            release.Wait(TIMEOUT);
+        };
 
         using ScreenCaptureLoop loop = new(screenCapture);
         loop.Start();
-        counter.WaitFor(1);
+        Assert.IsTrue(capturing.Wait(TIMEOUT));
 
-        Task stopped;
-        using (zone.Lock())
-        {
-            // The loop now waits for the frame to write the single-buffered zone; Stop would wait forever.
-            Thread.Sleep(50);
-            stopped = loop.StopAsync();
+        // The capture of the loop now waits in the zone update.
+        Task stopped = loop.StopAsync();
 
-            Assert.IsFalse(loop.IsRunning);
-            Assert.IsFalse(stopped.Wait(50));
-        }
+        Assert.IsFalse(loop.IsRunning);
+        Assert.IsFalse(stopped.Wait(50));
+
+        release.Set();
 
         Assert.IsTrue(stopped.Wait(TIMEOUT));
         Assert.AreSame(loop.Completion, stopped);

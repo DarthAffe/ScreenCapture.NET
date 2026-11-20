@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Threading;
 using HPPH;
 
 namespace ScreenCapture.NET;
@@ -8,7 +7,7 @@ namespace ScreenCapture.NET;
 /// Represents the pixels of an <see cref="ICaptureZone"/> while it's locked, for code that doesn't know the color format at compile time.
 /// </summary>
 /// <remarks>
-/// Get it from <see cref="ICaptureZone.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer or, if the zone isn't double-buffered, waits for it.
+/// Get it from <see cref="ICaptureZone.Lock"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer, and a frame held over two captures makes the zone skip a capture.
 /// <para>
 /// Use <see cref="Execute{TOperation, TResult}(TOperation)"/> to process the pixels without knowing their color format,
 /// or <see cref="AsRefImage{TColor}"/> if the format is known.
@@ -24,7 +23,6 @@ public ref struct CaptureFrame
 {
     #region Properties & Fields
 
-    private Lock.Scope _scope;
     private ZoneBuffer? _reader;
     private readonly ColorDispatcher _dispatcher;
     private readonly ReadOnlySpan<byte> _buffer;
@@ -59,24 +57,12 @@ public ref struct CaptureFrame
     #region Constructors
 
     /// <summary>
-    /// Creates a frame of a single-buffered zone that holds the zone lock.
-    /// </summary>
-    internal CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer, Lock.Scope scope)
-        : this(dispatcher, buffer, scope, null)
-    { }
-
-    /// <summary>
-    /// Creates a frame of a double-buffered zone that holds a reader of <paramref name="buffer"/> (already added by the caller).
+    /// Creates a frame that holds a reader of <paramref name="buffer"/> (already added by the caller).
     /// </summary>
     internal CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer)
-        : this(dispatcher, buffer, default, buffer)
-    { }
-
-    private CaptureFrame(ColorDispatcher dispatcher, ZoneBuffer buffer, Lock.Scope scope, ZoneBuffer? reader)
     {
-        this._scope = scope;
         this._dispatcher = dispatcher;
-        this._reader = reader;
+        this._reader = buffer;
         this._buffer = buffer.RawData;
         this.Width = buffer.Width;
         this.Height = buffer.Height;
@@ -149,8 +135,6 @@ public ref struct CaptureFrame
     /// </summary>
     public void Dispose()
     {
-        _scope.Dispose();
-
         ZoneBuffer? reader = _reader;
         _reader = null;
         reader?.RemoveReader();

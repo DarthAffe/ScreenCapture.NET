@@ -51,10 +51,10 @@ public sealed class ThreadSafetyStressTests
         };
         screenCapture.Pattern = (_, _) => color;
 
-        CaptureZone<ColorARGB> doubleBuffered = screenCapture.RegisterCaptureZone(REGIONS[0]);
-        CaptureZone<ColorARGB> singleBuffered = screenCapture.RegisterCaptureZone(REGIONS[1], 1, doubleBuffered: false);
+        CaptureZone<ColorARGB> first = screenCapture.RegisterCaptureZone(REGIONS[0]);
+        CaptureZone<ColorARGB> second = screenCapture.RegisterCaptureZone(REGIONS[1], 1);
         CaptureZone<ColorARGB> bigOnly = screenCapture.RegisterCaptureZone(BIG_ONLY);
-        CaptureZone<ColorARGB>[] zones = [doubleBuffered, singleBuffered, bigOnly];
+        CaptureZone<ColorARGB>[] zones = [first, second, bigOnly];
 
         ConcurrentQueue<Exception> errors = new();
         screenCapture.ErrorOccurred += (_, e) => errors.Enqueue(e.Exception);
@@ -63,17 +63,17 @@ public sealed class ThreadSafetyStressTests
         screenCapture.DisplayChanged += (_, _) => Interlocked.Increment(ref displayChanges);
 
         // Handlers run on the capturing threads and use the capture and its zones too (their exceptions are swallowed by the capture, so they're recorded here).
-        screenCapture.Updated += (_, _) => doubleBuffered.RequestUpdate();
-        singleBuffered.Updated += (_, _) => stress.Check("zone handler", () => AssertFrame(doubleBuffered, sizes));
+        screenCapture.Updated += (_, _) => first.RequestUpdate();
+        second.Updated += (_, _) => stress.Check("zone handler", () => AssertFrame(first, sizes));
 
         using ScreenCaptureLoop loop = new(screenCapture);
         loop.Start();
 
         stress.Run("capture", i =>
         {
-            // Holding a frame of a single-buffered zone while capturing: this thread writes it anyway (the lock is reentrant), others wait for it.
+            // Holding a frame while capturing: the zone is written into its other buffer, or skips the capture.
             if ((i % 5) == 0)
-                using (singleBuffered.Lock())
+                using (second.Lock())
                     screenCapture.CaptureScreen();
             else
                 screenCapture.CaptureScreen();
@@ -81,7 +81,7 @@ public sealed class ThreadSafetyStressTests
 
         stress.Run("update", i =>
         {
-            CaptureZone<ColorARGB> zone = (i % 2) == 0 ? doubleBuffered : singleBuffered;
+            CaptureZone<ColorARGB> zone = (i % 2) == 0 ? first : second;
             CaptureRegion region = REGIONS[i % REGIONS.Length];
             int level = LEVELS[(i / REGIONS.Length) % LEVELS.Length];
 
@@ -103,7 +103,7 @@ public sealed class ThreadSafetyStressTests
         stress.Run("register", i =>
         {
             CaptureRegion region = (i % 4) == 0 ? BIG_ONLY : REGIONS[i % REGIONS.Length];
-            CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(region, LEVELS[i % LEVELS.Length], doubleBuffered: (i % 2) == 0);
+            CaptureZone<ColorARGB> zone = screenCapture.RegisterCaptureZone(region, LEVELS[i % LEVELS.Length]);
             screenCapture.UnregisterCaptureZone(zone);
         }, ex => ex is ArgumentOutOfRangeException { ParamName: "region" }); // BIG_ONLY while the display is small.
 

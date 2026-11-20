@@ -9,7 +9,7 @@ namespace ScreenCapture.NET;
 /// A pixel buffer of a capture zone together with the size it was created for.
 /// </summary>
 /// <remarks>
-/// Double-buffered zones count the frames reading a buffer, so the capture only writes buffers nobody reads.
+/// Zones count the frames reading a buffer, so the capture only writes buffers nobody reads.
 /// The rows have no padding.
 /// </remarks>
 internal abstract class ZoneBuffer

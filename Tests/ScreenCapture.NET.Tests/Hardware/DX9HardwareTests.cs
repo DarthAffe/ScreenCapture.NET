@@ -184,15 +184,6 @@ public sealed class DX9HardwareTests
         HardwareTestHelper.AssertMovedZoneCapturesNewPosition(service, downscaleLevel: 2);
     }
 
-    [TestMethod]
-    [DataRow(0)]
-    [DataRow(2)]
-    public void ZonesChangedDuringACaptureShowTheChange(int downscaleLevel)
-    {
-        using DX9ScreenCaptureService service = new();
-        HardwareTestHelper.AssertZonesChangedDuringACaptureShowTheChange(service, downscaleLevel);
-    }
-
     /// <summary>
     /// DX9 downscales on the CPU, DX11 with the mip chain on the GPU: the results only differ by rounding.
     /// </summary>

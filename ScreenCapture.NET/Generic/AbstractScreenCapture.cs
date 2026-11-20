@@ -12,9 +12,8 @@ namespace ScreenCapture.NET;
 /// All members can be used from any thread (see <see cref="IScreenCapture"/>); backends guard their resources as described on
 /// <see cref="PerformScreenCapture"/>, <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>.
 /// <para>
-/// Lock order: a zone lock (held while a zone is written or changed, and by frames of single-buffered zones, see <see cref="CaptureZone{TColor}.Lock"/>)
+/// Lock order: a zone lock (held while a zone is written or changed; frames don't hold it, see <see cref="CaptureZone{TColor}.Lock"/>)
 /// is always acquired before any lock of the screen capture, and the library never acquires a zone lock while holding one of its own locks.
-/// It's therefore safe to call any method of the screen capture while holding a frame.
 /// </para>
 /// </remarks>
 public abstract class AbstractScreenCapture<TColor> : IScreenCapture
@@ -395,7 +394,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// </para>
     /// <para>
     /// <paramref name="buffer"/> has the zone's current size (<see cref="CaptureZone{TColor}.Width"/> * <see cref="CaptureZone{TColor}.Height"/> pixels, row after row without padding).
-    /// For a double-buffered zone it's the back buffer, which contains an older frame (or zeros) and is only shown if this returns <c>true</c>.
+    /// It's the zone's back buffer, which contains an older frame (or zeros) and is only shown if this returns <c>true</c>.
     /// </para>
     /// </remarks>
     /// <param name="captureZone">The capture zone to update.</param>
@@ -607,10 +606,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <inheritdoc />
-    ICaptureZone IScreenCapture.RegisterCaptureZone(CaptureRegion region, int downscaleLevel, bool doubleBuffered) => RegisterCaptureZone(region, downscaleLevel, doubleBuffered);
+    ICaptureZone IScreenCapture.RegisterCaptureZone(CaptureRegion region, int downscaleLevel) => RegisterCaptureZone(region, downscaleLevel);
 
     /// <inheritdoc cref="IScreenCapture.RegisterCaptureZone" />
-    public virtual CaptureZone<TColor> RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0, bool doubleBuffered = true)
+    public virtual CaptureZone<TColor> RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
@@ -620,7 +619,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
             (int width, int height, downscaleLevel) = CalculateScaledSize(region.Width, region.Height, downscaleLevel);
 
-            CaptureZone<TColor> captureZone = new(Display, region, width, height, downscaleLevel, doubleBuffered);
+            CaptureZone<TColor> captureZone = new(Display, region, width, height, downscaleLevel);
             Volatile.Write(ref _captureZones, [.. _captureZones, captureZone]);
 
             return captureZone;

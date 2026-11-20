@@ -15,8 +15,7 @@ namespace ScreenCapture.NET;
 /// The size of the pixels is reliable on a frame (see <see cref="Lock"/>), which keeps it while it's held.
 /// </description></item>
 /// <item><description>
-/// A frame is used and disposed on the thread that locked it. Frames of a double-buffered zone can be held by any number of threads at once;
-/// a frame of a single-buffered zone holds the zone's lock, so other threads wait for it to lock the zone.
+/// A frame is used and disposed on the thread that locked it. Frames can be held by any number of threads at once, and holding one never makes another thread wait.
 /// </description></item>
 /// <item><description>
 /// <see cref="Updated"/> is raised on the thread of the capture that wrote the zone, with no lock of the library held.
@@ -83,14 +82,6 @@ public interface ICaptureZone
     int DownscaleLevel { get; }
 
     /// <summary>
-    /// Gets if the capture writes a second buffer while frames of this zone are held, instead of waiting for them.
-    /// </summary>
-    /// <remarks>
-    /// Set when the zone is registered. Double-buffered zones need twice the memory for their pixels.
-    /// </remarks>
-    bool IsDoubleBuffered { get; }
-
-    /// <summary>
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>
     /// <remarks>
@@ -115,15 +106,8 @@ public interface ICaptureZone
     /// Locks the current pixels of the zone. Release them by disposing the returned frame.
     /// </summary>
     /// <remarks>
-    /// The pixels of the frame don't change while it's held.
-    /// <para>
-    /// Double-buffered zones (the default, see <see cref="IsDoubleBuffered"/>): the capture writes a second buffer and never waits for frames.
-    /// A frame that's still held when the capture after the next one starts makes the zone skip that capture.
-    /// </para>
-    /// <para>
-    /// Single-buffered zones: the capture waits until the frame is disposed, and <see cref="Lock"/> waits while the capture writes the zone.
-    /// The lock is reentrant: a capture on the thread holding the frame writes the zone anyway, and the frame shows the new pixels.
-    /// </para>
+    /// The pixels of the frame don't change while it's held: the zone has two buffers, the capture writes the one no frame reads and never waits for frames.
+    /// A frame that's still held when the capture after the next one starts makes the zone skip that capture (it's written by the next capture after the frame was disposed).
     /// <para>
     /// Any method of the <see cref="IScreenCapture"/> can be called while holding a frame, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
     /// The frame keeps the size it was created with. Keep frames short anyway.
