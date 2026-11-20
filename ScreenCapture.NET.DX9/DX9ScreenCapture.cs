@@ -89,8 +89,10 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 // GetFrontBufferData has no change detection: every successful read counts as a new frame.
                 return CaptureResult.NewFrame;
             }
-            catch (SharpGenException dxException) when (dxException.ResultCode == Result.AccessDenied)
+            catch (SharpGenException dxException)
             {
+                // E.g. AccessDenied while the secure desktop is shown, or a lost, removed or hung device (D3DERR_DEVICELOST/-REMOVED/-HUNG) after a GPU reset:
+                // a new device is cheap, and the backoff of the restarts keeps a lasting error from retrying all the time.
                 ReportError(dxException);
                 return RestartCapture();
             }

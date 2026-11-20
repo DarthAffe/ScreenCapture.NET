@@ -112,8 +112,15 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         lock (_captureLock)
         {
-            if ((_duplicatedOutput == null) || !_zonePipeline.IsInitialized)
+            if ((_device == null) || (_duplicatedOutput == null) || !_zonePipeline.IsInitialized)
                 return RestartCapture();
+
+            // E.g. after a driver update or a GPU reset (TDR): the device stays removed, and the zone copies of the last capture may have failed on it.
+            if (_device.DeviceRemovedReason is { Failure: true } removedReason)
+            {
+                ReportError(new InvalidOperationException($"The Direct3D device of the capture was removed ({removedReason})."));
+                return RestartCapture();
+            }
 
             try
             {
@@ -125,7 +132,8 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
             catch (SharpGenException dxException) when ((dxException.ResultCode == ResultCode.AccessLost)
                                                       || (dxException.ResultCode == ResultCode.AccessDenied)
-                                                      || (dxException.ResultCode == ResultCode.InvalidCall))
+                                                      || (dxException.ResultCode == ResultCode.InvalidCall)
+                                                      || (dxException.ResultCode == ResultCode.DeviceRemoved))
             {
                 ReportError(dxException);
 

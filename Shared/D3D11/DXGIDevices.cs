@@ -8,6 +8,10 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Enumerates the DXGI adapters and outputs as <see cref="GraphicsCard"/>s and <see cref="Display"/>s, for the services and for captures that read their display again.
 /// </summary>
+/// <remarks>
+/// A factory keeps showing the adapters it was created with. If they changed since (e.g. after a driver update, or a graphics card was added or removed),
+/// the methods enumerate with a new factory, so the shared one of a service can be kept.
+/// </remarks>
 internal static class DXGIDevices
 {
     #region Methods
@@ -15,7 +19,9 @@ internal static class DXGIDevices
     /// <summary>
     /// Reads all adapters of the factory.
     /// </summary>
-    public static List<GraphicsCard> GetGraphicsCards(IDXGIFactory1 factory)
+    public static List<GraphicsCard> GetGraphicsCards(IDXGIFactory1 factory) => WithCurrentFactory(factory, ReadGraphicsCards);
+
+    private static List<GraphicsCard> ReadGraphicsCards(IDXGIFactory1 factory)
     {
         List<GraphicsCard> graphicsCards = [];
         for (int i = 0; ; i++)
@@ -34,7 +40,9 @@ internal static class DXGIDevices
     /// Reads all outputs of the adapter with the id of <paramref name="graphicsCard"/>.
     /// </summary>
     /// <returns>The displays, with the card as it is now (its index can have changed); empty if the card isn't there anymore.</returns>
-    public static List<Display> GetDisplays(IDXGIFactory1 factory, GraphicsCard graphicsCard)
+    public static List<Display> GetDisplays(IDXGIFactory1 factory, GraphicsCard graphicsCard) => WithCurrentFactory(factory, current => ReadDisplays(current, graphicsCard));
+
+    private static List<Display> ReadDisplays(IDXGIFactory1 factory, GraphicsCard graphicsCard)
     {
         List<Display> displays = [];
 
@@ -111,6 +119,11 @@ internal static class DXGIDevices
 
     private static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory,
                                                                                                                                          Func<OutputDescription, WindowsDisplayDevices, bool> matches)
+        // The adapter and output keep their factory alive: the new factory can be released when they're returned.
+        => WithCurrentFactory(factory, current => ReadDisplay(current, matches));
+
+    private static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? ReadDisplay(IDXGIFactory1 factory,
+                                                                                                                                          Func<OutputDescription, WindowsDisplayDevices, bool> matches)
     {
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
 
@@ -151,6 +164,16 @@ internal static class DXGIDevices
                 adapter?.Dispose();
             }
         }
+    }
+
+    // Runs the enumeration with the factory, or with a new one if the adapters changed since the factory was created.
+    private static T WithCurrentFactory<T>(IDXGIFactory1 factory, Func<IDXGIFactory1, T> enumerate)
+    {
+        if (factory.IsCurrent) return enumerate(factory);
+
+        DXGI.CreateDXGIFactory1(out IDXGIFactory1? current).CheckError();
+        using (current)
+            return enumerate(current!);
     }
 
     private static ImageRotation GetRotation(ModeRotation rotation) => rotation switch
