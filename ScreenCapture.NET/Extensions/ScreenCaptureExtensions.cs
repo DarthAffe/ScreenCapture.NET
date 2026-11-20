@@ -28,7 +28,7 @@ public static class ScreenCaptureExtensions
     ///             ...
     /// </code>
     /// <see cref="IScreenCapture.CaptureScreen"/> runs on the thread pool, so the events of the capture and its zones are raised there.
-    /// A capture can block its thread for up to the timeout of the capture (DX11) or its restart backoff (up to 2 s).
+    /// A capture can block its thread for up to the timeout of the capture (DX11, WGC and Wayland) or its restart backoff (up to 2 s).
     /// <para>
     /// The sequence ends when the capture is disposed. Cancellation throws an <see cref="OperationCanceledException"/>.
     /// Other exceptions thrown by <see cref="IScreenCapture.CaptureScreen"/> (which a capture is not supposed to throw) end the sequence and are thrown to the consumer.

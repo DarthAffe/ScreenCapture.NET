@@ -18,7 +18,8 @@ namespace ScreenCapture.NET;
 /// </param>
 /// <param name="Timestamp">
 /// When the latest captured frame was shown, as a <see cref="Stopwatch"/> timestamp (e.g. <c>Stopwatch.GetElapsedTime(e.Timestamp)</c> is the age of the frame).
-/// DX11 reports when the frame was presented on the display, DX9 and X11 when it was read.
+/// DX11 and WGC report when the frame was presented on the display, Wayland the presentation time the compositor sends with the frame (or when it was read, if it sends none),
+/// DX9 and X11 when it was read.
 /// For results other than <see cref="CaptureResult.NewFrame"/> it's the timestamp of the frame captured before. 0 if no frame was captured yet.
 /// </param>
 [SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "It is the argument of the Updated event. A struct can't derive from EventArgs, which EventHandler<T> doesn't require anymore.")]

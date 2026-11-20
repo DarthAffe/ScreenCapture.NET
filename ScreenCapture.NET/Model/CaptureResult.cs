@@ -11,12 +11,12 @@ public enum CaptureResult
     NewFrame = 0,
 
     /// <summary>
-    /// The capture works, but the display shows no new frame (DX11: e.g. only the mouse cursor moved). The last frame is still current.
+    /// The capture works, but there's no new frame to show (DX11: e.g. only the mouse cursor moved; WGC: a frame from before a window was resized). The last frame is still current.
     /// </summary>
     NoChange,
 
     /// <summary>
-    /// No new frame arrived within the timeout of the capture (DX11, see <c>DX11ScreenCapture.Timeout</c>). The last frame is still current.
+    /// No new frame arrived within the timeout of a capture that waits for frames (DX11, WGC and Wayland, see their <c>Timeout</c>). The last frame is still current.
     /// </summary>
     Timeout,
 

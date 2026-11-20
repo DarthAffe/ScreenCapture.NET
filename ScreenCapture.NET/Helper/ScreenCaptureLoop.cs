@@ -51,7 +51,7 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// The rate is measured from the start of one capture to the start of the next. The loop waits with the OS timer, which is coarse (e.g. about 15.6 ms on Windows):
     /// single captures can start late, but the following ones start sooner, so the average rate is kept as long as the capture is fast enough.
     /// <para>
-    /// Without a limit, DX11 captures are paced by the display: a capture waits for the next frame (up to its timeout).
+    /// Without a limit, captures that wait for frames (DX11, WGC and Wayland) are paced by the display: a capture waits for the next frame (up to its timeout).
     /// DX9 and X11 captures return right away, so without a limit the loop keeps a CPU core busy.
     /// </para>
     /// A change applies to the next capture, also while the loop is waiting.
@@ -165,7 +165,7 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// Stops the loop and waits until it has ended. Does nothing if it doesn't run.
     /// </summary>
     /// <remarks>
-    /// The loop ends after the current capture, which can take up to the timeout of the capture (DX11) or its restart backoff (up to 2 s).
+    /// The loop ends after the current capture, which can take up to the timeout of the capture (DX11, WGC and Wayland) or its restart backoff (up to 2 s).
     /// Called on the thread of the loop (e.g. from an <see cref="IScreenCapture.Updated"/> handler) it doesn't wait: the loop ends when the handler returned.
     /// That also holds for a loop started again on that thread meanwhile (e.g. <c>Stop(); Start(); Stop();</c> in one handler), which waits for the handler before it captures.
     /// </remarks>

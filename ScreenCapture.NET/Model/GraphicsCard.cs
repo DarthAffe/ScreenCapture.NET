@@ -3,7 +3,7 @@
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents a graphics-card.
+/// Represents a graphics card.
 /// </summary>
 /// <remarks>
 /// Two values are only equal if all their properties are. To find the same graphics card again, compare the <see cref="Id"/>.
@@ -16,7 +16,14 @@ namespace ScreenCapture.NET;
 /// moving the card to another slot changes it. Adapters Windows has no path for (e.g. software renderers) use their LUID, which changes with every restart of the system.
 /// The DirectX 11 and the DirectX 9 backend report the same ids.
 /// </para>
-/// <para>On X11 it's the name of the X display (e.g. <c>:0</c>).</para>
+/// <para>
+/// On X11 it's the name of the X display as it was opened (e.g. <c>:0</c>, the value of <c>$DISPLAY</c> if no name was given).
+/// Different spellings of the same server (e.g. <c>:0</c>, <c>:0.0</c> and <c>unix:0</c>) give different ids, also for its displays: open it the same way to find stored ids again.
+/// </para>
+/// <para>
+/// On Wayland there's one graphics card, with the id <c>xdg-desktop-portal</c> and the desktop as its name (<c>$XDG_CURRENT_DESKTOP</c>, e.g. <c>KDE</c>):
+/// the portal doesn't tell which card shows a stream.
+/// </para>
 /// </param>
 /// <param name="Index">The index of the graphics card in the backend. It can change when devices are added or removed.</param>
 /// <param name="Name">The name of the graphics card.</param>
