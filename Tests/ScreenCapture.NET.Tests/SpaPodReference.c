@@ -34,6 +34,7 @@ int main(void)
     // SpaPod.BuildBuffers()
     b = (struct spa_pod_builder)SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
     print("Buffers", spa_pod_builder_add_object(&b, SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+        SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(3, 2, INT32_MAX),
         SPA_PARAM_BUFFERS_dataType, SPA_POD_CHOICE_FLAGS_Int((1 << SPA_DATA_MemPtr) | (1 << SPA_DATA_MemFd))));
 
     // SpaPod.BuildMetaHeader()

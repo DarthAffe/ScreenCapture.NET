@@ -83,10 +83,19 @@ public sealed class WaylandCaptureTests
         AssertPixels(zone, new ColorBGRA(10, 20, 30, 255));
     }
 
+    /// <summary>
+    /// Between two captures the capture holds two buffers (the current frame and the newest one), so with fewer than three the source can't send a newer frame:
+    /// a capture that runs seldom would get the frame from right after the previous capture.
+    /// The buffers are offered like the compositors do: xdg-desktop-portal-wlr 2 (2 to 32), KWin 3 (2 to 4), mutter 8 (2 to 8).
+    /// </summary>
     [TestMethod]
-    public void OnlyTheNewestFrameIsCaptured()
+    [DataRow(2, 2, 32)]
+    [DataRow(3, 2, 4)]
+    [DataRow(8, 2, 8)]
+    [DataRow(8, 8, 8)]
+    public void OnlyTheNewestFrameIsCaptured(int defaultBuffers, int minBuffers, int maxBuffers)
     {
-        using Setup setup = Setup.Start();
+        using Setup setup = Setup.Start(buffers: (defaultBuffers, minBuffers, maxBuffers));
         CaptureZone<ColorBGRA> zone = setup.Capture.RegisterCaptureZone(new CaptureRegion(0, 0, WIDTH, HEIGHT));
         setup.CaptureFrame(Color);
 
@@ -105,11 +114,14 @@ public sealed class WaylandCaptureTests
 
     /// <summary>
     /// More frames than the source has buffers: the capture has to give every buffer back.
+    /// A source that offers at most two buffers (fewer than the capture prefers) still streams.
     /// </summary>
     [TestMethod]
-    public void BuffersAreGivenBack()
+    [DataRow(8, 8, 8)]
+    [DataRow(2, 2, 2)]
+    public void BuffersAreGivenBack(int defaultBuffers, int minBuffers, int maxBuffers)
     {
-        using Setup setup = Setup.Start();
+        using Setup setup = Setup.Start(buffers: (defaultBuffers, minBuffers, maxBuffers));
         CaptureZone<ColorBGRA> zone = setup.Capture.RegisterCaptureZone(new CaptureRegion(0, 0, WIDTH, HEIGHT));
 
         for (byte i = 0; i < 30; i++)
@@ -353,9 +365,9 @@ public sealed class WaylandCaptureTests
         public required WaylandScreenCapture Capture { get; init; }
 
         // The portal tells the size it gets (or none for 0).
-        public static Setup Start(uint videoFormat = SPA_VIDEO_FORMAT_BGRx, int stride = 0, int portalWidth = WIDTH, int portalHeight = HEIGHT)
+        public static Setup Start(uint videoFormat = SPA_VIDEO_FORMAT_BGRx, int stride = 0, int portalWidth = WIDTH, int portalHeight = HEIGHT, (int Default, int Min, int Max)? buffers = null)
         {
-            PipeWireVideoSource source = PipeWireVideoSource.Start(WIDTH, HEIGHT, videoFormat, stride);
+            PipeWireVideoSource source = PipeWireVideoSource.Start(WIDTH, HEIGHT, videoFormat, stride, buffers);
             FakeScreenCastPortal? portal = null;
             WaylandScreenCaptureService? service = null;
             try

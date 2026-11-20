@@ -17,7 +17,6 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
     #region Constants
 
     private const string LIBRARY = "libpipewire-0.3.so.0";
-    private const int BUFFER_COUNT = 8;
 
     #endregion
 
@@ -28,6 +27,7 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
     private int _height;
     private int _stride;
     private readonly uint _videoFormat;
+    private readonly (int Default, int Min, int Max) _buffers;
 
     private nint _loop;
     private nint _context;
@@ -62,12 +62,13 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
 
     #region Constructors
 
-    private PipeWireVideoSource(int width, int height, int stride, uint videoFormat)
+    private PipeWireVideoSource(int width, int height, int stride, uint videoFormat, (int Default, int Min, int Max) buffers)
     {
         this._width = width;
         this._height = height;
         this._stride = stride;
         this._videoFormat = videoFormat;
+        this._buffers = buffers;
     }
 
     #endregion
@@ -91,11 +92,12 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
     /// Starts a source with frames of the given size and format (<see cref="SPA_VIDEO_FORMAT_BGRx"/> or <see cref="SPA_VIDEO_FORMAT_BGRA"/>).
     /// </summary>
     /// <param name="stride">The bytes per row; 0 for rows without padding.</param>
-    public static PipeWireVideoSource Start(int width, int height, uint videoFormat = SPA_VIDEO_FORMAT_BGRx, int stride = 0)
+    /// <param name="buffers">The number of buffers the source offers (default, minimum, maximum), like a compositor does; <c>null</c> for 8 (8 to 8).</param>
+    public static PipeWireVideoSource Start(int width, int height, uint videoFormat = SPA_VIDEO_FORMAT_BGRx, int stride = 0, (int Default, int Min, int Max)? buffers = null)
     {
         _ = GetDaemonSocket();
 
-        PipeWireVideoSource source = new(width, height, stride > 0 ? stride : width * 4, videoFormat);
+        PipeWireVideoSource source = new(width, height, stride > 0 ? stride : width * 4, videoFormat, buffers ?? (8, 8, 8));
         try
         {
             source.Connect();
@@ -223,6 +225,16 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
         return MemoryMarshal.AsBytes(words.ToArray().AsSpan()).ToArray();
     }
 
+    // Appends a property with a range of ints (a choice: default, minimum, maximum) to an object POD.
+    private static byte[] AddIntRange(byte[] pod, uint key, (int Default, int Min, int Max) range)
+    {
+        List<uint> words = [.. MemoryMarshal.Cast<byte, uint>(pod)];
+        words.AddRange([key, 0, 16 + (3 * 4), SPA_TYPE_Choice, SPA_CHOICE_Range, 0, 4, SPA_TYPE_Int, (uint)range.Default, (uint)range.Min, (uint)range.Max, 0]);
+
+        words[0] = (uint)((words.Count - 2) * 4);
+        return MemoryMarshal.AsBytes(words.ToArray().AsSpan()).ToArray();
+    }
+
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void OnParamChanged(nint data, uint id, byte* param)
     {
@@ -232,10 +244,10 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
 
         // The source sets the size of its buffers (PipeWire allocates them); both ends want the header metadata.
         byte[] buffers = Pod(SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
-                             SPA_PARAM_BUFFERS_buffers, 4, SPA_TYPE_Int, BUFFER_COUNT, 0,
                              SPA_PARAM_BUFFERS_blocks, 4, SPA_TYPE_Int, 1, 0,
                              SPA_PARAM_BUFFERS_size, 4, SPA_TYPE_Int, (uint)(source._stride * source._height), 0,
                              SPA_PARAM_BUFFERS_stride, 4, SPA_TYPE_Int, (uint)source._stride, 0);
+        buffers = AddIntRange(buffers, SPA_PARAM_BUFFERS_buffers, source._buffers);
         byte[] meta = Pod(SPA_TYPE_OBJECT_ParamMeta, SPA_PARAM_Meta,
                           SPA_PARAM_META_type, 4, SPA_TYPE_Id, SPA_META_Header, 0,
                           SPA_PARAM_META_size, 4, SPA_TYPE_Int, (uint)sizeof(SpaMetaHeader), 0);

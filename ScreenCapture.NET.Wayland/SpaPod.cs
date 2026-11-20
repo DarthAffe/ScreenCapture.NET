@@ -18,6 +18,12 @@ internal static class SpaPod
     // The largest size offered: the compositor picks the size of the monitor.
     private const int MAX_DIMENSION = 16384;
 
+    // The capture holds two buffers between captures (the current frame and the newest one, see PipeWireStream): with a third the compositor can always send a newer frame.
+    // Fewer are accepted, so a compositor that offers at most two still streams (with frames that can be one capture old); any more are fine.
+    // A compositor that drives the stream (all of them do) takes this default if its range allows it; otherwise its own default counts.
+    private const int PREFERRED_BUFFERS = 3;
+    private const int MIN_BUFFERS = 2;
+
     #endregion
 
     #region Methods
@@ -47,12 +53,14 @@ internal static class SpaPod
     }
 
     /// <summary>
-    /// Builds the buffers the capture accepts: in memory, mapped by PipeWire (no DMA-BUFs).
+    /// Builds the buffers the capture accepts: preferably three (see <see cref="PREFERRED_BUFFERS"/>), in memory, mapped by PipeWire (no DMA-BUFs).
     /// </summary>
     public static byte[] BuildBuffers()
     {
         Builder builder = new(stackalloc byte[MAX_SIZE]);
         int buffers = builder.StartObject(SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers);
+        builder.Property(SPA_PARAM_BUFFERS_buffers);
+        builder.Choice(SPA_CHOICE_Range, SPA_TYPE_Int, [PREFERRED_BUFFERS, MIN_BUFFERS, int.MaxValue]);
         builder.Property(SPA_PARAM_BUFFERS_dataType);
         builder.Choice(SPA_CHOICE_Flags, SPA_TYPE_Int, [(1u << (int)SPA_DATA_MemPtr) | (1u << (int)SPA_DATA_MemFd)]);
         builder.EndObject(buffers);
