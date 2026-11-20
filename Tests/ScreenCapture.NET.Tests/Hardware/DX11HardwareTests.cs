@@ -14,6 +14,9 @@ namespace ScreenCapture.NET.Tests.Hardware;
 public sealed class DX11HardwareTests
 {
     [TestMethod]
+    public void IsSupported() => Assert.IsTrue(DX11ScreenCaptureService.IsSupported());
+
+    [TestMethod]
     public void EnumeratesDisplays()
     {
         using DX11ScreenCaptureService service = new();

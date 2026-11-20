@@ -52,6 +52,10 @@ internal static partial class X11
     [LibraryImport("libX11.so.6")]
     internal static partial nint XDisplayString(X11DisplayHandle display);
 
+    [LibraryImport("libX11.so.6", StringMarshalling = StringMarshalling.Utf8)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool XQueryExtension(X11DisplayHandle display, string name, out int majorOpcode, out int firstEvent, out int firstError);
+
     /// <summary>
     /// Installs a process-wide error handler (<c>int (*)(Display*, XErrorEvent*)</c>) and returns the previous one.
     /// </summary>

@@ -204,10 +204,26 @@ internal sealed class ScreenCastSession : IDisposable
         return (availableCursorModes & mode) != 0 ? mode : null;
     }
 
-    // A property of the ScreenCast interface; 0 if it doesn't exist (e.g. AvailableCursorModes before version 2).
-    private async Task<uint> ReadPropertyAsync(string name)
+    /// <summary>
+    /// Reads the version of the ScreenCast interface of the portal on the session bus, without starting a session.
+    /// </summary>
+    /// <returns>The version; 0 if there's no session bus, no portal, or a portal without the ScreenCast interface.</returns>
+    public static async Task<uint> ReadPortalVersionAsync()
     {
-        MessageWriter writer = _connection.GetMessageWriter();
+        string? address = DBusAddress.Session;
+        if (string.IsNullOrEmpty(address)) return 0;
+
+        using DBusConnection connection = new(address);
+        await connection.ConnectAsync().ConfigureAwait(false);
+        return await ReadPropertyAsync(connection, "version").ConfigureAwait(false);
+    }
+
+    private Task<uint> ReadPropertyAsync(string name) => ReadPropertyAsync(_connection, name);
+
+    // A property of the ScreenCast interface; 0 if it doesn't exist (e.g. AvailableCursorModes before version 2, or no ScreenCast interface at all).
+    private static async Task<uint> ReadPropertyAsync(DBusConnection connection, string name)
+    {
+        MessageWriter writer = connection.GetMessageWriter();
         MessageBuffer call;
         try
         {
@@ -223,7 +239,7 @@ internal sealed class ScreenCastSession : IDisposable
 
         try
         {
-            VariantValue modes = await _connection.CallMethodAsync(call, (message, _) => message.GetBodyReader().ReadVariantValue(), null).ConfigureAwait(false);
+            VariantValue modes = await connection.CallMethodAsync(call, (message, _) => message.GetBodyReader().ReadVariantValue(), null).ConfigureAwait(false);
             return modes.Type == VariantValueType.UInt32 ? modes.GetUInt32() : 0;
         }
         catch (DBusErrorReplyException)

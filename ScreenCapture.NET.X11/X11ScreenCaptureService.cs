@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.Versioning;
 
 namespace ScreenCapture.NET;
 
@@ -59,6 +60,32 @@ public sealed class X11ScreenCaptureService : IScreenCaptureService
     #endregion
 
     #region Methods
+
+    /// <summary>
+    /// Checks if the desktop of an X server can be captured: libX11 is installed, a connection to the server can be opened, and the server isn't XWayland.
+    /// </summary>
+    /// <remarks>
+    /// XWayland, the X server of a Wayland session, doesn't show the Wayland desktop to X clients, so the check fails there: use ScreenCapture.NET.Wayland instead.
+    /// Like every connection of this library, the check installs the Xlib error handlers (see the remarks of the class).
+    /// </remarks>
+    /// <param name="displayName">The name of the X display (server), like the one passed to the constructor; <c>null</c> for the one named by $DISPLAY.</param>
+    /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
+    [SupportedOSPlatformGuard("linux")]
+    public static bool IsSupported(string? displayName = null)
+    {
+        if (!OperatingSystem.IsLinux()) return false;
+
+        try
+        {
+            using X11DisplayHandle display = X11DisplayHandle.Open(displayName);
+            return !display.IsInvalid && !X11Displays.IsXWayland(display);
+        }
+        catch (Exception)
+        {
+            // E.g. libX11 isn't installed, or the connection broke meanwhile.
+            return false;
+        }
+    }
 
     /// <inheritdoc />
     /// <remarks>

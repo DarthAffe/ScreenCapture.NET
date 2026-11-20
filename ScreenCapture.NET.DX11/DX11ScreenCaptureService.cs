@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Threading;
 using Vortice.DXGI;
 
@@ -44,6 +46,38 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     #endregion
 
     #region Methods
+
+    /// <summary>
+    /// Checks if Desktop Duplication can be used on this system.
+    /// </summary>
+    /// <remarks>
+    /// It needs Windows with DXGI. It doesn't tell if every display can be duplicated: on systems with two graphics cards (e.g. laptops) it can fail
+    /// for a display driven by the other card, which Windows.Graphics.Capture (ScreenCapture.NET.WGC) can capture.
+    /// </remarks>
+    /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
+    [SupportedOSPlatformGuard("windows")]
+    public static bool IsSupported()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            return CanCreateFactory();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // Separate, so the DirectX types are only loaded on Windows.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool CanCreateFactory()
+    {
+        bool created = DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).Success;
+        using (factory)
+            return created;
+    }
 
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()

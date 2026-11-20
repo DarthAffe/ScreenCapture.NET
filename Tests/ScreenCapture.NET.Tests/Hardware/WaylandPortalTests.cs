@@ -19,6 +19,40 @@ public sealed class WaylandPortalTests
     private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(5);
 
     [TestMethod]
+    public void IsSupportedWithAScreenCastPortal()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+
+        Assert.IsTrue(WaylandScreenCaptureService.IsSupported());
+
+        // The check only reads the version: no session, no dialog.
+        Assert.AreEqual(0, portal.CountCalls("CreateSession"));
+        Assert.AreEqual(0, portal.Dialogs);
+    }
+
+    /// <summary>
+    /// Like a portal whose backend can't share the screen: the frontend has no ScreenCast interface then.
+    /// </summary>
+    [TestMethod]
+    public void IsNotSupportedWithoutScreenCast()
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+        portal.Version = 0;
+
+        Assert.IsFalse(WaylandScreenCaptureService.IsSupported());
+    }
+
+    [TestMethod]
+    public void IsNotSupportedWithoutAPortal()
+    {
+        // The private bus is the session bus; it can't start a portal (no service files).
+        _ = PrivateSessionBus.Address;
+
+        // The bus releases the name of the portal of the previous test once it handled its disconnect.
+        Assert.IsTrue(SpinWait.SpinUntil(() => !WaylandScreenCaptureService.IsSupported(), TimeSpan.FromSeconds(5)), "A portal answered.");
+    }
+
+    [TestMethod]
     public void DisplaysAreTheSharedStreams()
     {
         using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();

@@ -10,6 +10,9 @@ namespace ScreenCapture.NET.Tests.Hardware;
 public sealed class DX9HardwareTests
 {
     [TestMethod]
+    public void IsSupported() => Assert.IsTrue(DX9ScreenCaptureService.IsSupported());
+
+    [TestMethod]
     public void EnumeratesDisplays()
     {
         using DX9ScreenCaptureService service = new();

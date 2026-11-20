@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Threading;
 using Vortice.Direct3D9;
 
@@ -44,6 +46,37 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
     #endregion
 
     #region Methods
+
+    /// <summary>
+    /// Checks if Direct3D 9 can be used on this system.
+    /// </summary>
+    /// <remarks>
+    /// It needs Windows with Direct3D 9Ex.
+    /// </remarks>
+    /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
+    [SupportedOSPlatformGuard("windows")]
+    public static bool IsSupported()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            return CanCreateDirect3D9();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // Separate, so the DirectX types are only loaded on Windows.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool CanCreateDirect3D9()
+    {
+        bool created = D3D9.Direct3DCreate9Ex(out IDirect3D9Ex? direct3D9).Success;
+        using (direct3D9)
+            return created;
+    }
 
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()

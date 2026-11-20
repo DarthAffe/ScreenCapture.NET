@@ -14,6 +14,43 @@ namespace ScreenCapture.NET.Tests.Hardware;
 public sealed partial class X11HardwareTests
 {
     [TestMethod]
+    [DataRow(true, DisplayName = "With RandR")]
+    [DataRow(false, DisplayName = "Without RandR")]
+    public void XvfbIsSupported(bool randrExtension)
+    {
+        using XvfbServer server = XvfbServer.Start(randrExtension: randrExtension);
+        Assert.IsTrue(X11ScreenCaptureService.IsSupported(server.DisplayName));
+    }
+
+    [TestMethod]
+    public void StoppedServerIsNotSupported()
+    {
+        using XvfbServer server = XvfbServer.Start();
+        server.Kill();
+
+        Assert.IsFalse(X11ScreenCaptureService.IsSupported(server.DisplayName));
+    }
+
+    /// <summary>
+    /// The server of the session ($DISPLAY) is supported unless it's XWayland, which doesn't show the Wayland desktop.
+    /// </summary>
+    [TestMethod]
+    public void SessionServerIsSupportedUnlessItsXWayland()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY")))
+            Assert.Inconclusive("No X server available ($DISPLAY is not set).");
+
+        bool isXWayland;
+        using (X11DisplayHandle display = X11DisplayHandle.Open(null))
+        {
+            if (display.IsInvalid) Assert.Inconclusive("The X server of the session can't be opened.");
+            isXWayland = X11.XQueryExtension(display, "XWAYLAND", out _, out _, out _);
+        }
+
+        Assert.AreEqual(!isXWayland, X11ScreenCaptureService.IsSupported(), isXWayland ? "The session's X server is XWayland." : "The session's X server isn't XWayland.");
+    }
+
+    [TestMethod]
     public void EnumeratesDisplays()
     {
         using X11ScreenCaptureService service = X11DesktopServer.CreateService();

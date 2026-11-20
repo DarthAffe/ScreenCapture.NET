@@ -14,6 +14,21 @@
 | [ScreenCapture.NET.X11](https://www.nuget.org/packages/ScreenCapture.NET.X11) | libX11 based capturing for the X-Window-System. Uses shared memory (MIT-SHM) if the X-Server supports it. On Wayland use the Wayland package. |
 | [ScreenCapture.NET.Wayland](https://www.nuget.org/packages/ScreenCapture.NET.Wayland) | xdg-desktop-portal and PipeWire based capturing for Wayland desktops (KDE Plasma, GNOME, wlroots compositors with xdg-desktop-portal-wlr). The user has to allow the capture in a dialog of the desktop (see [Wayland](#wayland)). Needs libpipewire. |
 
+If your application runs on multiple systems, every service can tell if it works on the current one:
+```csharp
+IScreenCaptureService screenCaptureService;
+if (WGCScreenCaptureService.IsSupported())
+    screenCaptureService = new WGCScreenCaptureService();
+else if (DX11ScreenCaptureService.IsSupported())
+    screenCaptureService = new DX11ScreenCaptureService();
+else if (X11ScreenCaptureService.IsSupported()) // false on XWayland, as it doesn't show the Wayland desktop
+    screenCaptureService = new X11ScreenCaptureService();
+else if (WaylandScreenCaptureService.IsSupported())
+    screenCaptureService = new WaylandScreenCaptureService();
+else
+    throw new PlatformNotSupportedException("Screen capturing isn't supported on this system.");
+```
+
 ## Usage
 ```csharp
 // Create a screen-capture service

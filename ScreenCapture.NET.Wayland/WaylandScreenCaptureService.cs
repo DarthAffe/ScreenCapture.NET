@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +21,13 @@ namespace ScreenCapture.NET;
 /// </remarks>
 public sealed class WaylandScreenCaptureService : IScreenCaptureService
 {
+    #region Constants
+
+    // Asking the portal can take a moment if the session bus has to start it first.
+    private static readonly TimeSpan SupportCheckTimeout = TimeSpan.FromSeconds(5);
+
+    #endregion
+
     #region Properties & Fields
 
     // Held while a session starts (which waits for the user), so only one session starts at a time.
@@ -89,6 +97,33 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     #endregion
 
     #region Methods
+
+    /// <summary>
+    /// Checks if the ScreenCast portal can be used: libpipewire is installed, and a portal on the session bus offers the ScreenCast interface.
+    /// </summary>
+    /// <remarks>
+    /// It doesn't start a session, so no dialog is shown. It asks the portal, which can take a moment if the session bus has to start it first (it gives up after 5 s).
+    /// Desktops like KDE Plasma and GNOME offer the portal in X11 sessions too: prefer ScreenCapture.NET.X11 there (it needs no dialog); its check fails in Wayland sessions.
+    /// </remarks>
+    /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
+    [SupportedOSPlatformGuard("linux")]
+    public static bool IsSupported()
+    {
+        if (!OperatingSystem.IsLinux()) return false;
+
+        try
+        {
+            if (!PipeWire.IsAvailable()) return false;
+
+            // On the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
+            Task<uint> version = Task.Run(ScreenCastSession.ReadPortalVersionAsync);
+            return version.Wait(SupportCheckTimeout) && (version.Result > 0);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     /// <inheritdoc />
     /// <remarks>

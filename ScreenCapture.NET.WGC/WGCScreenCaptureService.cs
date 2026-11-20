@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.Versioning;
 using System.Threading;
 using Vortice.DXGI;
 
@@ -58,7 +59,8 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
     /// It needs Windows 10 1903 or later and a desktop composition (e.g. not on Windows Server Core).
     /// </remarks>
     /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
-    public static bool IsSupported() => WGCInterop.IsSupported();
+    [SupportedOSPlatformGuard("windows")]
+    public static bool IsSupported() => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362) && WGCInterop.IsSupported();
 
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()

@@ -15,6 +15,17 @@ internal static unsafe partial class PipeWire
 
     private const string LIBRARY = "libpipewire-0.3.so.0";
 
+    /// <summary>
+    /// Gets if libpipewire is installed (can be loaded).
+    /// </summary>
+    public static bool IsAvailable()
+    {
+        if (!NativeLibrary.TryLoad(LIBRARY, typeof(PipeWire).Assembly, DllImportSearchPath.SafeDirectories, out nint handle)) return false;
+
+        NativeLibrary.Free(handle);
+        return true;
+    }
+
     public const uint PW_VERSION_STREAM_EVENTS = 2;
     public const uint PW_VERSION_CORE_EVENTS = 1;
     public const uint PW_ID_CORE = 0;

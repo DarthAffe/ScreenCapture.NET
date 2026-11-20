@@ -29,6 +29,21 @@ internal static class X11Displays
     #region Methods
 
     /// <summary>
+    /// Gets if the server is XWayland. Recent versions have the XWAYLAND extension; older ones are recognized by the names of their outputs (XWAYLAND0, ...).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The connection broke meanwhile.</exception>
+    public static bool IsXWayland(X11DisplayHandle display)
+    {
+        if (X11.XQueryExtension(display, "XWAYLAND", out _, out _, out _)) return true;
+
+        foreach (X11Display x11Display in GetDisplays(display))
+            if (x11Display.Display.DeviceName.StartsWith("XWAYLAND", StringComparison.Ordinal))
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
     /// Gets the graphics card of an X server. X11 doesn't tell which card shows a screen, so the server is the card.
     /// </summary>
     public static GraphicsCard GetGraphicsCard(X11DisplayHandle display)
