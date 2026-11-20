@@ -21,6 +21,11 @@ namespace ScreenCapture.NET;
 /// The pixels of the zones are opaque if the compositor sends BGRx (its fourth byte is padding); BGRA is passed on as it is.
 /// </para>
 /// <para>
+/// Known limitation: frames are taken in the orientation the compositor sends them. KDE and GNOME send rotated monitors already rotated.
+/// xdg-desktop-portal-wlr (wlroots desktops, e.g. sway) sends them in their unrotated orientation and only describes the rotation in the metadata of the frame,
+/// which the capture doesn't apply: a rotated monitor is captured sideways, with the unrotated size.
+/// </para>
+/// <para>
 /// The capture belongs to the screen cast session of its <see cref="WaylandScreenCaptureService"/>: once the session ended (the user stopped sharing, or the connection to PipeWire broke)
 /// it's <see cref="CaptureResult.Unavailable"/>, until <see cref="WaylandScreenCaptureService.GetDisplays"/> started a new session that shares its display again
 /// (captures never show the dialog themselves).

@@ -52,6 +52,8 @@ namespace ScreenCapture.NET;
 /// How the display is rotated, clockwise (on Windows: the orientation set in the display settings).
 /// Zones are always in the orientation of the display: a backend that captures the output in its native orientation (DX11) rotates the pixels by this.
 /// Always <see cref="ImageRotation.None"/> on X11, which delivers the pixels already rotated, and on Wayland.
+/// KDE and GNOME send rotated monitors already rotated; xdg-desktop-portal-wlr (wlroots desktops, e.g. sway) sends them unrotated and the capture doesn't rotate them,
+/// so a rotated monitor is captured sideways there.
 /// </param>
 /// <param name="GraphicsCard">The <see cref="GraphicsCard"/> this <see cref="Display"/> is connected to.</param>
 public readonly record struct Display(string Id, int Index, string DeviceName, string FriendlyName, int X, int Y, int Width, int Height, ImageRotation Rotation, GraphicsCard GraphicsCard);
