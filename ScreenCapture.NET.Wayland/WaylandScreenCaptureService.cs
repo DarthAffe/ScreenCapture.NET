@@ -33,6 +33,11 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// </summary>
     public WaylandCaptureOptions Options { get; }
 
+    /// <summary>
+    /// Gets the options of the screen cast session, which apply to all captures.
+    /// </summary>
+    public WaylandSessionOptions SessionOptions { get; }
+
     #endregion
 
     #region Constructors
@@ -44,9 +49,11 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// Nothing is connected yet: the screen cast session starts with the first <see cref="GetDisplays"/>.
     /// </remarks>
     /// <param name="options">The options of captures created without their own options; <c>null</c> for <see cref="WaylandCaptureOptions.Default"/>.</param>
-    public WaylandScreenCaptureService(WaylandCaptureOptions? options = null)
+    /// <param name="sessionOptions">The options of the screen cast session; <c>null</c> for <see cref="WaylandSessionOptions.Default"/>.</param>
+    public WaylandScreenCaptureService(WaylandCaptureOptions? options = null, WaylandSessionOptions? sessionOptions = null)
     {
         Options = options ?? WaylandCaptureOptions.Default;
+        SessionOptions = sessionOptions ?? WaylandSessionOptions.Default;
         _screenCaptures = new ScreenCaptureCache<WaylandScreenCapture, WaylandCaptureOptions>(this, (display, captureOptions) => new WaylandScreenCapture(this, display, captureOptions), capture => capture.Options);
     }
 
@@ -110,7 +117,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
             try
             {
                 // Started on the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
-                Task.Run(session.StartAsync).GetAwaiter().GetResult();
+                Task.Run(() => session.StartAsync(SessionOptions)).GetAwaiter().GetResult();
                 return session;
             }
             catch (Exception)

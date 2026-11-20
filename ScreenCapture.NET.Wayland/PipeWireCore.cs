@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using static ScreenCapture.NET.PipeWire;
@@ -30,6 +32,17 @@ internal sealed unsafe class PipeWireCore : IDisposable
     private nint _core;
     private readonly List<PipeWireStream> _streams = [];
     private bool _isDisposed;
+
+    // The listener of the core's events, freed after the core is disconnected.
+    private GCHandle _handle;
+    private PwCoreEvents* _events;
+    private void* _hook;
+    private volatile bool _isDead;
+
+    /// <summary>
+    /// Gets a value indicating whether the connection to PipeWire broke (e.g. the daemon was restarted): its streams fail, and the nodes of the session are gone with it.
+    /// </summary>
+    public bool IsDead => _isDead;
 
     #endregion
 
@@ -76,6 +89,14 @@ internal sealed unsafe class PipeWireCore : IDisposable
 
                 core._core = pw_context_connect_fd(core._context, fd, 0, 0);
                 if (core._core == 0) throw new InvalidOperationException("Connecting to PipeWire (pw_context_connect_fd) failed.");
+
+                core._handle = GCHandle.Alloc(core, GCHandleType.Weak);
+                core._events = (PwCoreEvents*)NativeMemory.AllocZeroed((nuint)sizeof(PwCoreEvents));
+                core._events->version = PW_VERSION_CORE_EVENTS;
+                core._events->error = &OnError;
+                core._hook = NativeMemory.AllocZeroed(SPA_HOOK_SIZE);
+                if (AddCoreListener(core._core, core._hook, core._events, GCHandle.ToIntPtr(core._handle)) < 0)
+                    throw new InvalidOperationException("Listening to the PipeWire connection failed.");
             }
             finally
             {
@@ -152,9 +173,30 @@ internal sealed unsafe class PipeWireCore : IDisposable
             if (_loop != 0)
                 pw_thread_loop_destroy(_loop);
 
+            if (_events != null) NativeMemory.Free(_events);
+            if (_hook != null) NativeMemory.Free(_hook);
+            if (_handle.IsAllocated) _handle.Free();
+            _events = null;
+            _hook = null;
+
             _core = 0;
             _context = 0;
             _loop = 0;
+        }
+    }
+
+    // On the PipeWire thread. An error of the core itself (id 0) is the end of the connection (e.g. EPIPE); others belong to objects (a stream reports its own).
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void OnError(nint data, uint id, int seq, int result, byte* message)
+    {
+        try
+        {
+            if ((id == PW_ID_CORE) && (GCHandle.FromIntPtr(data).Target is PipeWireCore core))
+                core._isDead = true;
+        }
+        catch
+        {
+            // Nothing may be thrown into PipeWire.
         }
     }
 

@@ -16,6 +16,8 @@ internal static unsafe partial class PipeWire
     private const string LIBRARY = "libpipewire-0.3.so.0";
 
     public const uint PW_VERSION_STREAM_EVENTS = 2;
+    public const uint PW_VERSION_CORE_EVENTS = 1;
+    public const uint PW_ID_CORE = 0;
     public const uint PW_ID_ANY = 0xFFFFFFFF;
 
     public const int PW_DIRECTION_INPUT = 0;
@@ -102,6 +104,46 @@ internal static unsafe partial class PipeWire
         public nint drained;
         public nint command;
         public nint trigger_done;
+    }
+
+    /// <summary>
+    /// The events of a core. Only <c>error</c> is used.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PwCoreEvents
+    {
+        public uint version;
+        public nint info;
+        public nint done;
+        public nint ping;
+        public delegate* unmanaged[Cdecl]<nint, uint, int, int, byte*, void> error;
+        public nint remove_id;
+        public nint bound_id;
+        public nint add_mem;
+        public nint remove_mem;
+        public nint bound_props;
+    }
+
+    /// <summary>
+    /// The start of every SPA interface (a <c>pw_core*</c> points to one): its methods are called through the table in <c>funcs</c>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SpaInterface
+    {
+        public byte* type;
+        public uint version;
+        public void* funcs;
+        public void* data;
+    }
+
+    /// <summary>
+    /// The start of the method table of a core (<c>pw_core_methods</c>).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PwCoreMethods
+    {
+        public uint version;
+        public delegate* unmanaged[Cdecl]<void*, void*, PwCoreEvents*, nint, int> add_listener;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -204,6 +246,16 @@ internal static unsafe partial class PipeWire
 
     [LibraryImport(LIBRARY)]
     public static partial int pw_core_disconnect(nint core);
+
+    /// <summary>
+    /// Adds a listener to the events of a core. <c>pw_core_add_listener</c> is an inline function before libpipewire 1.4 (no symbol), so it's called through the method table like it does.
+    /// </summary>
+    public static int AddCoreListener(nint core, void* hook, PwCoreEvents* events, nint data)
+    {
+        SpaInterface* coreInterface = (SpaInterface*)core;
+        PwCoreMethods* methods = (PwCoreMethods*)coreInterface->funcs;
+        return methods->add_listener(coreInterface->data, hook, events, data);
+    }
 
     [LibraryImport(LIBRARY, StringMarshalling = StringMarshalling.Utf8)]
     public static partial nint pw_properties_new_string(string text);

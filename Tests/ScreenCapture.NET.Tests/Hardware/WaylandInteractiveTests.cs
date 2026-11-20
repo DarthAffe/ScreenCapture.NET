@@ -42,15 +42,18 @@ public sealed class WaylandInteractiveTests
     }
 
     /// <summary>
-    /// <b>Shows the share dialog once</b>: share one or more monitors. Each one is captured (the compositor sends a frame when the stream starts).
+    /// <b>Shows the share dialog once per row</b>: share one or more monitors. Each one is captured (the compositor sends a frame when the stream starts),
+    /// also with the pointer drawn into the frames.
     /// </summary>
     [TestMethod]
-    public void SharedMonitorsAreCaptured()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SharedMonitorsAreCaptured(bool drawCursor)
     {
         if (Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") == null)
             Assert.Inconclusive("Not in a Wayland session.");
 
-        using WaylandScreenCaptureService service = new();
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { DrawCursor = drawCursor });
         foreach (Display display in service.GetDisplays(service.GetGraphicsCards().Single()).ToList())
         {
             WaylandScreenCapture capture = service.GetScreenCapture(display);

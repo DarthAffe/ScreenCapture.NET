@@ -21,8 +21,13 @@ namespace ScreenCapture.NET;
 /// The pixels of the zones are opaque if the compositor sends BGRx (its fourth byte is padding); BGRA is passed on as it is.
 /// </para>
 /// <para>
-/// The capture belongs to the screen cast session of its <see cref="WaylandScreenCaptureService"/>: once the session ended it's <see cref="CaptureResult.Unavailable"/>,
-/// until <see cref="WaylandScreenCaptureService.GetDisplays"/> started a new session that shares its display again (captures never show the dialog themselves).
+/// The capture belongs to the screen cast session of its <see cref="WaylandScreenCaptureService"/>: once the session ended (the user stopped sharing, or the connection to PipeWire broke)
+/// it's <see cref="CaptureResult.Unavailable"/>, until <see cref="WaylandScreenCaptureService.GetDisplays"/> started a new session that shares its display again
+/// (captures never show the dialog themselves).
+/// </para>
+/// <para>
+/// A (re)start waits until PipeWire streams the monitor, up to 2 s: it fails if the monitor isn't shared anymore or offers no supported format (see <see cref="IScreenCapture.LastError"/>).
+/// A stream that pauses for more than 2 s (PipeWire pauses it when the compositor removes the monitor) counts as failed: the capture restarts, which fails if the monitor is gone.
 /// </para>
 /// </remarks>
 public sealed class WaylandScreenCapture : AbstractScreenCapture<ColorBGRA>
@@ -164,6 +169,9 @@ public sealed class WaylandScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                 _stream = session.GetPipeWireCore().CreateStream(portalStream.NodeId, display.Width, display.Height);
                 _session = session;
+
+                // E.g. the node is gone (the compositor stopped sharing the monitor): PipeWire reports it while the stream connects.
+                if (_stream.WaitUntilStreaming() is { } failure) throw failure;
 
                 // The size of the frames is only known with the first one; a display without size keeps its old one until then.
                 SetDisplay((display.Width > 0) && (display.Height > 0) ? display : display with { Width = Display.Width, Height = Display.Height });

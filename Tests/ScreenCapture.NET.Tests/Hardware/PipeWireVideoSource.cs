@@ -23,9 +23,10 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
 
     #region Properties & Fields
 
-    private readonly int _width;
-    private readonly int _height;
-    private readonly int _stride;
+    // Only changed under the lock of the PipeWire thread.
+    private int _width;
+    private int _height;
+    private int _stride;
     private readonly uint _videoFormat;
 
     private nint _loop;
@@ -123,13 +124,7 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
             _hook = NativeMemory.AllocZeroed(SPA_HOOK_SIZE);
             pw_stream_add_listener(_stream, _hook, _events, GCHandle.ToIntPtr(_handle));
 
-            // One fixed format: the capture gets exactly this one.
-            byte[] format = Pod(SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
-                                SPA_FORMAT_mediaType, 4, SPA_TYPE_Id, SPA_MEDIA_TYPE_video, 0,
-                                SPA_FORMAT_mediaSubtype, 4, SPA_TYPE_Id, SPA_MEDIA_SUBTYPE_raw, 0,
-                                SPA_FORMAT_VIDEO_format, 4, SPA_TYPE_Id, _videoFormat, 0,
-                                SPA_FORMAT_VIDEO_size, 8, SPA_TYPE_Rectangle, (uint)_width, (uint)_height,
-                                SPA_FORMAT_VIDEO_framerate, 8, SPA_TYPE_Fraction, 0, 1);
+            byte[] format = BuildFormat();
             fixed (byte* formatPointer = format)
             {
                 byte* parameter = formatPointer;
@@ -176,6 +171,40 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
             pw_thread_loop_unlock(_loop);
         }
     }
+
+    /// <summary>
+    /// Changes the size of the frames, like a monitor that gets another resolution: the stream negotiates the new format with the capture.
+    /// </summary>
+    public void Resize(int width, int height)
+    {
+        pw_thread_loop_lock(_loop);
+        try
+        {
+            _width = width;
+            _height = height;
+            _stride = width * 4;
+
+            byte[] format = BuildFormat();
+            fixed (byte* formatPointer = format)
+            {
+                byte* parameter = formatPointer;
+                Assert.IsGreaterThanOrEqualTo(0, pw_stream_update_params(_stream, &parameter, 1));
+            }
+        }
+        finally
+        {
+            pw_thread_loop_unlock(_loop);
+        }
+    }
+
+    // One fixed format: the capture gets exactly this one.
+    private byte[] BuildFormat()
+        => Pod(SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+               SPA_FORMAT_mediaType, 4, SPA_TYPE_Id, SPA_MEDIA_TYPE_video, 0,
+               SPA_FORMAT_mediaSubtype, 4, SPA_TYPE_Id, SPA_MEDIA_SUBTYPE_raw, 0,
+               SPA_FORMAT_VIDEO_format, 4, SPA_TYPE_Id, _videoFormat, 0,
+               SPA_FORMAT_VIDEO_size, 8, SPA_TYPE_Rectangle, (uint)_width, (uint)_height,
+               SPA_FORMAT_VIDEO_framerate, 8, SPA_TYPE_Fraction, 0, 1);
 
     // Object PODs from plain 32-bit words: every property is key, flags (0), then the value (size, type and the value padded to 8 bytes).
     private static byte[] Pod(uint objectType, uint id, params uint[] properties)

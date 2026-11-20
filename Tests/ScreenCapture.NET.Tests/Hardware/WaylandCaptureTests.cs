@@ -132,6 +132,102 @@ public sealed class WaylandCaptureTests
         AssertPixels(zone, new ColorBGRA(10, 20, 30, 255));
     }
 
+    /// <summary>
+    /// Like a monitor that gets another resolution: the stream negotiates a new format, the buffers of the old size are removed.
+    /// </summary>
+    [TestMethod]
+    public void ResizedStreamChangesTheDisplay()
+    {
+        using Setup setup = Setup.Start();
+        CaptureZone<ColorBGRA> zone = setup.Capture.RegisterCaptureZone(new CaptureRegion(0, 0, WIDTH, HEIGHT));
+        setup.CaptureFrame(Color);
+
+        List<Display> changes = [];
+        setup.Capture.DisplayChanged += (_, args) => changes.Add(args.Display);
+
+        setup.Source.Resize(WIDTH * 2, HEIGHT + 2);
+        setup.CaptureFrame(new ColorBGRA(1, 2, 3, 0));
+
+        Assert.AreEqual((WIDTH * 2, HEIGHT + 2), (setup.Capture.Display.Width, setup.Capture.Display.Height));
+        CollectionAssert.AreEqual(new[] { setup.Capture.Display }, changes);
+        AssertPixels(zone, new ColorBGRA(1, 2, 3, 255));
+
+        // Smaller than the zone: it doesn't fit anymore.
+        setup.Source.Resize(WIDTH / 2, HEIGHT / 2);
+        setup.CaptureFrame(new ColorBGRA(4, 5, 6, 0));
+
+        Assert.AreEqual((WIDTH / 2, HEIGHT / 2), (setup.Capture.Display.Width, setup.Capture.Display.Height));
+        Assert.IsFalse(zone.IsValid);
+    }
+
+    /// <summary>
+    /// PipeWire frees the buffers of the old format when it negotiates a new one: a zone written before the next frame (here a new one, after a timeout) must not read them.
+    /// </summary>
+    [TestMethod]
+    public void ZonesArentReadFromRemovedBuffers()
+    {
+        using Setup setup = Setup.Start();
+        setup.CaptureFrame(Color);
+
+        setup.Source.Resize(WIDTH * 2, HEIGHT);
+        Thread.Sleep(200); // the buffers are renegotiated
+
+        CaptureZone<ColorBGRA> zone = setup.Capture.RegisterCaptureZone(new CaptureRegion(0, 0, 8, 8));
+        Assert.AreEqual(CaptureResult.Timeout, setup.Capture.CaptureScreen());
+
+        // Not written: the zone keeps its initial pixels.
+        AssertPixels(zone, default);
+    }
+
+    /// <summary>
+    /// Like a monitor the compositor stops sharing: the node goes away, and the stream is just paused.
+    /// </summary>
+    [TestMethod]
+    public void RemovedNodeMakesTheCaptureUnavailable()
+    {
+        using Setup setup = Setup.Start();
+        setup.CaptureFrame(Color);
+
+        setup.Source.Dispose();
+
+        // Then the restart to the node fails (PipeWire: "no target node available").
+        List<string> errors = AssertBecomesUnavailable(setup.Capture);
+        Assert.IsTrue(errors.Any(error => error.Contains("paused")), string.Join(Environment.NewLine, errors));
+    }
+
+    /// <summary>
+    /// A compositor that offers neither BGRx nor BGRA (RGBA here): the stream can't start.
+    /// </summary>
+    [TestMethod]
+    public void UnsupportedFormatMakesTheCaptureUnavailable()
+    {
+        using Setup setup = Setup.Start(videoFormat: 11); // SPA_VIDEO_FORMAT_RGBA
+
+        // The first restart (by the constructor) failed already: PipeWire reports "no more input formats".
+        Assert.Contains("formats", setup.Capture.LastError?.Message ?? string.Empty);
+        AssertBecomesUnavailable(setup.Capture);
+    }
+
+    /// <summary>
+    /// Like a PipeWire daemon that stops: the session counts as ended (its nodes are gone), the next enumeration starts a new one.
+    /// </summary>
+    [TestMethod]
+    public void BrokenPipeWireConnectionEndsTheSession()
+    {
+        using Setup setup = Setup.Start();
+        CaptureZone<ColorBGRA> zone = setup.Capture.RegisterCaptureZone(new CaptureRegion(0, 0, WIDTH, HEIGHT));
+        setup.CaptureFrame(Color);
+
+        setup.Portal.BreakPipeWireConnections();
+        AssertBecomesUnavailable(setup.Capture);
+
+        _ = setup.Service.GetDisplays(setup.Service.GetGraphicsCards().Single()).ToList();
+        Assert.AreEqual(2, setup.Portal.CountCalls("CreateSession"));
+
+        setup.CaptureFrame(new ColorBGRA(1, 2, 3, 0));
+        AssertPixels(zone, new ColorBGRA(1, 2, 3, 255));
+    }
+
     [TestMethod]
     public void TimestampIsThePresentationTime()
     {
@@ -221,6 +317,23 @@ public sealed class WaylandCaptureTests
         setup.Service.Dispose();
 
         Assert.ThrowsExactly<ObjectDisposedException>(() => setup.Capture.CaptureScreen());
+    }
+
+    // Returns the errors reported meanwhile.
+    private static List<string> AssertBecomesUnavailable(WaylandScreenCapture capture)
+    {
+        List<string> errors = [];
+        capture.ErrorOccurred += (_, args) => errors.Add(args.Exception.Message);
+
+        List<CaptureResult> results = [];
+        Assert.IsTrue(SpinWait.SpinUntil(() =>
+        {
+            results.Add(capture.CaptureScreen());
+            return results[^1] == CaptureResult.Unavailable;
+        }, TimeSpan.FromSeconds(10)), $"The capture didn't become unavailable: {string.Join(", ", results.Distinct())}.");
+        Assert.IsNotNull(capture.LastError);
+
+        return errors;
     }
 
     private static void AssertPixels(CaptureZone<ColorBGRA> zone, ColorBGRA expected)

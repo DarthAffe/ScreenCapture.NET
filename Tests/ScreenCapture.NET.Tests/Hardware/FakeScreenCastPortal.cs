@@ -1,5 +1,7 @@
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Microsoft.Win32.SafeHandles;
 using Tmds.DBus.Protocol;
 
 namespace ScreenCapture.NET.Tests.Hardware;
@@ -11,7 +13,7 @@ namespace ScreenCapture.NET.Tests.Hardware;
 /// Disposing it removes the portal from the bus.
 /// </summary>
 [SupportedOSPlatform("linux")]
-internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
+internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDisposable
 {
     #region Constants
 
@@ -29,7 +31,7 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
     private readonly HashSet<string> _sessions = [];
     private Dictionary<string, VariantValue>? _selectSourcesOptions;
 
-    // Kept open until the portal is disposed: the reply that passes them on is sent asynchronously.
+    // The sockets handed out (as duplicates: the reply disposes the handle it sends), so they can be broken.
     private readonly List<Socket> _sockets = [];
 
     public string Path => "/org/freedesktop/portal/desktop";
@@ -39,6 +41,11 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
     /// Gets the streams the user "shares".
     /// </summary>
     public List<FakeStream> Streams { get; } = [new FakeStream(42, Size: (1920, 1080))];
+
+    /// <summary>
+    /// Gets or sets the <c>AvailableCursorModes</c> of the portal (1 hidden, 2 embedded, 4 metadata); <c>null</c> for a portal without it (version 1 of the interface).
+    /// </summary>
+    public uint? AvailableCursorModes { get; set; } = 7;
 
     /// <summary>
     /// Gets or sets the response code of <c>Start</c> (0 = shared, 1 = cancelled, 2 = failed).
@@ -123,6 +130,16 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
     }
 
     public int CountCalls(string method) => Calls.Count(call => call == method);
+
+    /// <summary>
+    /// Breaks the PipeWire connections handed out, like a PipeWire daemon that stops.
+    /// </summary>
+    public void BreakPipeWireConnections()
+    {
+        lock (_lock)
+            foreach (Socket socket in _sockets)
+                socket.Shutdown(SocketShutdown.Both);
+    }
 
     /// <summary>
     /// Ends all sessions like the portal does when the user stops sharing (<c>Session.Closed</c>).
@@ -221,7 +238,32 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
                 MessageWriter writer = context.CreateReplyWriter("h");
                 try
                 {
-                    writer.WriteHandle(socket.SafeHandle);
+                    writer.WriteHandle(new SafeFileHandle(dup((int)socket.Handle), ownsHandle: true));
+                    context.Reply(writer.CreateMessage());
+                }
+                finally
+                {
+                    writer.Dispose();
+                }
+
+                break;
+            }
+
+            case "org.freedesktop.DBus.Properties" when method == "Get":
+            {
+                Reader reader = request.GetBodyReader();
+                string propertyInterface = reader.ReadString();
+                string property = reader.ReadString();
+                if ((propertyInterface != SCREEN_CAST_INTERFACE) || (property != "AvailableCursorModes") || (AvailableCursorModes is not { } modes))
+                {
+                    context.ReplyError("org.freedesktop.DBus.Error.UnknownProperty", $"No property {propertyInterface}.{property}.");
+                    break;
+                }
+
+                MessageWriter writer = context.CreateReplyWriter("v");
+                try
+                {
+                    writer.WriteVariantUInt32(modes);
                     context.Reply(writer.CreateMessage());
                 }
                 finally
@@ -367,6 +409,9 @@ internal sealed class FakeScreenCastPortal : IPathMethodHandler, IDisposable
 
     // The unique name of the caller without the ':' and with '_' for '.' (computed here on its own, not with the code under test).
     private static string GetSender(Message request) => request.SenderAsString![1..].Replace('.', '_');
+
+    [LibraryImport("libc")]
+    private static partial int dup(int fd);
 
     public void Dispose()
     {

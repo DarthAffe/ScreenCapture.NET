@@ -81,6 +81,39 @@ public sealed class WaylandPortalTests
     }
 
     [TestMethod]
+    [DataRow(false, 7u, 1u)]
+    [DataRow(true, 7u, 2u)]
+    [DataRow(true, 3u, 2u)]
+    public void CursorModeIsTheOneOfTheOptions(bool drawCursor, uint availableCursorModes, uint cursorMode)
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+        portal.AvailableCursorModes = availableCursorModes;
+
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { DrawCursor = drawCursor });
+        _ = GetDisplays(service, service.GetGraphicsCards().Single());
+
+        Assert.AreEqual(cursorMode, portal.SelectSourcesOptions?["cursor_mode"].GetUInt32());
+    }
+
+    /// <summary>
+    /// A mode the portal doesn't offer would end the session: none is asked for (the portal hides the pointer then).
+    /// </summary>
+    [TestMethod]
+    [DataRow(true, 5u)]
+    [DataRow(false, 2u)]
+    [DataRow(true, null)]
+    public void CursorModeIsOnlyAskedForIfOffered(bool drawCursor, uint? availableCursorModes)
+    {
+        using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();
+        portal.AvailableCursorModes = availableCursorModes;
+
+        using WaylandScreenCaptureService service = new(sessionOptions: new WaylandSessionOptions { DrawCursor = drawCursor });
+        Assert.ContainsSingle(GetDisplays(service, service.GetGraphicsCards().Single()));
+
+        Assert.IsFalse(portal.SelectSourcesOptions?.ContainsKey("cursor_mode") ?? true);
+    }
+
+    [TestMethod]
     public void ResponseBeforeTheReplyIsntMissed()
     {
         using FakeScreenCastPortal portal = FakeScreenCastPortal.Start();

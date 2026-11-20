@@ -26,6 +26,17 @@ internal sealed unsafe class PipeWireStream : IDisposable
 
     private const string PROPERTIES = "media.type=Video media.category=Capture media.role=Screen";
 
+    /// <summary>
+    /// How long a new stream may take to start streaming (it usually takes some 10 ms).
+    /// PipeWire reports a node that's gone or a format both ends don't support as an error of the stream; this catches a stream that hangs without one.
+    /// </summary>
+    public static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// How long a stream that streamed may stay paused (e.g. while it negotiates a new size) before it counts as failed: a stream whose node was removed is paused, without an error.
+    /// </summary>
+    public static readonly TimeSpan PauseTimeout = TimeSpan.FromSeconds(2);
+
     #endregion
 
     #region Properties & Fields
@@ -48,6 +59,9 @@ internal sealed unsafe class PipeWireStream : IDisposable
     private PwBuffer* _newest;
     private PipeWireFrame _newestFrame;
     private Exception? _failure;
+    private int _state = PW_STREAM_STATE_UNCONNECTED;
+    private long _stateTimestamp = Stopwatch.GetTimestamp();
+    private bool _hasStreamed;
 
     // Only used under BufferLock (and swapped under the lock of the PipeWire thread too).
     private PwBuffer* _current;
@@ -132,7 +146,28 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Waits until a frame arrived that wasn't taken yet, or the stream failed.
+    /// Waits until the stream streams (up to <see cref="StartTimeout"/>).
+    /// </summary>
+    /// <returns><c>null</c> if it streams; otherwise why not.</returns>
+    public Exception? WaitUntilStreaming()
+    {
+        long deadline = Stopwatch.GetTimestamp() + ToTicks(StartTimeout);
+        lock (_frameLock)
+            while (true)
+            {
+                if (_failure != null) return _failure;
+                if (_state == PW_STREAM_STATE_STREAMING) return null;
+
+                long remaining = deadline - Stopwatch.GetTimestamp();
+                if (remaining <= 0)
+                    return _failure = new InvalidOperationException($"The PipeWire stream didn't start within {StartTimeout.TotalSeconds} s (it's {GetStateName(_state)}): its node is gone or offers no supported format.");
+
+                Wait(remaining);
+            }
+    }
+
+    /// <summary>
+    /// Waits until a frame arrived that wasn't taken yet, or the stream failed (also when it stays paused longer than <see cref="PauseTimeout"/>).
     /// </summary>
     /// <param name="deadline">Until when to wait, as a <see cref="Stopwatch"/> timestamp.</param>
     /// <returns><c>true</c> if a frame is there; <c>false</c> if none arrived in time or the stream failed (see <see cref="Failure"/>).</returns>
@@ -144,13 +179,41 @@ internal sealed unsafe class PipeWireStream : IDisposable
                 if (_failure != null) return false;
                 if (_newest != null) return true;
 
-                long remaining = deadline - Stopwatch.GetTimestamp();
-                if (remaining <= 0) return false;
+                long now = Stopwatch.GetTimestamp();
+                long waitUntil = deadline;
+                if (_hasStreamed && (_state != PW_STREAM_STATE_STREAMING))
+                {
+                    long pauseEnd = _stateTimestamp + ToTicks(PauseTimeout);
+                    if (now >= pauseEnd)
+                    {
+                        _failure = new InvalidOperationException($"The PipeWire stream is {GetStateName(_state)} for more than {PauseTimeout.TotalSeconds} s: its node was probably removed.");
+                        return false;
+                    }
 
-                // Rounded up: waking before the deadline would only wait again.
-                Monitor.Wait(_frameLock, (int)Math.Min(int.MaxValue, ((remaining * 1000) + Stopwatch.Frequency - 1) / Stopwatch.Frequency));
+                    waitUntil = Math.Min(deadline, pauseEnd);
+                }
+
+                if (now >= deadline) return false;
+
+                Wait(waitUntil - now);
             }
     }
+
+    // Under _frameLock. Rounded up to whole milliseconds: waking before the end would only wait again.
+    private void Wait(long ticks) => Monitor.Wait(_frameLock, (int)Math.Min(int.MaxValue, ((ticks * 1000) + Stopwatch.Frequency - 1) / Stopwatch.Frequency));
+
+    private static long ToTicks(TimeSpan time) => (long)(time.TotalSeconds * Stopwatch.Frequency);
+
+    private static string GetStateName(int state)
+        => state switch
+        {
+            PW_STREAM_STATE_ERROR => "failed",
+            PW_STREAM_STATE_UNCONNECTED => "unconnected",
+            PW_STREAM_STATE_CONNECTING => "connecting",
+            PW_STREAM_STATE_PAUSED => "paused",
+            PW_STREAM_STATE_STREAMING => "streaming",
+            _ => $"in state {state}"
+        };
 
     /// <summary>
     /// Makes the newest frame the current one and gives the previous current one back to PipeWire.
@@ -250,6 +313,14 @@ internal sealed unsafe class PipeWireStream : IDisposable
         {
             PipeWireStream? stream = FromData(data);
             if (stream == null) return;
+
+            lock (stream._frameLock)
+            {
+                stream._state = state;
+                stream._stateTimestamp = Stopwatch.GetTimestamp();
+                stream._hasStreamed |= state == PW_STREAM_STATE_STREAMING;
+                Monitor.PulseAll(stream._frameLock);
+            }
 
             // E.g. the compositor removed the node (the user stopped sharing the monitor) or PipeWire went away.
             if (state == PW_STREAM_STATE_ERROR)

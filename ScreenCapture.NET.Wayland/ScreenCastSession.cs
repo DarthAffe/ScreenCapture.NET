@@ -28,6 +28,11 @@ internal sealed class ScreenCastSession : IDisposable
 
     private const uint SOURCE_TYPE_MONITOR = 1;
 
+    internal const uint CURSOR_MODE_HIDDEN = 1;
+    internal const uint CURSOR_MODE_EMBEDDED = 2;
+
+    private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
+
     // Disposing waits this long for the portal to confirm the end of the session; the connection is closed afterwards anyway.
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(1);
 
@@ -47,7 +52,7 @@ internal sealed class ScreenCastSession : IDisposable
 
     // Guards the PipeWire connection, created by the first capture.
     private readonly Lock _coreLock = new();
-    private PipeWireCore? _core;
+    private volatile PipeWireCore? _core;
 
     /// <summary>
     /// Gets the streams the user shared; empty until the session is started.
@@ -55,9 +60,10 @@ internal sealed class ScreenCastSession : IDisposable
     public IReadOnlyList<PortalStream> Streams { get; private set; } = [];
 
     /// <summary>
-    /// Gets a value indicating whether the session ended: the portal closed it (e.g. the user stopped sharing) or the connection to the session bus closed.
+    /// Gets a value indicating whether the session ended: the portal closed it (e.g. the user stopped sharing), the connection to the session bus closed,
+    /// or the connection to PipeWire broke (the nodes of the session are gone with it, e.g. when the daemon restarted).
     /// </summary>
-    public bool IsClosed => _isClosed || _disconnected.IsCompleted;
+    public bool IsClosed => _isClosed || _disconnected.IsCompleted || (_core?.IsDead ?? false);
 
     /// <summary>
     /// Gets a value indicating whether the session was started (the user shared the <see cref="Streams"/>).
@@ -87,8 +93,9 @@ internal sealed class ScreenCastSession : IDisposable
     /// <summary>
     /// Creates the session, lets the user choose the monitors to share and starts sharing them. Waits until the user answered the dialog of the compositor.
     /// </summary>
+    /// <param name="options">The options of the session.</param>
     /// <exception cref="InvalidOperationException">The portal isn't available, the user cancelled the dialog or the portal ended the session.</exception>
-    public async Task StartAsync()
+    public async Task StartAsync(WaylandSessionOptions options)
     {
         try
         {
@@ -100,10 +107,13 @@ internal sealed class ScreenCastSession : IDisposable
             _closedWatch = await _connection.WatchSignalAsync(PORTAL_NAME, sessionPath, SESSION_INTERFACE, "Closed", _ => _isClosed = true, ObserverFlags.None, false, null).ConfigureAwait(false);
             _sessionPath = sessionPath;
 
+            uint? cursorMode = GetCursorMode(options, await ReadAvailableCursorModesAsync().ConfigureAwait(false));
             await RequestAsync("SelectSources", (ref MessageWriter writer) =>
             {
                 WriteOption(ref writer, "types", SOURCE_TYPE_MONITOR);
                 WriteOption(ref writer, "multiple", true);
+                if (cursorMode is { } mode)
+                    WriteOption(ref writer, "cursor_mode", mode);
             }, sessionPath).ConfigureAwait(false);
 
             Dictionary<string, VariantValue> started = await RequestAsync("Start", null, sessionPath, parentWindow: string.Empty).ConfigureAwait(false);
@@ -162,6 +172,45 @@ internal sealed class ScreenCastSession : IDisposable
         catch (DBusExceptionBase ex)
         {
             throw new InvalidOperationException($"The screen cast portal didn't open the PipeWire connection: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets the cursor mode to ask for: only one the portal offers (asking for another one ends the session); <c>null</c> to ask for none (the portal hides the pointer then).
+    /// </summary>
+    /// <param name="options">The options of the session.</param>
+    /// <param name="availableCursorModes">The <c>AvailableCursorModes</c> of the portal (0 before version 2 of the interface, which has no cursor modes).</param>
+    internal static uint? GetCursorMode(WaylandSessionOptions options, uint availableCursorModes)
+    {
+        uint mode = options.DrawCursor ? CURSOR_MODE_EMBEDDED : CURSOR_MODE_HIDDEN;
+        return (availableCursorModes & mode) != 0 ? mode : null;
+    }
+
+    // Version 1 of the interface has no cursor modes: the property doesn't exist.
+    private async Task<uint> ReadAvailableCursorModesAsync()
+    {
+        MessageWriter writer = _connection.GetMessageWriter();
+        MessageBuffer call;
+        try
+        {
+            writer.WriteMethodCallHeader(PORTAL_NAME, PORTAL_PATH, PROPERTIES_INTERFACE, "Get", "ss", MessageFlags.None);
+            writer.WriteString(SCREEN_CAST_INTERFACE);
+            writer.WriteString("AvailableCursorModes");
+            call = writer.CreateMessage();
+        }
+        finally
+        {
+            writer.Dispose();
+        }
+
+        try
+        {
+            VariantValue modes = await _connection.CallMethodAsync(call, (message, _) => message.GetBodyReader().ReadVariantValue(), null).ConfigureAwait(false);
+            return modes.Type == VariantValueType.UInt32 ? modes.GetUInt32() : 0;
+        }
+        catch (DBusErrorReplyException)
+        {
+            return 0;
         }
     }
 
