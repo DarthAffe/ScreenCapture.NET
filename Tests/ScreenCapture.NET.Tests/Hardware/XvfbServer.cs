@@ -19,7 +19,8 @@ internal sealed partial class XvfbServer : IDisposable
     private readonly List<string> _arguments;
     private readonly bool _ownIpcNamespace;
 
-    private Process _process;
+    // Null after a restart that failed to launch the server again.
+    private Process? _process;
 
     /// <summary>
     /// Gets the name of the X display (e.g. <c>:3</c>) to connect to.
@@ -68,7 +69,7 @@ internal sealed partial class XvfbServer : IDisposable
     /// </summary>
     public void Kill()
     {
-        if (!_process.HasExited)
+        if (_process is { HasExited: false })
         {
             // unshare execs Xvfb, so this is the server in both cases.
             _process.Kill();
@@ -82,7 +83,8 @@ internal sealed partial class XvfbServer : IDisposable
     public void Restart()
     {
         Kill();
-        _process.Dispose();
+        _process?.Dispose();
+        _process = null;
 
         // An explicit display number is used as is; -displayfd still tells when the server is ready.
         (_process, string displayNumber) = Launch([DisplayName, .. _arguments], _ownIpcNamespace);
@@ -245,7 +247,7 @@ internal sealed partial class XvfbServer : IDisposable
     public void Dispose()
     {
         Kill();
-        _process.Dispose();
+        _process?.Dispose();
     }
 
     #endregion
