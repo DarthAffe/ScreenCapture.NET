@@ -22,6 +22,9 @@ internal sealed partial class XvfbServer : IDisposable
     // Null after a restart that failed to launch the server again.
     private Process? _process;
 
+    // Held from a kill that reserves the display number until the restart or the disposal.
+    private FileStream? _displayNumberLock;
+
     /// <summary>
     /// Gets the name of the X display (e.g. <c>:3</c>) to connect to.
     /// </summary>
@@ -60,15 +63,23 @@ internal sealed partial class XvfbServer : IDisposable
         if (!randrExtension)
             arguments.AddRange(["-extension", "RANDR"]);
 
-        (Process process, string displayNumber) = Launch(arguments, ownIpcNamespace);
+        Process process;
+        string displayNumber;
+        using (LockDisplayNumbers())
+            (process, displayNumber) = Launch(arguments, ownIpcNamespace);
+
         return new XvfbServer(arguments, ownIpcNamespace, process, $":{displayNumber}");
     }
 
     /// <summary>
     /// Kills the server, like a crash: its clients' connections break.
     /// </summary>
-    public void Kill()
+    /// <param name="reserveDisplay">Whether the display number stays reserved until <see cref="Restart"/> (or <see cref="Dispose"/>), so a server of the other TFM's test host can't take it in between.</param>
+    public void Kill(bool reserveDisplay = false)
     {
+        if (reserveDisplay)
+            _displayNumberLock ??= LockDisplayNumbers();
+
         if (_process is { HasExited: false })
         {
             // unshare execs Xvfb, so this is the server in both cases.
@@ -82,13 +93,49 @@ internal sealed partial class XvfbServer : IDisposable
     /// </summary>
     public void Restart()
     {
-        Kill();
+        Kill(reserveDisplay: true);
         _process?.Dispose();
         _process = null;
 
         // An explicit display number is used as is; -displayfd still tells when the server is ready.
-        (_process, string displayNumber) = Launch([DisplayName, .. _arguments], _ownIpcNamespace);
+        string displayNumber;
+        try
+        {
+            (_process, displayNumber) = Launch([DisplayName, .. _arguments], _ownIpcNamespace);
+        }
+        finally
+        {
+            ReleaseDisplayNumber();
+        }
+
         Assert.AreEqual(DisplayName, $":{displayNumber}", "The server restarted with another display.");
+    }
+
+    /// <summary>
+    /// Locks the display numbers against the other TFM's test host (both run at once): held while a server picks a free number with -displayfd and while a killed server's number is reserved for its restart.
+    /// The lock is a file lock (flock), which the system releases if a test host crashes.
+    /// </summary>
+    private static FileStream LockDisplayNumbers()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "ScreenCapture.NET.Tests-Xvfb.lock");
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (stopwatch.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                Thread.Sleep(10);
+            }
+        }
+    }
+
+    private void ReleaseDisplayNumber()
+    {
+        _displayNumberLock?.Dispose();
+        _displayNumberLock = null;
     }
 
     private static (Process process, string displayNumber) Launch(List<string> arguments, bool ownIpcNamespace)
@@ -248,6 +295,7 @@ internal sealed partial class XvfbServer : IDisposable
     {
         Kill();
         _process?.Dispose();
+        ReleaseDisplayNumber();
     }
 
     #endregion

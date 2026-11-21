@@ -799,7 +799,7 @@ public sealed partial class X11HardwareTests
         screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
         HardwareTestHelper.CaptureFrame(screenCapture);
 
-        server.Kill();
+        server.Kill(reserveDisplay: true);
         Assert.AreEqual(CaptureResult.Unavailable, screenCapture.CaptureScreen());
 
         // It found the broken connection, then couldn't connect again.
