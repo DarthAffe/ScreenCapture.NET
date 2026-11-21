@@ -27,6 +27,7 @@ internal static unsafe partial class WGCInterop
     private static readonly Guid IID_IGraphicsCaptureSessionStatics = new("2224a540-5974-49aa-b232-0882536f4cb5");
     private static readonly Guid IID_IGraphicsCaptureSession2 = new("2c39ae40-7d2e-5044-804e-8b6799d4cf9e");
     private static readonly Guid IID_IGraphicsCaptureSession3 = new("f2cdd966-22ae-5ea1-9596-3a289344c3be");
+    private static readonly Guid IID_IGraphicsCaptureSession5 = new("67c0ea62-1f85-5061-925a-239be0ac09cb");
     private static readonly Guid IID_IGraphicsCaptureItem = new("79c3f95b-31f7-4ec2-a464-632ef5d30760");
     private static readonly Guid IID_IGraphicsCaptureItemInterop = new("3628e81b-3cac-4c60-b7f4-23ce0e0c3356");
     private static readonly Guid IID_IDirect3D11CaptureFramePoolStatics2 = new("589b103f-6bbc-5df5-a991-02e28b3b66d5");
@@ -282,6 +283,25 @@ internal static unsafe partial class WGCInterop
         finally
         {
             Marshal.Release(session3);
+        }
+    }
+
+    /// <summary>
+    /// Sets the shortest time between two frames of the session (<c>IGraphicsCaptureSession5.MinUpdateInterval</c>).
+    /// </summary>
+    /// <returns><c>false</c> if this Windows doesn't support it (before Windows 11 24H2).</returns>
+    public static bool TrySetMinUpdateInterval(WinRTHandle session, TimeSpan interval)
+    {
+        if (Marshal.QueryInterface(session.Pointer, IID_IGraphicsCaptureSession5, out nint session5) < 0) return false;
+        try
+        {
+            // Windows.Foundation.TimeSpan is a struct with one Int64 (100 ns units), passed like an Int64.
+            Check(((delegate* unmanaged[Stdcall]<nint, long, int>)VTable(session5)[WINRT + 1])(session5, interval.Ticks));
+            return true;
+        }
+        finally
+        {
+            Marshal.Release(session5);
         }
     }
 

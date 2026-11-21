@@ -21,6 +21,9 @@ namespace ScreenCapture.NET;
 /// The timestamp of a frame (<see cref="ScreenCaptureUpdatedEventArgs.Timestamp"/>) is when it's shown on the display, which can be up to a refresh after the capture got it.
 /// </para>
 /// <para>
+/// Since Windows 11 24H2 every frame Windows composes is captured, up to the refresh rate of the display. Older versions deliver at most about 60 frames per second, also on displays with a higher refresh rate.
+/// </para>
+/// <para>
 /// A display mode change (resolution, rotation) changes the size of the frames: the next capture restarts and reads the display again (see <see cref="IScreenCapture.DisplayChanged"/>).
 /// </para>
 /// <para>
@@ -48,6 +51,10 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     // The frame Windows writes while the capture reads the last one.
     private const int FRAME_POOL_BUFFERS = 2;
+
+    // With the default (0) Windows delivers at most about 60 frames per second, also on displays with a higher refresh rate.
+    // Values below 1 ms are reported to behave like the default (https://github.com/robmikh/Win32CaptureSample/issues/82).
+    private static readonly TimeSpan MinUpdateInterval = TimeSpan.FromMilliseconds(1);
 
     #endregion
 
@@ -424,6 +431,7 @@ public sealed class WGCScreenCapture : AbstractScreenCapture<ColorBGRA>
                 // Without the option Windows would draw the mouse pointer into the frames anyway (before Windows 10 2004 it always does).
                 TrySetCursorCaptureEnabled(_session, Options.DrawCursor);
                 TrySetBorderRequired(_session, Options.ShowBorder);
+                TrySetMinUpdateInterval(_session, MinUpdateInterval);
                 StartCapture(_session);
 
                 // Zone writes take the display of the capture texture from the pipeline: the zones get this one after the capture.
