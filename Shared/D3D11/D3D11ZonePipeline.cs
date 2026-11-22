@@ -84,8 +84,8 @@ internal sealed class D3D11ZonePipeline
             CPUAccessFlags = CpuAccessFlags.None,
             BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
             Format = Format.B8G8R8A8_UNorm,
-            Width = width,
-            Height = height,
+            Width = (uint)width,
+            Height = (uint)height,
             MiscFlags = ResourceOptionFlags.None,
             MipLevels = 1,
             ArraySize = 1,
@@ -253,8 +253,8 @@ internal sealed class D3D11ZonePipeline
             try
             {
                 // The staging texture is the downscaled region in the orientation of the capture texture; only the rotation is left.
-                ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.StagingHeight);
-                CaptureZoneWriter.WriteFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, mapSource.RowPitch), captureZone, buffer, _sourceRotation);
+                ReadOnlySpan<byte> source = mapSource.AsSpan((int)mapSource.RowPitch * textures.StagingHeight);
+                CaptureZoneWriter.WriteFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, (int)mapSource.RowPitch), captureZone, buffer, _sourceRotation);
             }
             finally
             {
@@ -286,7 +286,7 @@ internal sealed class D3D11ZonePipeline
         {
             context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, captureTexture, 0, sourceBox);
             context.GenerateMips(textures.ScalingTextureView);
-            context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, textures.DownscaleLevel);
+            context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, (uint)textures.DownscaleLevel);
         }
         else
             context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, captureTexture, 0, sourceBox);
@@ -334,8 +334,8 @@ internal sealed class D3D11ZonePipeline
             CPUAccessFlags = CpuAccessFlags.Read,
             BindFlags = BindFlags.None,
             Format = Format.B8G8R8A8_UNorm,
-            Width = width,
-            Height = height,
+            Width = (uint)width,
+            Height = (uint)height,
             MiscFlags = ResourceOptionFlags.None,
             MipLevels = 1,
             ArraySize = 1,
@@ -353,10 +353,10 @@ internal sealed class D3D11ZonePipeline
                 CPUAccessFlags = CpuAccessFlags.None,
                 BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                 Format = Format.B8G8R8A8_UNorm,
-                Width = unscaledWidth,
-                Height = unscaledHeight,
+                Width = (uint)unscaledWidth,
+                Height = (uint)unscaledHeight,
                 MiscFlags = ResourceOptionFlags.GenerateMips,
-                MipLevels = downscaleLevel + 1,
+                MipLevels = (uint)(downscaleLevel + 1),
                 ArraySize = 1,
                 SampleDescription = { Count = 1, Quality = 0 },
                 Usage = ResourceUsage.Default
@@ -434,7 +434,7 @@ internal sealed class D3D11ZonePipeline
                 textureView = device.CreateShaderResourceView(texture);
                 captureTextureTarget = device.CreateRenderTargetView(captureTexture);
 
-                return new HdrFrame(captureTextureDesc.Width, captureTextureDesc.Height, texture, textureView, captureTextureTarget, new HdrToneMapper(device));
+                return new HdrFrame((int)captureTextureDesc.Width, (int)captureTextureDesc.Height, texture, textureView, captureTextureTarget, new HdrToneMapper(device));
             }
             catch
             {

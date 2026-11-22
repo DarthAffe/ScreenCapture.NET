@@ -103,7 +103,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         try
         {
-            DisplayMode displayMode = _direct3D9.GetAdapterDisplayMode(Display.Index);
+            DisplayMode displayMode = _direct3D9.GetAdapterDisplayMode((uint)Display.Index);
             return (displayMode.Width == frame.Width) && (displayMode.Height == frame.Height);
         }
         catch (SharpGenException)
@@ -156,13 +156,13 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                 PresentParameters presentParameters = new()
                 {
-                    BackBufferWidth = display.Width,
-                    BackBufferHeight = display.Height,
+                    BackBufferWidth = (uint)display.Width,
+                    BackBufferHeight = (uint)display.Height,
                     Windowed = true,
                     SwapEffect = SwapEffect.Discard
                 };
-                _device = _direct3D9.CreateDevice(display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
-                _surface = _device.CreateOffscreenPlainSurface(display.Width, display.Height, Format.A8R8G8B8, Pool.Scratch);
+                _device = _direct3D9.CreateDevice((uint)display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
+                _surface = _device.CreateOffscreenPlainSurface((uint)display.Width, (uint)display.Height, Format.A8R8G8B8, Pool.Scratch);
                 _frame = new FrameBuffer(display.Width, display.Height);
 
                 SetDisplay(display);

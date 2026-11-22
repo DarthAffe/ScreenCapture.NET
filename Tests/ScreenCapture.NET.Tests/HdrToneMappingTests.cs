@@ -46,13 +46,13 @@ public sealed class HdrToneMappingTests
             for (int channel = 0; channel < 3; channel++)
                 pixels[(i * 4) + channel] = (Half)rgb[(i * 3) + channel];
 
-        Texture2DDescription frameDesc = new(Format.R16G16B16A16_Float, width, height, 1, 1, BindFlags.ShaderResource);
+        Texture2DDescription frameDesc = new(Format.R16G16B16A16_Float, (uint)width, (uint)height, 1, 1, BindFlags.ShaderResource);
         using ID3D11Texture2D frame = CreateTexture(device, frameDesc, pixels, width * 8);
         using ID3D11ShaderResourceView frameView = device.CreateShaderResourceView(frame);
 
-        using ID3D11Texture2D target = device.CreateTexture2D(new Texture2DDescription(Format.B8G8R8A8_UNorm, width, height, 1, 1, BindFlags.RenderTarget));
+        using ID3D11Texture2D target = device.CreateTexture2D(new Texture2DDescription(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, 1, 1, BindFlags.RenderTarget));
         using ID3D11RenderTargetView targetView = device.CreateRenderTargetView(target);
-        using ID3D11Texture2D staging = device.CreateTexture2D(new Texture2DDescription(Format.B8G8R8A8_UNorm, width, height, 1, 1, BindFlags.None,
+        using ID3D11Texture2D staging = device.CreateTexture2D(new Texture2DDescription(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, 1, 1, BindFlags.None,
                                                                                          ResourceUsage.Staging, CpuAccessFlags.Read));
 
         using HdrToneMapper toneMapper = new(device);
@@ -66,8 +66,8 @@ public sealed class HdrToneMappingTests
             MappedSubresource mapped = context.Map(staging, 0, MapMode.Read);
             try
             {
-                ReadOnlySpan<byte> data = mapped.AsSpan(mapped.RowPitch * height);
-                results[i] = RefImage<ColorBGRA>.Wrap(data, width, height, mapped.RowPitch).ToArray();
+                ReadOnlySpan<byte> data = mapped.AsSpan((int)mapped.RowPitch * height);
+                results[i] = RefImage<ColorBGRA>.Wrap(data, width, height, (int)mapped.RowPitch).ToArray();
             }
             finally
             {
@@ -82,7 +82,7 @@ public sealed class HdrToneMappingTests
         where T : unmanaged
     {
         fixed (T* pointer = data)
-            return device.CreateTexture2D(description, new SubresourceData((nint)pointer, rowPitch));
+            return device.CreateTexture2D(description, new SubresourceData((nint)pointer, (uint)rowPitch));
     }
 
     internal static float SrgbToLinear(byte value)
@@ -204,7 +204,7 @@ public sealed class HdrToneMappingTests
     {
         fixed (byte* pointer = bytecode)
         {
-            Compiler.StripShader((nint)pointer, bytecode.Length, STRIP_FLAGS, out Blob stripped).CheckError();
+            Compiler.StripShader((nint)pointer, (nuint)bytecode.Length, STRIP_FLAGS, out Blob stripped).CheckError();
             using (stripped)
                 return stripped.AsBytes();
         }

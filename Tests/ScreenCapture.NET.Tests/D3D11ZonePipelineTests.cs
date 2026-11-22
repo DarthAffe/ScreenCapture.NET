@@ -305,7 +305,7 @@ public sealed class D3D11ZonePipelineTests
             where T : unmanaged
         {
             fixed (T* pointer = data)
-                return _device.CreateTexture2D(new Texture2DDescription(format, width, height, 1, 1, BindFlags.ShaderResource), new SubresourceData((nint)pointer, rowPitch));
+                return _device.CreateTexture2D(new Texture2DDescription(format, (uint)width, (uint)height, 1, 1, BindFlags.ShaderResource), new SubresourceData((nint)pointer, (uint)rowPitch));
         }
 
         /// <summary>

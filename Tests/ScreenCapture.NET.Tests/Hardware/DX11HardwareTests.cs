@@ -494,9 +494,9 @@ public sealed class DX11HardwareTests
         DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).CheckError();
         using IDXGIFactory1 _ = factory!;
 
-        for (int adapterIndex = 0; factory!.EnumAdapters1(adapterIndex, out IDXGIAdapter1? adapter).Success; adapterIndex++)
+        for (int adapterIndex = 0; factory!.EnumAdapters1((uint)adapterIndex, out IDXGIAdapter1? adapter).Success; adapterIndex++)
             using (adapter)
-                for (int outputIndex = 0; adapter.EnumOutputs(outputIndex, out IDXGIOutput? output).Success; outputIndex++)
+                for (int outputIndex = 0; adapter.EnumOutputs((uint)outputIndex, out IDXGIOutput? output).Success; outputIndex++)
                     using (output)
                     {
                         using IDXGIOutput6 output6 = output.QueryInterface<IDXGIOutput6>();

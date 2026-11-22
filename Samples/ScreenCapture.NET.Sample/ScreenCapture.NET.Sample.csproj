@@ -3,6 +3,10 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+
+    <!-- SharpGen.Runtime (Vortice) warns about its reflection fallback for COM callbacks, which isn't used here.
+         IL2104 is the warning about a referenced assembly as a whole; the libraries' own code is still checked by their trim and AOT analyzers (IsAotCompatible). -->
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

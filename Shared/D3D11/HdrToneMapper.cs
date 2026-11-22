@@ -49,7 +49,7 @@ internal sealed class HdrToneMapper : IDisposable
         {
             _vertexShader = device.CreateVertexShader(VERTEX_SHADER.Value);
             _pixelShader = device.CreatePixelShader(PIXEL_SHADER.Value);
-            _constants = device.CreateBuffer(new BufferDescription(Marshal.SizeOf<Constants>(), BindFlags.ConstantBuffer));
+            _constants = device.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<Constants>(), BindFlags.ConstantBuffer));
         }
         catch
         {

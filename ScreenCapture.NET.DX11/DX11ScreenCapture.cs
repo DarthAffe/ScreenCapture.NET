@@ -151,7 +151,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         bool acquired = false;
         try
         {
-            Result acquireResult = duplicatedOutput.AcquireNextFrame(_timeout, out OutduplFrameInfo frameInfo, out screenResource);
+            Result acquireResult = duplicatedOutput.AcquireNextFrame((uint)_timeout, out OutduplFrameInfo frameInfo, out screenResource);
             if (acquireResult == ResultCode.WaitTimeout) 
                 return CaptureResult.Timeout;
 
@@ -208,7 +208,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
         if (frameInfo.PointerShapeBufferSize > 0)
         {
-            _cursorShape = ReadCursorShape(duplicatedOutput, frameInfo.PointerShapeBufferSize);
+            _cursorShape = ReadCursorShape(duplicatedOutput, (int)frameInfo.PointerShapeBufferSize);
             changed = true;
         }
 
@@ -230,14 +230,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         if (_cursorShapeBuffer.Length < size)
             _cursorShapeBuffer = new byte[size];
 
-        int requiredSize;
+        uint requiredSize;
         OutduplPointerShapeInfo shapeInfo;
         fixed (byte* buffer = _cursorShapeBuffer)
-            duplicatedOutput.GetFramePointerShape(_cursorShapeBuffer.Length, (IntPtr)buffer, out requiredSize, out shapeInfo).CheckError();
+            duplicatedOutput.GetFramePointerShape((uint)_cursorShapeBuffer.Length, (IntPtr)buffer, out requiredSize, out shapeInfo).CheckError();
 
         try
         {
-            return CursorShape.Create((PointerShapeType)shapeInfo.Type, shapeInfo.Width, shapeInfo.Height, shapeInfo.Pitch, _cursorShapeBuffer.AsSpan(0, Math.Min(requiredSize, _cursorShapeBuffer.Length)));
+            return CursorShape.Create((PointerShapeType)shapeInfo.Type, (int)shapeInfo.Width, (int)shapeInfo.Height, (int)shapeInfo.Pitch, _cursorShapeBuffer.AsSpan(0, Math.Min((int)requiredSize, _cursorShapeBuffer.Length)));
         }
         catch (ArgumentException ex)
         {

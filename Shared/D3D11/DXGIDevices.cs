@@ -26,7 +26,7 @@ internal static class DXGIDevices
         List<GraphicsCard> graphicsCards = [];
         for (int i = 0; ; i++)
         {
-            bool found = factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success;
+            bool found = factory.EnumAdapters1((uint)i, out IDXGIAdapter1 adapter).Success;
             using (adapter)
             {
                 if (!found) return graphicsCards;
@@ -56,7 +56,7 @@ internal static class DXGIDevices
 
         for (int i = 0; ; i++)
         {
-            bool found = adapter.EnumOutputs(i, out IDXGIOutput output).Success;
+            bool found = adapter.EnumOutputs((uint)i, out IDXGIOutput output).Success;
             using (output)
             {
                 if (!found) return displays;
@@ -71,7 +71,7 @@ internal static class DXGIDevices
     {
         for (int i = 0; ; i++)
         {
-            if (!factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success)
+            if (!factory.EnumAdapters1((uint)i, out IDXGIAdapter1 adapter).Success)
             {
                 adapter?.Dispose();
                 return null;
@@ -86,7 +86,7 @@ internal static class DXGIDevices
     public static GraphicsCard CreateGraphicsCard(IDXGIAdapter1 adapter, int index)
     {
         AdapterDescription1 description = adapter.Description1;
-        return new GraphicsCard(WindowsDisplayDevices.GetGraphicsCardId(description.Luid), index, description.Description, description.VendorId, description.DeviceId);
+        return new GraphicsCard(WindowsDisplayDevices.GetGraphicsCardId(description.Luid), index, description.Description, (int)description.VendorId, (int)description.DeviceId);
     }
 
     public static Display CreateDisplay(OutputDescription description, int index, GraphicsCard graphicsCard, WindowsDisplayDevices devices)
@@ -132,14 +132,14 @@ internal static class DXGIDevices
             IDXGIAdapter1? adapter = null;
             try
             {
-                if (!factory.EnumAdapters1(adapterIndex, out adapter).Success) return null;
+                if (!factory.EnumAdapters1((uint)adapterIndex, out adapter).Success) return null;
 
                 for (int outputIndex = 0; ; outputIndex++)
                 {
                     IDXGIOutput? output = null;
                     try
                     {
-                        if (!adapter.EnumOutputs(outputIndex, out output).Success) break;
+                        if (!adapter.EnumOutputs((uint)outputIndex, out output).Success) break;
 
                         OutputDescription description = output.Description;
                         if (!matches(description, devices)) continue;

@@ -15,7 +15,7 @@ internal static partial class DX9Devices
 {
     #region Methods
 
-    public static string GetGraphicsCardId(IDirect3D9Ex direct3D9, int adapter) => WindowsDisplayDevices.GetGraphicsCardId(direct3D9.GetAdapterLuid(adapter));
+    public static string GetGraphicsCardId(IDirect3D9Ex direct3D9, int adapter) => WindowsDisplayDevices.GetGraphicsCardId(direct3D9.GetAdapterLuid((uint)adapter));
 
     /// <summary>
     /// Creates the graphics card the given adapter belongs to.
@@ -32,18 +32,18 @@ internal static partial class DX9Devices
                 break;
             }
 
-        AdapterIdentifier identifier = direct3D9.GetAdapterIdentifier(index);
+        AdapterIdentifier identifier = direct3D9.GetAdapterIdentifier((uint)index);
         return new GraphicsCard(id, index, identifier.Description, identifier.VendorId, identifier.DeviceId);
     }
 
     public static Display CreateDisplay(IDirect3D9Ex direct3D9, int adapter, GraphicsCard graphicsCard, WindowsDisplayDevices devices)
     {
-        AdapterIdentifier identifier = direct3D9.GetAdapterIdentifier(adapter);
-        DisplayMode displayMode = direct3D9.GetAdapterDisplayMode(adapter);
+        AdapterIdentifier identifier = direct3D9.GetAdapterIdentifier((uint)adapter);
+        DisplayMode displayMode = direct3D9.GetAdapterDisplayMode((uint)adapter);
         (string id, string friendlyName) = devices.GetMonitor(identifier.DeviceName);
-        (int x, int y) = GetPosition(direct3D9.GetAdapterMonitor(adapter));
+        (int x, int y) = GetPosition(direct3D9.GetAdapterMonitor((uint)adapter));
 
-        return new Display(id, adapter, identifier.DeviceName, friendlyName, x, y, displayMode.Width, displayMode.Height, ImageRotation.None, graphicsCard);
+        return new Display(id, adapter, identifier.DeviceName, friendlyName, x, y, (int)displayMode.Width, (int)displayMode.Height, ImageRotation.None, graphicsCard);
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ internal static partial class DX9Devices
         WindowsDisplayDevices devices = WindowsDisplayDevices.Query();
 
         for (int i = 0; i < direct3D9.AdapterCount; i++)
-            if (string.Equals(devices.GetMonitor(direct3D9.GetAdapterIdentifier(i).DeviceName).Id, id, StringComparison.Ordinal))
+            if (string.Equals(devices.GetMonitor(direct3D9.GetAdapterIdentifier((uint)i).DeviceName).Id, id, StringComparison.Ordinal))
                 return CreateDisplay(direct3D9, i, CreateGraphicsCard(direct3D9, i), devices);
 
         return null;
