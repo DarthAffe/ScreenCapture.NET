@@ -21,8 +21,8 @@ internal static partial class InteractiveTestHelper
     #region Methods
 
     /// <summary>
-    /// Checks on every display that the pointer shows in zones under it (also downscaled ones), at its position, and disappears when it moves away,
-    /// also to another display; after a restart it shows again without moving. Inconclusive if no display could be checked (nothing stood still).
+    /// Checks on every display that the pointer shows in zones under it at its position, disappears when it moves away, and shows again after a restart.
+    /// Inconclusive if nothing stood still.
     /// </summary>
     /// <param name="service">The service of the captures; created with the option that draws the pointer.</param>
     /// <param name="getScreenCapture">Gets the capture of a display from the service.</param>
@@ -137,7 +137,7 @@ internal static partial class InteractiveTestHelper
             MoveCursor(screenCapture, new POINT(display.X + region.X + (SIZE / 2), display.Y + region.Y + (SIZE / 2)));
             (ColorBGRA[] pixels, ColorBGRA[] downscaledPixels) with = (HardwareTestHelper.GetPixels(zone), HardwareTestHelper.GetPixels(downscaled));
 
-            // A restart forgets the pointer (like one after the secure desktop or a mode change): the new capture has to deliver it again, without a move.
+            // A restart forgets the pointer, the new capture has to deliver it without a move.
             screenCapture.Restart();
             CaptureFor(screenCapture, TimeSpan.FromMilliseconds(500));
             ColorBGRA[] afterRestart = HardwareTestHelper.GetPixels(zone);
@@ -157,7 +157,7 @@ internal static partial class InteractiveTestHelper
 
             string name = $"{display.DeviceName} ({display.Rotation}), zone {region}";
 
-            // The top left of the drawn shape is the position minus the hot spot (which lies within the shape, up to 64 pixels for usual pointer sizes).
+            // The shape starts at the position minus the hot spot (up to 64 px for usual pointers).
             (int left, int top)? drawn = null;
             for (int i = 0; i < with.pixels.Length; i++)
                 if (with.pixels[i] != without.pixels[i])
@@ -211,7 +211,7 @@ internal static partial class InteractiveTestHelper
             screenCapture.UnregisterCaptureZone(zone);
     }
 
-    // Moves the pointer and captures for a while, so the zones show it at its new place (also if something else on the screen renders all the time).
+    // Moves the pointer and captures for a while, so the zones show it at its new place.
     private static void MoveCursor(AbstractScreenCapture<ColorBGRA> screenCapture, POINT position)
     {
         Assert.IsTrue(SetCursorPos(position.X, position.Y));

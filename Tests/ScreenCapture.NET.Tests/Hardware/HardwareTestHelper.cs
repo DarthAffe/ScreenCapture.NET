@@ -3,21 +3,21 @@ using HPPH;
 namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
-/// Shared checks for backend smoke tests. These need a real GPU/display and are excluded from CI via TestCategory "Hardware" (and "Interactive", see <see cref="INTERACTIVE_CATEGORY"/>).
+/// Shared checks for backend smoke tests. They need a real GPU/display and are excluded from CI ("Hardware", and "Interactive", see <see cref="INTERACTIVE_CATEGORY"/>).
 /// </summary>
 internal static class HardwareTestHelper
 {
     public const string CATEGORY = "Hardware";
 
     /// <summary>
-    /// Tests that take over the desktop (e.g. move the mouse pointer): only run on request, not with <see cref="CATEGORY"/> and never in CI.
+    /// Tests that take over the desktop (e.g. move the mouse pointer). Only run on request, never in CI.
     /// </summary>
     public const string INTERACTIVE_CATEGORY = "Interactive";
 
     private const int CAPTURE_ATTEMPTS = 20;
 
     /// <summary>
-    /// A display that doesn't exist (by default: its index is out of range on every backend), so every restart of a capture fails.
+    /// A display that doesn't exist on any backend, so every restart fails.
     /// </summary>
     public static Display CreateMissingDisplay(int index = 99)
         => new("missing", index, "missing", string.Empty, 0, 0, 640, 480, ImageRotation.None, new GraphicsCard("first", 0, "first", 0, 0));
@@ -97,7 +97,7 @@ internal static class HardwareTestHelper
         ICaptureZone reference = screenCapture.RegisterCaptureZone(new CaptureRegion(centerX, centerY, size, size), downscaleLevel);
         ICaptureZone topLeft = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, size, size), downscaleLevel);
 
-        // No new frame needed: the zones are updated from the last captured frame even if this returns false (e.g. on a static desktop).
+        // No new frame needed, the zones are updated from the last one.
         screenCapture.CaptureScreen();
 
         byte[] movedPixels;
@@ -118,8 +118,8 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// Changes, registers and unregisters zones while holding a zone lock, while another thread captures continuously.
-    /// This used to deadlock: the capture thread held its locks and waited for the zone lock, the user thread held the zone lock and waited for them.
+    /// Changes, registers and unregisters zones while holding a zone lock and another thread captures.
+    /// This used to deadlock on the lock order.
     /// </summary>
     public static void AssertZonesCanBeChangedWhileCapturing(IScreenCaptureService service, int downscaleLevel = 0)
     {
@@ -172,8 +172,7 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// Checks on every display that partial zones show the same pixels as the same area of a full-screen zone.
-    /// On rotated displays this checks that the source region of a partial zone is mirrored like the full-screen copy.
+    /// Checks on every display that partial zones show the same pixels as the same area of a full-screen zone (also on rotated displays).
     /// </summary>
     public static void AssertPartialZonesMatchFullScreen(IScreenCaptureService service)
     {
@@ -220,23 +219,21 @@ internal static class HardwareTestHelper
 
     /// <summary>
     /// Captures every display with both services and checks that the images have the same orientation.
-    /// <paramref name="reference"/> has to capture in display orientation (like DX9), so this checks the rotation of <paramref name="service"/>.
+    /// <paramref name="reference"/> has to capture in display orientation (like DX9).
     /// </summary>
     /// <remarks>
-    /// The two captures are taken one after the other, so animated content can differ. Instead of comparing pixels this compares the average
-    /// brightness of a coarse grid, and requires the image to be much closer to the reference than the same image rotated by 180°
-    /// (which is what mixing up 90° and 270° would produce).
+    /// The captures are taken one after the other, so it compares the brightness of a coarse grid: the image has to be much closer to the reference
+    /// than to it rotated by 180° (what mixing up 90° and 270° would give).
     /// </remarks>
     /// <summary>
-    /// Downscaled zones of two backends nearly match: e.g. the CPU downscaling (one average per 2^level block) and DX11's mip chain (2x2 per level on the GPU, rounded per level).
+    /// Downscaled zones of two backends nearly match, e.g. the CPU downscaling and DX11's mip chain (rounded per level).
     /// </summary>
     /// <remarks>
-    /// The two captures are taken one after the other: unscaled zones of the same region show if the screen changed between them (then nothing can be compared).
-    /// The first display whose center stood still is compared.
+    /// The captures are taken one after the other; unscaled zones show if the screen changed in between. The first display whose center stood still is compared.
     /// </remarks>
     public static void AssertDownscaledZonesMatchReference(IScreenCaptureService service, IScreenCaptureService reference, int downscaleLevel)
     {
-        // Average difference per color channel (0-255). Rounding the averages differently gives far below 1 (measured: 0.01 at level 1, 0.03 at level 3).
+        // Average difference per channel (0-255). Different rounding gives far below 1 (measured 0.01 at level 1, 0.03 at level 3).
         const double tolerance = 1.0;
         const double maxUnscaledDifference = 0.1;
         const int size = 512;
@@ -294,7 +291,7 @@ internal static class HardwareTestHelper
 
     public static void AssertMatchesReferenceOrientation(IScreenCaptureService service, IScreenCaptureService reference)
     {
-        // Below this (average brightness difference, 0-255) the screen looks too much like itself rotated by 180° to tell the difference.
+        // Below this the screen looks too much like itself rotated by 180°.
         const double minRotatedDistance = 4;
 
         List<Display> referenceDisplays = [.. GetAllDisplays(reference)];
@@ -397,8 +394,8 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// A capture created with an outdated display (e.g. one stored before a mode change) finds it by its id, reads it again when it starts
-    /// and reports the change with its first capture. This is what a restart after a display mode change does, without changing the mode.
+    /// A capture created with an outdated display finds it by its id and reports the change with its first capture,
+    /// like a restart after a mode change, without changing the mode.
     /// </summary>
     public static void AssertOutdatedDisplayIsReadAgain(Display current, Display outdated, Func<Display, IScreenCapture> createCapture)
     {
@@ -421,19 +418,19 @@ internal static class HardwareTestHelper
         Assert.AreEqual(current, zone.Display);
         Assert.IsTrue(zone.IsValid);
 
-        // Any result will do: a static display gives no second new frame, and the display change is applied after every capture.
+        // Any result will do, the change is applied after every capture.
         screenCapture.CaptureScreen();
         Assert.HasCount(1, changes);
     }
 
     /// <summary>
-    /// A restart between a capture getting its frame and writing the zones (here: from the <see cref="IScreenCapture.DisplayChanged"/> handler, which runs exactly then;
-    /// in an app: a <see cref="IScreenCapture.Restart"/> on another thread) leaves the backend without a frame: the zones must not be written from its empty resources.
+    /// A restart between a capture getting its frame and writing the zones (here from <see cref="IScreenCapture.DisplayChanged"/>, which runs exactly then)
+    /// leaves the backend without a frame: the zones must not be written from it.
     /// </summary>
-    /// <returns><c>false</c> if the first capture never had a new frame (only a new frame writes zones), so nothing was checked.</returns>
+    /// <returns><c>false</c> if the first capture never had a new frame, so nothing was checked.</returns>
     public static bool TryAssertRestartDuringACaptureWritesNoEmptyZone(Display current, Display outdated, Func<Display, IScreenCapture> createCapture)
     {
-        // The first capture of a new DX11 duplication has no new frame if nothing is presented on the display meanwhile.
+        // A new DX11 duplication has no new frame if nothing is presented meanwhile.
         for (int attempt = 0; attempt < 5; attempt++)
         {
             using IScreenCapture screenCapture = createCapture(outdated);
@@ -459,11 +456,11 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// A zone that was written with earlier frames shows the current one: it matches a zone registered now for the same region, written by the same capture.
-    /// DX11 keeps a copy of each zone's region on the GPU: one from an older frame must not be used.
+    /// A zone written with earlier frames shows the current one, like a zone registered now for the same region.
+    /// DX11 keeps a copy of each zone on the GPU, one from an older frame must not be used.
     /// </summary>
     /// <remarks>
-    /// Only detects a stale zone if the screen changes between the frames (e.g. a video or an animation on the display); on a static screen it passes without checking anything.
+    /// Only detects a stale zone if the screen changes between the frames, a static screen passes.
     /// </remarks>
     public static void AssertZoneShowsTheLatestFrame(IScreenCaptureService service)
     {
@@ -476,7 +473,7 @@ internal static class HardwareTestHelper
 
         for (int i = 0; i < 5; i++)
         {
-            // Written by the next capture (it's new), from the same frame as kept if that's a new one.
+            // Written by the next capture, from the same frame as kept.
             ICaptureZone current = screenCapture.RegisterCaptureZone(fullScreen, downscaleLevel: 2);
             CaptureResult result = screenCapture.CaptureScreen();
             if (result == CaptureResult.NewFrame)
@@ -533,10 +530,9 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// The thread-safety contract on a real backend (see <see cref="ThreadSafetyStressTests"/> for the same with exact pixel checks): captures on several threads
-    /// (also while holding a frame), zone updates (also while holding a frame), restarts, zones registered and unregistered, frames and properties read,
-    /// and the service disposed while all of it runs. Nothing may throw (except <see cref="ObjectDisposedException"/> after the dispose), deadlock or report an error,
-    /// and every frame must have a size the zone had.
+    /// The thread-safety contract on a real backend (see <see cref="ThreadSafetyStressTests"/> for exact pixel checks): captures, zone changes, restarts,
+    /// frames and properties on several threads, and the service disposed meanwhile. Nothing may throw (except <see cref="ObjectDisposedException"/> after the dispose),
+    /// deadlock or report an error, and every frame must have a size the zone had.
     /// </summary>
     public static void AssertThreadSafetyContract(IScreenCaptureService service)
     {
@@ -571,7 +567,7 @@ internal static class HardwareTestHelper
 
         CaptureFrame(screenCapture);
 
-        // Not disposed by the test (that would wait for it, also after a deadlock): disposing the capture ends it.
+        // Not disposed by the test, which would wait after a deadlock. Disposing the capture ends it.
         ScreenCaptureLoop loop = new(screenCapture);
         loop.Start();
 
@@ -639,7 +635,7 @@ internal static class HardwareTestHelper
         Thread.Sleep(duration);
         KeyValuePair<CaptureResult, int>[] resultsBeforeDispose = [.. results];
 
-        // Disposing the service disposes the capture while everything runs. On another thread, so a deadlock fails the test instead of blocking it.
+        // On another thread, so a deadlock fails the test instead of blocking it.
         Task dispose = Task.Run(service.Dispose);
         try
         {
@@ -670,12 +666,11 @@ internal static class HardwareTestHelper
     }
 
     /// <summary>
-    /// Disposes services while another thread enumerates their devices: the enumeration either finishes or throws an <see cref="ObjectDisposedException"/>,
-    /// it never uses the released native objects of the service.
+    /// Disposes services while another thread enumerates: the enumeration finishes or throws an <see cref="ObjectDisposedException"/>, but never uses released native objects.
     /// </summary>
     public static void AssertEnumerationDuringDisposeIsSafe(Func<IScreenCaptureService> createService)
     {
-        // An enumeration is short (especially on DX9): many rounds with dispose times spread over it to hit one in progress.
+        // Enumerations are short, so many rounds with spread dispose times.
         for (int round = 0; round < 200; round++)
         {
             IScreenCaptureService service = createService();

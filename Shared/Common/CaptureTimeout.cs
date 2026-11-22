@@ -3,7 +3,7 @@ using System;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// The frame timeout of the captures that wait for new frames (DX11, WGC, Wayland): validated as a <see cref="TimeSpan"/>, waited for in whole milliseconds.
+/// The frame timeout of DX11, WGC and Wayland.
 /// </summary>
 internal static class CaptureTimeout
 {
@@ -19,11 +19,11 @@ internal static class CaptureTimeout
     #region Methods
 
     /// <summary>
-    /// Checks that a timeout isn't negative (including <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>) and not greater than <see cref="Max"/>.
+    /// Checks that a timeout isn't negative (including <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>) or greater than <see cref="Max"/>.
     /// </summary>
     /// <param name="timeout">The timeout.</param>
     /// <returns><paramref name="timeout"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The timeout is negative or greater than <see cref="Max"/> (parameter name <c>Timeout</c>, the property it's set to).</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The timeout is negative or greater than <see cref="Max"/>.</exception>
     public static TimeSpan Validate(TimeSpan timeout)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero, "Timeout");

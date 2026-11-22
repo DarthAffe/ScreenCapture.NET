@@ -10,7 +10,7 @@ namespace ScreenCapture.NET;
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="WGCScreenCapture"/>.
 /// </summary>
 /// <remarks>
-/// The graphics cards and displays are the same as the ones of the DX11 backend (same <see cref="Display.Id"/>s).
+/// The graphics cards and displays are the same as the ones of DX11.
 /// Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, WGCCaptureOptions)"/>.
 /// Besides displays it can capture windows (<see cref="GetWindowCapture(nint)"/>).
 /// </remarks>
@@ -19,7 +19,7 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
-    // Enumerations use the factory under this lock and Dispose releases it under it, so it's never released while it's used.
+    // So Dispose never releases the factory while it's used.
     private readonly Lock _factoryLock = new();
     private readonly IDXGIFactory1 _factory;
     private readonly ScreenCaptureCache<WGCScreenCapture, WGCCaptureOptions> _screenCaptures;
@@ -56,7 +56,7 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
     /// Checks if Windows.Graphics.Capture can be used on this system.
     /// </summary>
     /// <remarks>
-    /// It needs Windows 10 1903 or later and a desktop composition (e.g. not on Windows Server Core).
+    /// Needs Windows 10 1903 or later with desktop composition (e.g. not Windows Server Core).
     /// </remarks>
     /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
     [SupportedOSPlatformGuard("windows")]
@@ -65,7 +65,7 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        // Read right away (not while enumerating), so the factory isn't used outside the lock.
+        // Read right away, so the factory isn't used outside the lock.
         lock (_factoryLock)
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
@@ -77,7 +77,7 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        // Read right away (not while enumerating), so the factory isn't used outside the lock.
+        // Read right away, so the factory isn't used outside the lock.
         lock (_factoryLock)
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
@@ -91,9 +91,7 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     /// <remarks>
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// A new capture gets the <see cref="Options"/> of the service, an existing one keeps its own.
     /// </remarks>
     public WGCScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
 
@@ -101,9 +99,7 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
     /// Creates a <see cref="WGCScreenCapture"/> with the given options for the given display.
     /// </summary>
     /// <remarks>
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// An existing capture is only returned if it was created with equal options.
+    /// There's one capture per <see cref="Display.Id"/>. An existing capture is only returned if it was created with equal options.
     /// </remarks>
     /// <param name="display">The display to capture.</param>
     /// <param name="options">The options of the capture.</param>
@@ -120,15 +116,13 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
     /// Gets the capture of a window.
     /// </summary>
     /// <remarks>
-    /// The window is captured as it's shown, also while other windows cover it. Its <see cref="IScreenCapture.Display"/> describes the window (see <see cref="WGCScreenCapture"/>);
-    /// its <see cref="Display.Id"/> is only valid while the window exists. A resize restarts the capture with the new size (<see cref="IScreenCapture.DisplayChanged"/>).
+    /// The window is captured also while others cover it. Its <see cref="IScreenCapture.Display"/> describes the window (see <see cref="WGCScreenCapture"/>),
+    /// the <see cref="Display.Id"/> is only valid while it exists. A resize restarts the capture (<see cref="IScreenCapture.DisplayChanged"/>).
     /// <para>
-    /// Windows.Graphics.Capture refuses some windows (e.g. tool windows and ones that can't be activated, like the taskbar): their capture is <see cref="CaptureResult.Unavailable"/>
-    /// and <see cref="IScreenCapture.LastError"/> tells why.
+    /// Some windows are refused (e.g. tool windows or the taskbar): their capture is <see cref="CaptureResult.Unavailable"/>.
     /// </para>
     /// <para>
-    /// The service creates one capture per window and returns it again for the same handle. A capture that was disposed is replaced by a new one.
-    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// There's one capture per window. A new capture gets the <see cref="Options"/> of the service, an existing one keeps its own.
     /// </para>
     /// </remarks>
     /// <param name="window">The handle (<c>HWND</c>) of a top-level window (e.g. <c>Process.MainWindowHandle</c>).</param>
@@ -159,17 +153,17 @@ public sealed class WGCScreenCaptureService : IScreenCaptureService
         if (!WindowInterop.IsTopLevelWindow(window))
             throw new ArgumentException($"0x{(long)window:X} isn't the handle of an existing top-level window.", nameof(window));
 
-        // Cached with the displays: the capture reads the window from the id.
+        // Cached with the displays, the capture reads the window from the id.
         return _screenCaptures.GetOrCreate(WindowInterop.CreateUnknownDisplay(window), options, requireEqualOptions);
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Disposes all captures created by the service. It's thread-safe and can be called more than once.
+    /// Disposes all captures created by the service. Can be called more than once.
     /// </remarks>
     public void Dispose()
     {
-        // The captures use the factory too (when they restart): they're disposed first.
+        // The captures use the factory too.
         if (!_screenCaptures.DisposeAll()) return;
 
         lock (_factoryLock)

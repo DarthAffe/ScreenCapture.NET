@@ -5,12 +5,11 @@ using Vortice.DXGI;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// The shape of the mouse pointer as Desktop Duplication delivers it, prepared to be drawn into zones (also downscaled ones).
+/// The shape of the mouse pointer from Desktop Duplication, prepared to be drawn into (also downscaled) zones.
 /// </summary>
 /// <remarks>
-/// Each pixel of the shape changes each color channel of the pixel under it to <c>(add + multiply * value) / 255</c>.
-/// Alpha blending (<c>multiply = 255 - alpha</c>), replacing (0), keeping (255) and inverting (-255) are all of this form,
-/// so the pixels of a block of a downscaled zone can be averaged like the frame is.
+/// Each pixel changes each channel under it to <c>(add + multiply * value) / 255</c>. Blending, replacing, keeping and inverting all have this form,
+/// so they can be averaged over the blocks of downscaled zones.
 /// </remarks>
 internal sealed class CursorShape
 {
@@ -35,7 +34,7 @@ internal sealed class CursorShape
     public int Width { get; }
 
     /// <summary>
-    /// Gets the height of the shape in pixels (for a monochrome pointer half the height Desktop Duplication reports, which includes both masks).
+    /// Gets the height of the shape in pixels (for monochrome pointers without the second mask).
     /// </summary>
     public int Height { get; }
 
@@ -60,9 +59,8 @@ internal sealed class CursorShape
     /// Creates the shape from the data of <c>IDXGIOutputDuplication::GetFramePointerShape</c>.
     /// </summary>
     /// <remarks>
-    /// Color pointers are alpha blended. Monochrome pointers (an AND mask over an XOR mask) keep, blacken, whiten or invert pixels.
-    /// Masked color pointers replace pixels (alpha 0) or XOR them (otherwise); a channel XORed with 128 or more is inverted, with less kept,
-    /// which is exact for the usual 0 and 255.
+    /// Color pointers are alpha blended. Monochrome pointers (AND over XOR mask) keep, blacken, whiten or invert pixels.
+    /// Masked color pointers replace or XOR pixels; XOR is approximated by inverting from 128 on, exact for the usual 0 and 255.
     /// </remarks>
     /// <param name="type">The type of the shape (<c>DXGI_OUTDUPL_POINTER_SHAPE_INFO::Type</c>).</param>
     /// <param name="width">The width in pixels.</param>
@@ -160,17 +158,15 @@ internal sealed class CursorShape
     /// Draws the pointer into the pixels of a zone.
     /// </summary>
     /// <remarks>
-    /// The blocks of a downscaled zone are the ones of <see cref="CaptureZoneWriter.Write{TColor}"/>: 2^level x 2^level pixels from the top left of the region,
-    /// a region smaller than a block is one block. The pointer is averaged over each block it covers (pixels it doesn't cover are kept) and blended into the zone's pixel,
-    /// which is close to downscaling the frame with the pointer drawn into it.
+    /// Averaged over the blocks of downscaled zones (the same as in <see cref="CaptureZoneWriter.Write{TColor}"/>), which is close to downscaling the frame with the pointer in it.
     /// </remarks>
-    /// <param name="buffer">The pixels of the zone, in the orientation of the display, <paramref name="width"/> per row.</param>
+    /// <param name="buffer">The pixels of the zone, in the orientation of the display.</param>
     /// <param name="region">The region of the zone on the display.</param>
     /// <param name="width">The width of the zone (after downscaling).</param>
     /// <param name="height">The height of the zone (after downscaling).</param>
     /// <param name="downscaleLevel">The downscale level of the zone.</param>
-    /// <param name="x">The left edge of the pointer on the display (it can lie outside of it).</param>
-    /// <param name="y">The top edge of the pointer on the display (it can lie outside of it).</param>
+    /// <param name="x">The left edge of the pointer on the display.</param>
+    /// <param name="y">The top edge of the pointer on the display.</param>
     public void Draw(Span<ColorBGRA> buffer, CaptureRegion region, int width, int height, int downscaleLevel, int x, int y)
     {
         if ((Width == 0) || (Height == 0) || (width <= 0) || (height <= 0)) return;
@@ -204,7 +200,7 @@ internal sealed class CursorShape
                 int shapeLeft = Math.Max(blockLeft, left) - left;
                 int shapeRight = Math.Min(blockLeft + blockWidth, left + Width) - left;
 
-                // The pixels of the block the pointer doesn't cover are kept.
+                // Pixels not covered by the pointer are kept.
                 long kept = blockSize - ((long)(shapeRight - shapeLeft) * (shapeBottom - shapeTop));
                 for (int channel = 0; channel < CHANNELS; channel++)
                 {

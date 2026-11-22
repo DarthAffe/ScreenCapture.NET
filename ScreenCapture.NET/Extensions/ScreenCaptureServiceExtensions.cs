@@ -6,10 +6,8 @@ namespace ScreenCapture.NET;
 /// Finds graphics cards and displays of a <see cref="IScreenCaptureService"/> by their id, e.g. one stored in settings.
 /// </summary>
 /// <remarks>
-/// The devices are enumerated on every call, so the returned values are current (e.g. their <see cref="Display.Index"/>, size and position).
-/// Ids are compared ordinally (case-sensitive). An id can stop matching, e.g. after a monitor was connected to another port
-/// (see <see cref="GraphicsCard.Id"/> and <see cref="Display.Id"/>); falling back to another property, like <see cref="Display.FriendlyName"/>, is up to the caller.
-/// Errors of the enumeration (e.g. no X server on X11) aren't caught.
+/// The devices are enumerated on every call, so the returned values are current. Ids are compared ordinally.
+/// An id can stop matching, e.g. after a monitor was connected to another port; a fallback (e.g. to <see cref="Display.FriendlyName"/>) is up to the caller.
 /// </remarks>
 public static class ScreenCaptureServiceExtensions
 {
@@ -42,8 +40,8 @@ public static class ScreenCaptureServiceExtensions
     /// Finds the display with the given <see cref="Display.Id"/> on any graphics card.
     /// </summary>
     /// <remarks>
-    /// Display ids are unique across all graphics cards, so the id of the graphics card isn't needed.
-    /// In clone mode the cloned monitors are one display, whose id is the one of the monitor Windows lists first; the other monitors' ids aren't found.
+    /// Display ids are unique across all graphics cards.
+    /// In clone mode the cloned monitors are one display with the id of the monitor Windows lists first.
     /// </remarks>
     /// <param name="service">The service to search.</param>
     /// <param name="id">The id of the display.</param>

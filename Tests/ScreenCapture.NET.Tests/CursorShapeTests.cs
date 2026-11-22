@@ -168,7 +168,7 @@ public sealed class CursorShapeTests
     [TestMethod]
     public void DownscaledZoneUsesBlocksFromTheRegionsTopLeft()
     {
-        // Region at x = 3, level 1: blocks cover display columns 3-4 and 5-6. A 1x2 pointer at column 5 fills half of the second block.
+        // Region at x = 3, level 1: blocks cover columns 3-4 and 5-6. A 1x2 pointer at column 5 fills half of the second.
         ColorBGRA background = new(200, 100, 40, 255);
         ColorBGRA[] zone = Draw(CreateBlack(1, 2), 5, 0, new CaptureRegion(3, 0, 4, 2), downscaleLevel: 1, background);
 

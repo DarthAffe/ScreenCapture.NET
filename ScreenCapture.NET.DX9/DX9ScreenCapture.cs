@@ -11,7 +11,7 @@ namespace ScreenCapture.NET;
 /// https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-getfrontbufferdata
 /// </summary>
 /// <remarks>
-/// Every capture checks the display mode: after a change of the resolution it restarts and reads the display again (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// A changed resolution makes the capture restart (see <see cref="IScreenCapture.DisplayChanged"/>).
 /// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
@@ -24,7 +24,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private IDirect3DDevice9? _device;
     private IDirect3DSurface9? _surface;
 
-    // The frame read from the surface, replaced by restarts. Only used under _captureLock.
+    // Only used under _captureLock.
     private FrameBuffer? _frame;
 
     /// <summary>
@@ -58,7 +58,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        // DX9 can't tell when the frame was presented: the base uses the time the capture returned.
+        // DX9 doesn't tell when the frame was presented.
         timestamp = 0;
 
         lock (_captureLock)
@@ -67,7 +67,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
             if ((_device == null) || (_surface == null) || (frame == null))
                 return RestartCapture();
 
-            // The surface has the size of the display mode the capture started with; GetFrontBufferData needs the current one.
+            // GetFrontBufferData needs a surface of the current display mode.
             if (!IsDisplayModeOf(frame))
                 return RestartCapture();
 
@@ -86,13 +86,12 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 }
                 frame.HasData = true;
 
-                // GetFrontBufferData has no change detection: every successful read counts as a new frame.
+                // No change detection: every read counts as a new frame.
                 return CaptureResult.NewFrame;
             }
             catch (SharpGenException dxException)
             {
-                // E.g. AccessDenied while the secure desktop is shown, or a lost, removed or hung device (D3DERR_DEVICELOST/-REMOVED/-HUNG) after a GPU reset:
-                // a new device is cheap, and the backoff of the restarts keeps a lasting error from retrying all the time.
+                // E.g. a UAC prompt, or a lost device after a GPU reset. A new device is cheap.
                 ReportError(dxException);
                 return RestartCapture();
             }
@@ -108,7 +107,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
         catch (SharpGenException)
         {
-            // E.g. the adapter is gone: the restart finds out what happened to the display.
+            // E.g. the adapter is gone. The restart finds out.
             return false;
         }
     }
@@ -118,10 +117,10 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        // Another thread can capture (or restart) meanwhile: without the lock it could overwrite the frame while it's copied.
+        // A concurrent capture could overwrite the frame while it's copied.
         lock (_captureLock)
         {
-            // HasData: e.g. a Restart on another thread replaced the frame after this capture read it.
+            // A restart on another thread can have replaced the frame.
             FrameBuffer? frame = _frame;
             if ((frame == null) || !frame.HasData || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
 
@@ -131,7 +130,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
     }
 
-    // The rows of the surface are Pitch bytes apart; the last one may end without padding.
+    // The last row may end without padding.
     private static unsafe void CopySurface(LockedRectangle surface, FrameBuffer frame)
     {
         ReadOnlySpan<byte> data = new((void*)surface.DataPointer, (surface.Pitch * (frame.Height - 1)) + (frame.Width * ColorBGRA.ColorFormat.BytesPerPixel));
@@ -143,15 +142,13 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         lock (_captureLock)
         {
-            // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
+            // Nothing created here may outlive Dispose.
             if (IsDisposed) return false;
 
             DisposeDX();
 
             try
             {
-                // Found by its id and read again: after a mode change the display has another size,
-                // and after displays were added or removed its adapter can have another index.
                 Display display = DX9Devices.FindDisplay(_direct3D9, Display.Id) ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
 
                 PresentParameters presentParameters = new()
@@ -171,7 +168,7 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
             }
             catch (Exception ex)
             {
-                // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
+                // E.g. while a UAC prompt or the lock screen is shown.
                 DisposeDX();
                 ReportError(ex);
 
@@ -206,7 +203,6 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
         public int Height { get; } = height;
         public ColorBGRA[] Data { get; } = new ColorBGRA[width * height];
 
-        // False until the first frame was read into Data.
         public bool HasData { get; set; }
     }
 }

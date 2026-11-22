@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// The delay between attempts of something that can fail (e.g. restarting a capture): none until an attempt fails, then 100 ms, doubling with every further failure up to 2 s.
+/// The delay between attempts after failures: 100 ms, doubling up to 2 s.
 /// </summary>
 /// <remarks>
 /// Not thread-safe. Times are <see cref="Stopwatch"/> timestamps.
@@ -29,12 +29,12 @@ internal sealed class Backoff
     #region Methods
 
     /// <summary>
-    /// Records a successful attempt: the next attempt is due right away.
+    /// Records a successful attempt.
     /// </summary>
     public void Succeeded() => _failed = false;
 
     /// <summary>
-    /// Records a failed attempt: the next attempt waits for the next delay.
+    /// Records a failed attempt.
     /// </summary>
     /// <param name="timestamp">When the attempt failed.</param>
     public void Failed(long timestamp)

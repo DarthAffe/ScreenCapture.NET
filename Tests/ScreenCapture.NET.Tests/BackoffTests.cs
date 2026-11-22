@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// The delay sequence, with explicit timestamps (see <see cref="CaptureRestartTests"/> for how captures restart with it and <see cref="CapturePacerTests"/> for how capture loops back off with it).
+/// The delay sequence, with explicit timestamps (see also <see cref="CaptureRestartTests"/> and <see cref="CapturePacerTests"/>).
 /// </summary>
 [TestClass]
 public sealed class BackoffTests

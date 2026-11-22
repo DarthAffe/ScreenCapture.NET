@@ -10,11 +10,10 @@ namespace ScreenCapture.NET;
 
 /// <inheritdoc />
 /// <remarks>
-/// All members can be used from any thread (see <see cref="IScreenCapture"/>); backends guard their resources as described on
+/// Thread-safe (see <see cref="IScreenCapture"/>). How backends guard their resources is described on
 /// <see cref="PerformScreenCapture"/>, <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>.
 /// <para>
-/// Lock order: a zone lock (held while a zone is written, changed or unregistered; frames don't hold it, see <see cref="CaptureZone{TColor}.AcquireFrame"/>)
-/// is always acquired before any lock of the screen capture, and the library never acquires a zone lock while holding one of its own locks.
+/// Lock order: a zone lock is always taken before any lock of the screen capture, never while holding one.
 /// </para>
 /// </remarks>
 public abstract class AbstractScreenCapture<TColor> : IScreenCapture
@@ -22,12 +21,12 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 {
     #region Constants
 
-    // Zone counts up to this use a stack buffer for the per-capture "updated" flags; more fall back to the ArrayPool.
+    // Up to this many zones the "updated" flags are on the stack.
     private const int UPDATED_STACKALLOC_THRESHOLD = 32;
 
     private const string NOT_REGISTERED_MESSAGE = "The capture zone is not registered to this screen capture.";
 
-    // Errors reported without a CaptureScreen call raising them (e.g. by repeated Restart calls) are dropped beyond this, oldest first.
+    // Errors not raised yet; beyond this the oldest are dropped.
     private const int MAX_PENDING_ERRORS = 16;
 
     private static readonly TimeSpan RESTART_WAIT_SLICE = TimeSpan.FromMilliseconds(50);
@@ -38,46 +37,45 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     private bool _isDisposed;
 
-    // Held while Dispose(bool) runs, so a second Dispose waits for the first. Only Dispose takes it, before any other lock.
+    // Makes a second Dispose wait for the first. Taken before any other lock.
     private readonly Lock _disposeLock = new();
 
     /// <inheritdoc />
     /// <remarks>
-    /// Set at the start of <see cref="Dispose()"/>, before the backend released its resources.
+    /// Set before the backend releases its resources.
     /// </remarks>
     public bool IsDisposed => Volatile.Read(ref _isDisposed);
 
     private Exception? _lastError;
 
-    // Guards _pendingErrors. A leaf lock, so errors can be reported while holding any other lock.
+    // Leaf lock: errors can be reported while holding any other lock.
     private readonly Lock _errorLock = new();
     private readonly Queue<Exception> _pendingErrors = new();
 
-    // Guards _frameNumber, _frameTimestamp and _hasFrame, which always describe the same frame. A leaf lock.
+    // Leaf lock for _frameNumber, _frameTimestamp and _hasFrame.
     private readonly Lock _frameLock = new();
     private long _frameNumber;
     private long _frameTimestamp;
 
     private bool _hasFrame;
 
-    // Guards the restart backoff. A leaf lock: never held while restarting, so it doesn't matter which backend locks the caller holds.
+    // Leaf lock for the backoff, never held while restarting.
     private readonly Lock _restartLock = new();
     private readonly Backoff _restartBackoff = new();
 
-    // Guards all changes to the zone set and to zone positions/sizes. Acquired after a zone lock, never before.
+    // Guards the zone set and the zone regions. Taken after a zone lock, never before.
     private readonly Lock _captureZonesLock = new();
 
-    // Copy-on-write: replaced (never modified) under _captureZonesLock, so a capture can walk it without a lock.
+    // Copy-on-write, so captures can walk it without a lock.
     private CaptureZone<TColor>[] _captureZones = [];
 
-    // Guards the display changes (_display is replaced under it, but read without it), _displayVersion, _appliedDisplayVersion and _pendingDisplayChange.
-    // A leaf lock, so backends can set the display while holding their locks.
+    // Leaf lock for the display changes, so backends can set the display while holding their locks. _display is read without it.
     private readonly Lock _displayLock = new();
 
-    // Boxed, so the display (a large struct) is replaced atomically and read without a lock.
+    // Boxed, so it's replaced atomically.
     private DisplayBox _display;
 
-    // Counts the display changes; the zones follow up to _appliedDisplayVersion.
+    // The zones are fitted to the display up to _appliedDisplayVersion.
     private int _displayVersion;
     private int _appliedDisplayVersion;
 
@@ -86,9 +84,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <summary>
     /// Gets a snapshot of the <see cref="CaptureZone{TColor}"/> registered on this ScreenCapture.
     /// </summary>
-    /// <remarks>
-    /// The snapshot doesn't change when zones are registered or unregistered later.
-    /// </remarks>
     // ReSharper disable once InconsistentlySynchronizedField
     protected IReadOnlyList<CaptureZone<TColor>> CaptureZones => Volatile.Read(ref _captureZones);
 
@@ -185,7 +180,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         CaptureZone<TColor>[] captureZones = Volatile.Read(ref _captureZones);
         if (hasFrame && (captureZones.Length > 0))
         {
-            // Every slot is written before it's read. If an update throws, the rented array is simply not returned, which the pool tolerates.
+            // If an update throws, the rented array isn't returned. The pool tolerates that.
             bool[]? rented = null;
             Span<bool> updated = captureZones.Length <= UPDATED_STACKALLOC_THRESHOLD
                                      ? stackalloc bool[UPDATED_STACKALLOC_THRESHOLD]
@@ -194,8 +189,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             for (int i = 0; i < captureZones.Length; i++)
                 updated[i] = TryUpdateCaptureZone(captureZones[i], frameNumber);
 
-            // Raised after the loop, so every zone shows this frame before any handler runs (e.g. a handler of one zone that reads another).
-            // No lock is held: handlers can (un)register or update zones and lock other zones.
+            // Raised once all zones are written, without holding a lock.
             for (int i = 0; i < captureZones.Length; i++)
                 if (updated[i])
                     captureZones[i].RaiseUpdated();
@@ -211,8 +205,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         return result;
     }
 
-    // Raised here instead of where the errors occur: there the backends often hold their locks, and a handler that locks a zone
-    // could deadlock against a thread that holds a frame of that zone and calls into the capture.
+    // Not raised where they occur: the backends often hold their locks there, a handler locking a zone could deadlock.
     private void RaisePendingErrors()
     {
         while (true)
@@ -227,16 +220,15 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <summary>
-    /// Sets the display the capture duplicates now, e.g. after <see cref="PerformRestart"/> read it again and found it changed (resolution, rotation, position).
+    /// Sets the display the capture duplicates, e.g. after a restart found it changed.
     /// </summary>
     /// <remarks>
-    /// Call it once the resources of the backend match the new display, e.g. at the end of a successful restart. It can be called while holding any lock.
-    /// The zones follow the new display before the next capture writes them (and before <see cref="Restart"/> returns): zones that don't fit anymore become invalid
-    /// (see <see cref="ICaptureZone.IsValid"/>). <see cref="DisplayChanged"/> is raised by the next <see cref="CaptureScreen"/>.
-    /// Nothing happens if the display didn't change.
+    /// Call it once the resources of the backend match the new display. Can be called while holding any lock.
+    /// The zones are fitted to it before they're written next; zones that don't fit anymore become invalid.
+    /// <see cref="DisplayChanged"/> is raised by the next <see cref="CaptureScreen"/>.
     /// </remarks>
     /// <param name="display">The current display.</param>
-    /// <exception cref="ArgumentException"><paramref name="display"/> has another <see cref="Display.Id"/>: a capture always duplicates the same display.</exception>
+    /// <exception cref="ArgumentException"><paramref name="display"/> has another <see cref="Display.Id"/>.</exception>
     protected void SetDisplay(Display display)
     {
         lock (_displayLock)
@@ -265,8 +257,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
             if (version == _appliedDisplayVersion) return;
         }
 
-        // Read under the lock (not just with Volatile.Read): it waits for a register that runs right now. That one may have created its zone with the old display,
-        // and would only add it to the array after this walked it.
+        // Read under the lock to wait for a running register, which may have created its zone with the old display.
         CaptureZone<TColor>[] captureZones;
         lock (_captureZonesLock)
             captureZones = _captureZones;
@@ -295,11 +286,11 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <summary>
-    /// Reports an error the capture recovers from (or reports as its result) instead of throwing it.
+    /// Reports an error without throwing it.
     /// </summary>
     /// <remarks>
-    /// Sets <see cref="LastError"/> right away; <see cref="ErrorOccurred"/> is raised by the next <see cref="CaptureScreen"/>.
-    /// It can be called while holding any lock. Exceptions thrown by <see cref="PerformScreenCapture"/> and <see cref="PerformCaptureZoneUpdate"/> are reported by the base class.
+    /// Sets <see cref="LastError"/> right away, <see cref="ErrorOccurred"/> is raised by the next <see cref="CaptureScreen"/>. Can be called while holding any lock.
+    /// Exceptions thrown by <see cref="PerformScreenCapture"/> and <see cref="PerformCaptureZoneUpdate"/> are reported automatically.
     /// </remarks>
     /// <param name="exception">The error.</param>
     protected void ReportError(Exception exception)
@@ -325,8 +316,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         {
             using (captureZone.EnterUpdateScope())
             {
-                // Checked again: it can have been unregistered while this capture held it in its snapshot, or written meanwhile by a capture
-                // on another thread (with the same frame, or taking the update request).
+                // Checked again: it can have been unregistered or written by another capture meanwhile.
                 if (captureZone.IsUnregistered || !captureZone.NeedsUpdate(frameNumber)) return false;
 
                 ZoneBuffer<TColor>? buffer = captureZone.BeginWrite();
@@ -342,7 +332,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
                 {
                     captureZone.EndWrite(buffer, written);
 
-                    // Not written: the request stays for the next capture.
+                    // Not written: keep the request for the next capture.
                     if (!written && requested)
                         captureZone.RequestUpdate();
                 }
@@ -365,16 +355,14 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Performs the actual screen capture.
     /// </summary>
     /// <remarks>
-    /// Exceptions are reported (see <see cref="ReportError"/>) and returned as <see cref="CaptureResult.Failed"/>.
-    /// Errors the capture recovers from (e.g. by restarting) aren't thrown, but should be reported with <see cref="ReportError"/>.
+    /// Exceptions are reported and returned as <see cref="CaptureResult.Failed"/>. Report errors the capture recovers from with <see cref="ReportError"/>.
     /// <para>
-    /// It can run on several threads at once (<see cref="CaptureScreen"/> can) and while <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>
-    /// run on other threads: guard the backend's resources with a lock that all three use, and don't acquire a zone lock while holding it.
+    /// Can run on several threads at once and concurrently with <see cref="PerformCaptureZoneUpdate"/> and <see cref="PerformRestart"/>.
+    /// Guard the backend's resources with one lock all three use, and never take a zone lock while holding it.
     /// </para>
     /// </remarks>
     /// <param name="timestamp">
-    /// For <see cref="CaptureResult.NewFrame"/>: when the frame was shown, as a <see cref="Stopwatch"/> timestamp,
-    /// or 0 to use the time this method returned. Ignored for other results.
+    /// For <see cref="CaptureResult.NewFrame"/>: when the frame was shown as a <see cref="Stopwatch"/> timestamp, or 0 to use the current time.
     /// </param>
     /// <returns><see cref="CaptureResult.NewFrame"/> if a new frame was captured; otherwise why not.</returns>
     protected abstract CaptureResult PerformScreenCapture(out long timestamp);
@@ -383,33 +371,21 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Performs an update of the given capture zone.
     /// </summary>
     /// <remarks>
-    /// Called with the lock of <paramref name="captureZone"/> held, so its position and size don't change during the update,
-    /// and only for registered zones: the zone isn't unregistered before this returned.
+    /// Only called for valid, registered zones, with the zone lock held, so the zone doesn't change meanwhile.
     /// Use <see cref="CaptureZoneWriter"/> to write zones in software.
     /// <para>
-    /// <see cref="CaptureScreen"/> can run on several threads at once, and <see cref="Restart"/> on any thread: this can run while <see cref="PerformScreenCapture"/>
-    /// or <see cref="PerformRestart"/> run on other threads. Read the frame under the lock those use, so it isn't overwritten or released meanwhile
-    /// (zone locks are acquired before the backend's locks, never after).
+    /// Can run concurrently with <see cref="PerformScreenCapture"/> and <see cref="PerformRestart"/>: read the frame under the lock they use.
+    /// A restart on another thread can change the display or drop the frame after this capture got it.
+    /// Check that the backend holds a frame and that the region lies within it (<see cref="CaptureRegion.IsWithin"/>), and return <c>false</c> if not.
     /// </para>
     /// <para>
-    /// Only called for valid zones (see <see cref="ICaptureZone.IsValid"/>), whose region lies within <see cref="Display"/>.
-    /// But a <see cref="Restart"/> on another thread can change the display before the zones follow it, or leave the backend without a frame
-    /// after this capture got one: check that the backend holds a frame and that the region lies within it (see <see cref="CaptureRegion.IsWithin"/>),
-    /// and return <c>false</c> if not.
-    /// </para>
-    /// <para>
-    /// Called after <see cref="CaptureResult.NewFrame"/>, and after <see cref="CaptureResult.NoChange"/> or <see cref="CaptureResult.Timeout"/>
-    /// for zones that requested an update or don't show the last frame yet (e.g. new or changed zones): the backend has to keep the last frame for that.
-    /// Not called after other results or after <see cref="Restart"/> until the next <see cref="CaptureResult.NewFrame"/>.
-    /// </para>
-    /// <para>
-    /// <paramref name="buffer"/> has the zone's current size (<see cref="CaptureZone{TColor}.Width"/> * <see cref="CaptureZone{TColor}.Height"/> pixels, row after row without padding).
-    /// It's the zone's back buffer, which contains an older frame (or zeros) and is only shown if this returns <c>true</c>.
+    /// Also called after <see cref="CaptureResult.NoChange"/> and <see cref="CaptureResult.Timeout"/> for zones that don't show the last frame yet,
+    /// so the backend has to keep it.
     /// </para>
     /// </remarks>
     /// <param name="captureZone">The capture zone to update.</param>
-    /// <param name="buffer">The buffer to write the pixels of the capture zone to.</param>
-    /// <returns><c>true</c> if <paramref name="buffer"/> was filled; <c>false</c> if there was nothing to write (e.g. no captured frame yet), so the zone keeps its pixels.</returns>
+    /// <param name="buffer">The back buffer of the zone, with its current size and no padding. Only shown if this returns <c>true</c>.</param>
+    /// <returns><c>true</c> if <paramref name="buffer"/> was filled; <c>false</c> if there was nothing to write.</returns>
     protected abstract bool PerformCaptureZoneUpdate(CaptureZone<TColor> captureZone, Span<TColor> buffer);
 
     /// <summary>
@@ -461,7 +437,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
         lock (_captureZonesLock)
         {
-            // Read once: the zone gets the display it was validated against. If a restart changes it meanwhile, ApplyDisplayChange moves the zone (and checks it again).
+            // Read once, so the zone gets the display it was validated against.
             Display display = Display;
             ValidateCaptureZoneAndThrow(region, downscaleLevel, display);
 
@@ -490,7 +466,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         if (region.Width <= 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Width must be greater than 0.");
         if (region.Height <= 0) throw new ArgumentOutOfRangeException(nameof(region), region, "Height must be greater than 0.");
 
-        // Compared this way, X + Width can't overflow (X and Y aren't negative here).
+        // Compared this way to not overflow.
         if (region.Width > (display.Width - region.X))
             throw new ArgumentOutOfRangeException(nameof(region), region, $"X + Width must not be greater than the display width ({display.Width}).");
         if (region.Height > (display.Height - region.Y))
@@ -505,7 +481,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// <param name="width">The original width.</param>
     /// <param name="height">The original height.</param>
     /// <param name="downscaleLevel">The level of downscaling to be used.</param>
-    /// <returns>A tuple containing the scaled width, the scaled height and the downscale-level used. (This can be smaller then the one provided if the image is not big enough to scale down that often.)</returns>
+    /// <returns>The scaled width and height, and the downscale-level used (smaller than requested if the image is too small).</returns>
     private static (int width, int height, int downscaleLevel) CalculateScaledSize(int width, int height, int downscaleLevel)
     {
         if (downscaleLevel > 0)
@@ -532,15 +508,14 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     /// <inheritdoc cref="IScreenCapture.UnregisterCaptureZone" />
     /// <remarks>
-    /// Overrides release the backend's resources of the zone after the base implementation returned <c>true</c>:
-    /// from then on, <see cref="PerformCaptureZoneUpdate"/> isn't called for the zone anymore.
+    /// Overrides release the backend's resources of the zone after the base returned <c>true</c>. <see cref="PerformCaptureZoneUpdate"/> isn't called for it anymore.
     /// </remarks>
     public virtual bool UnregisterCaptureZone(CaptureZone<TColor> captureZone)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        // Zone lock first (see the lock order in the class remarks): waits for a capture writing the zone, later captures skip it.
+        // Zone lock first: waits for a capture writing the zone.
         using (captureZone.EnterUpdateScope())
             lock (_captureZonesLock)
             {
@@ -562,7 +537,6 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     void IScreenCapture.UpdateCaptureZone(ICaptureZone captureZone, CaptureRegion? region, int? downscaleLevel)
         => UpdateCaptureZone(AsCaptureZone(captureZone), region, downscaleLevel);
 
-    // A zone of another color format (or another ICaptureZone implementation) can't be registered to this capture.
     private static CaptureZone<TColor> AsCaptureZone(ICaptureZone captureZone)
     {
         ArgumentNullException.ThrowIfNull(captureZone);
@@ -576,8 +550,7 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
         ArgumentNullException.ThrowIfNull(captureZone);
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        // Zone lock first (see the lock order in the class remarks): the zone doesn't change while a capture writes it.
-        // The buffers are resized by the next capture, frames keep their size.
+        // Zone lock first: the zone doesn't change while it's written. The buffers are resized by the next capture.
         using (captureZone.EnterUpdateScope())
             lock (_captureZonesLock)
             {
@@ -608,11 +581,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <summary>
-    /// Restarts the capture if it's due: right away the first time, after a failed restart only once the backoff has passed.
+    /// Restarts the capture, unless the backoff of a failed restart is still running.
     /// </summary>
     /// <remarks>
-    /// Call this from <see cref="PerformScreenCapture"/> when the capture isn't running or lost its source, and return its result.
-    /// <see cref="CaptureScreen"/> already waited for the backoff before calling <see cref="PerformScreenCapture"/>, so the restart is usually due.
+    /// Call it from <see cref="PerformScreenCapture"/> when the capture isn't running or lost its source, and return its result.
     /// </remarks>
     /// <returns><see cref="CaptureResult.Restarting"/> if the capture runs again; otherwise <see cref="CaptureResult.Unavailable"/>.</returns>
     protected CaptureResult RestartCapture()
@@ -668,16 +640,14 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     }
 
     /// <summary>
-    /// (Re)starts the capture: releases what the capture holds and creates it again.
+    /// (Re)starts the capture: releases its resources and creates them again.
     /// </summary>
     /// <remarks>
-    /// Called by <see cref="Restart"/>, by <see cref="RestartCapture"/> and usually by the constructor of the backend (through <see cref="Restart"/>).
-    /// Find the display by its <see cref="Display.Id"/> (an index can point to another display after displays were added or removed),
-    /// read it again and pass it to <see cref="SetDisplay"/>, so a changed resolution, rotation or position is picked up.
-    /// Don't throw: report errors with <see cref="ReportError"/> and return <c>false</c> (exceptions are reported and count as a failed restart).
-    /// After a failed restart, <see cref="RestartCapture"/> waits 100 ms before the next attempt, doubling with every further failure up to 2 s.
+    /// Find the display by its <see cref="Display.Id"/>, read it again and pass it to <see cref="SetDisplay"/>, so changes are picked up.
+    /// Report errors with <see cref="ReportError"/> and return <c>false</c> instead of throwing. After a failure the next attempt waits 100 ms, doubling up to 2 s.
     /// <para>
-    /// It can run concurrently with <see cref="PerformScreenCapture"/> (from <see cref="Restart"/>) and must return <c>false</c> once the capture is disposed: check <see cref="IsDisposed"/> under the lock <see cref="Dispose(bool)"/> releases the resources under.
+    /// Can run concurrently with <see cref="PerformScreenCapture"/>. Return <c>false</c> once the capture is disposed:
+    /// check <see cref="IsDisposed"/> under the lock <see cref="Dispose(bool)"/> releases the resources under.
     /// </para>
     /// </remarks>
     /// <returns><c>true</c> if the capture runs; otherwise <c>false</c>.</returns>
@@ -685,17 +655,16 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
 
     /// <inheritdoc />
     /// <remarks>
-    /// A concurrent second call waits until the first one has released the resources of the backend.
+    /// A concurrent second call waits until the first one is done.
     /// </remarks>
-    [SuppressMessage("Design", "CA1063:Implement IDisposable Correctly", Justification = "Dispose(bool) runs only once, so backends don't need their own flag; the flag is set before it runs, so a racing PerformRestart sees it.")]
+    [SuppressMessage("Design", "CA1063:Implement IDisposable Correctly", Justification = "Dispose(bool) runs only once, after the flag is set.")]
     public void Dispose()
     {
-        // A second call waits for the first: e.g. a service releases the objects its captures share once the capture's Dispose returned.
         lock (_disposeLock)
         {
             if (_isDisposed) return;
 
-            // Set before the backend releases its resources: a restart racing the dispose sees it under the backend's lock.
+            // Set first, so a racing restart sees it under the backend's lock.
             Volatile.Write(ref _isDisposed, true);
             Dispose(true);
         }
@@ -707,10 +676,10 @@ public abstract class AbstractScreenCapture<TColor> : IScreenCapture
     /// Releases the resources of this screen capture.
     /// </summary>
     /// <remarks>
-    /// Called once, by the first <see cref="Dispose()"/>: <see cref="IsDisposed"/> is already <c>true</c>. Overrides call the base implementation and never throw.
-    /// Release the resources under the lock <see cref="PerformRestart"/> uses, and check <see cref="IsDisposed"/> there, so a restart doesn't create resources that outlive the capture.
+    /// Called once, with <see cref="IsDisposed"/> already <c>true</c>. Overrides call the base and never throw.
+    /// Release the resources under the lock <see cref="PerformRestart"/> uses.
     /// </remarks>
-    /// <param name="disposing">Always <c>true</c>: screen captures have no finalizer.</param>
+    /// <param name="disposing">Always <c>true</c>, screen captures have no finalizer.</param>
     protected virtual void Dispose(bool disposing) { }
 
     #endregion

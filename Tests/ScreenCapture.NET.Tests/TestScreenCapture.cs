@@ -13,7 +13,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     public Action<CaptureZone<ColorARGB>>? ZoneUpdating { get; set; }
 
     /// <summary>
-    /// Called at the start of every zone update with the zone lock held, but before <see cref="CaptureLock"/> is taken: captures on other threads can run meanwhile.
+    /// Called at the start of every zone update, with the zone lock but before <see cref="CaptureLock"/>.
     /// </summary>
     public Action<CaptureZone<ColorARGB>>? ZoneUpdateStarting { get; set; }
 
@@ -43,7 +43,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     public Exception? CaptureException { get; set; }
 
     /// <summary>
-    /// Gets or sets an error reported (not thrown) by the next screen captures while they hold <see cref="CaptureLock"/>, like a backend that recovers from it.
+    /// Gets or sets an error reported (not thrown) by the next screen captures under <see cref="CaptureLock"/>.
     /// </summary>
     public Exception? ReportedCaptureError { get; set; }
 
@@ -53,7 +53,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     public Lock CaptureLock { get; } = new();
 
     /// <summary>
-    /// Gets or sets if the simulated backend runs. While it doesn't, captures restart it (with the backoff of the base class) instead of returning <see cref="Result"/>.
+    /// Gets or sets if the simulated backend runs. While it doesn't, captures restart it instead of returning <see cref="Result"/>.
     /// </summary>
     public bool IsRunning { get; set; } = true;
 
@@ -73,7 +73,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
     public List<TimeSpan> RestartAttempts { get; } = [];
 
     /// <summary>
-    /// Gets or sets the display the next successful restarts find, like a backend that reads its display again; <c>null</c> keeps the current one.
+    /// Gets or sets the display the next successful restarts find; <c>null</c> keeps the current one.
     /// </summary>
     public Display? NextDisplay { get; set; }
 
@@ -137,7 +137,7 @@ internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
         }
     }
 
-    // Under CaptureLock like a real backend (see the contract of PerformCaptureZoneUpdate): captures on other threads don't run meanwhile.
+    // Under CaptureLock like a real backend.
     protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer)
     {
         ZoneUpdateStarting?.Invoke(captureZone);

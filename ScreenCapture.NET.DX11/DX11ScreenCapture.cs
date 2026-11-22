@@ -15,7 +15,7 @@ namespace ScreenCapture.NET;
 /// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
 /// </summary>
 /// <remarks>
-/// A display mode change (resolution, rotation) ends the duplication: the next capture restarts it and reads the display again (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// A display mode change ends the duplication; the next capture restarts it (see <see cref="IScreenCapture.DisplayChanged"/>).
 /// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
@@ -34,8 +34,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Properties & Fields
 
-    // Guards the DirectX objects, the zone pipeline and the immediate context (which isn't thread-safe): held by captures, zone updates and restarts.
-    // The zone pipeline guards its zone textures with a lock of its own, acquired after this one; Unregister takes only that one.
+    // Guards the DirectX objects, the zone pipeline and the immediate context. The pipeline's own lock is taken after this one.
     private readonly Lock _captureLock = new();
 
     /// <summary>
@@ -43,15 +42,14 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// </summary>
     public DX11CaptureOptions Options { get; }
 
-    // In whole milliseconds; an int, so it's read and written atomically.
+    // In ms, an int so it's atomic.
     private int _timeout;
 
     /// <summary>
     /// Gets or sets how long <see cref="IScreenCapture.CaptureScreen"/> waits for a new frame before it returns <see cref="CaptureResult.Timeout"/>.
     /// </summary>
     /// <remarks>
-    /// It starts with <see cref="DX11CaptureOptions.Timeout"/> and can be changed at any time; a running capture keeps the value it started with.
-    /// It's rounded up to whole milliseconds; 0 doesn't wait.
+    /// Starts with <see cref="DX11CaptureOptions.Timeout"/> and can be changed at any time. Rounded up to whole milliseconds; 0 doesn't wait.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative (including <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>) or greater than <see cref="DX11CaptureOptions.MaxTimeout"/>.</exception>
     public TimeSpan Timeout
@@ -66,14 +64,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
 
-    // Holds the frame and writes the zones from it. Initialized by every restart with the new device, released before the device is disposed.
     private readonly D3D11ZonePipeline _zonePipeline;
 
-    // The monitor of the display, to read its SDR white level for the tone mapping (null if unknown). Only used under _captureLock.
+    // For the SDR white level of HDR frames.
     private WindowsDisplayDevices.MonitorTarget? _monitorTarget;
 
-    // The mouse pointer (only with DrawCursor), from the frames of the duplication; drawn into the zones when they're written.
-    // _cursorX/_cursorY: the top left of the shape on the display. Only used under _captureLock.
+    // Only with DrawCursor. _cursorX/_cursorY are the top left of the shape on the display.
     private CursorShape? _cursorShape;
     private bool _cursorVisible;
     private int _cursorX;
@@ -115,7 +111,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             if ((_device == null) || (_duplicatedOutput == null) || !_zonePipeline.IsInitialized)
                 return RestartCapture();
 
-            // E.g. after a driver update or a GPU reset (TDR): the device stays removed, and the zone copies of the last capture may have failed on it.
+            // E.g. after a driver update or a GPU reset (TDR).
             if (_device.DeviceRemovedReason is { Failure: true } removedReason)
             {
                 ReportError(new InvalidOperationException($"The Direct3D device of the capture was removed ({removedReason})."));
@@ -136,8 +132,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                                                       || (dxException.ResultCode == ResultCode.DeviceRemoved))
             {
                 ReportError(dxException);
-
-                // AcquireNextFrame released the frame (if it got one) before the restart disposes the duplication.
                 return RestartCapture();
             }
         }
@@ -158,13 +152,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
             acquireResult.CheckError();
             acquired = true;
 
-            // Read before the frame is released: the shape is only available until then.
+            // The shape is only available until the frame is released.
             bool cursorChanged = Options.DrawCursor && UpdateCursor(duplicatedOutput, frameInfo);
 
-            // No present since the last frame (e.g. only the mouse cursor moved): the image didn't change.
+            // No present since the last frame (e.g. only the mouse cursor moved).
             if ((screenResource == null) || (frameInfo.LastPresentTime == 0))
             {
-                // A pointer drawn into the zones changed: they're written again from the last frame, with the pointer as it is now.
+                // The drawn pointer changed: write the zones again from the last frame.
                 if (cursorChanged && _zonePipeline.HasFrame)
                 {
                     timestamp = frameInfo.LastMouseUpdateTime;
@@ -174,7 +168,6 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 return CaptureResult.NoChange;
             }
 
-            // HDR frames only come from DuplicateOutput1 (CaptureHdr) while the display shows HDR.
             using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
             _zonePipeline.SetFrame(screenTexture, _monitorTarget);
 
@@ -195,12 +188,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     }
 
     /// <summary>
-    /// Takes the position, visibility and (if it changed) the shape of the mouse pointer from an acquired frame. Called under <see cref="_captureLock"/>.
+    /// Takes the mouse pointer from an acquired frame. Called under <see cref="_captureLock"/>.
     /// </summary>
-    /// <returns><c>true</c> if the pointer drawn into the zones changed (moved, changed its shape, appeared or disappeared).</returns>
+    /// <returns><c>true</c> if the pointer drawn into the zones changed.</returns>
     private bool UpdateCursor(IDXGIOutputDuplication duplicatedOutput, in OutduplFrameInfo frameInfo)
     {
-        // Neither the position nor the shape changed since the last frame (the position is always supplied with an update).
+        // No pointer update since the last frame.
         if (frameInfo.LastMouseUpdateTime == 0) return false;
 
         bool wasDrawn = _cursorVisible && (_cursorShape != null);
@@ -241,7 +234,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         }
         catch (ArgumentException ex)
         {
-            // A shape this can't draw (e.g. an unknown type): the pointer isn't drawn until the next shape.
+            // Not drawn until the next shape.
             ReportError(ex);
             return null;
         }
@@ -252,12 +245,12 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         ArgumentNullException.ThrowIfNull(captureZone);
 
-        // _captureLock: another thread can capture (or restart) meanwhile, and both use the immediate context.
+        // Guards the immediate context against a concurrent capture or restart.
         lock (_captureLock)
         {
             if (!_zonePipeline.WriteZone(captureZone, buffer)) return false;
 
-            // Into the zone's pixels, not the staging texture: that keeps the frame for writes with the pointer somewhere else.
+            // Into the zone, so the staging texture keeps the clean frame.
             if (_cursorVisible && (_cursorShape != null))
                 _cursorShape.Draw(buffer, captureZone.Region, captureZone.Width, captureZone.Height, captureZone.DownscaleLevel, _cursorX, _cursorY);
         }
@@ -280,15 +273,13 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         lock (_captureLock)
         {
-            // Dispose releases everything under this lock after setting the flag: nothing created here may outlive it.
+            // Nothing created here may outlive Dispose.
             if (IsDisposed) return false;
 
             try
             {
                 DisposeDX();
 
-                // Found by its id and read again: after a mode change (resolution, rotation) the display has other values,
-                // and after displays were added or removed the indices can point to another adapter or output.
                 (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DXGIDevices.FindDisplay(_factory, Display.Id)
                                                                                                      ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
                 using IDXGIAdapter1 adapter = foundAdapter;
@@ -299,24 +290,22 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
                 using IDXGIOutput5 output = dxgiOutput.QueryInterface<IDXGIOutput5>();
 
-                // The duplication delivers the frames in the native orientation of the output.
+                // The duplication delivers the native orientation of the output.
                 _zonePipeline.Initialize(_device, _context, display, display.Rotation);
 
-                // While the display shows HDR, DuplicateOutput1 delivers 16-bit frames (tone mapped by the capture), otherwise 8-bit ones.
-                // DuplicateOutput always delivers 8-bit frames, converted by Windows.
+                // DuplicateOutput1 delivers 16-bit frames while the display shows HDR. DuplicateOutput always delivers 8-bit frames converted by Windows.
                 if (Options.CaptureHdr)
                     _duplicatedOutput = output.DuplicateOutput1(_device, [Format.R16G16B16A16_Float, Format.B8G8R8A8_UNorm]);
                 else
                     _duplicatedOutput = output.DuplicateOutput(_device);
 
-                // Zone writes take the display of the capture texture from the pipeline: the zones get this one after the capture.
                 SetDisplay(display);
 
                 return true;
             }
             catch (Exception ex)
             {
-                // E.g. while the secure desktop (UAC, lock screen) is shown. The next capture tries again.
+                // E.g. while a UAC prompt or the lock screen is shown.
                 DisposeDX();
                 ReportError(ex);
 
@@ -345,7 +334,7 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         _context = null;
         _device = null;
 
-        // Unknown until the new duplication delivers the next pointer update.
+        // Unknown until the next pointer update.
         _cursorShape = null;
         _cursorVisible = false;
     }

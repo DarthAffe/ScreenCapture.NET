@@ -18,9 +18,8 @@ internal static class SpaPod
     // The largest size offered: the compositor picks the size of the monitor.
     private const int MAX_DIMENSION = 16384;
 
-    // The capture holds two buffers between captures (the current frame and the newest one, see PipeWireStream): with a third the compositor can always send a newer frame.
-    // Fewer are accepted, so a compositor that offers at most two still streams (with frames that can be one capture old); any more are fine.
-    // A compositor that drives the stream (all of them do) takes this default if its range allows it; otherwise its own default counts.
+    // The capture holds two buffers (current and newest), with a third the compositor can always send a newer frame.
+    // Fewer are accepted (frames can then be one capture old). The compositor takes this default if its range allows it.
     private const int PREFERRED_BUFFERS = 3;
     private const int MIN_BUFFERS = 2;
 
@@ -29,7 +28,7 @@ internal static class SpaPod
     #region Methods
 
     /// <summary>
-    /// Builds the formats the capture accepts: raw video in BGRx or BGRA (no modifiers, so the buffers are in memory, not DMA-BUFs), of any size and frame rate.
+    /// Builds the formats the capture accepts: raw BGRx or BGRA video in memory (no modifiers, so no DMA-BUFs), of any size and frame rate.
     /// </summary>
     /// <param name="width">The preferred width (the default of the range).</param>
     /// <param name="height">The preferred height (the default of the range).</param>
@@ -53,7 +52,7 @@ internal static class SpaPod
     }
 
     /// <summary>
-    /// Builds the buffers the capture accepts: preferably three (see <see cref="PREFERRED_BUFFERS"/>), in memory, mapped by PipeWire (no DMA-BUFs).
+    /// Builds the buffers the capture accepts: preferably three (see <see cref="PREFERRED_BUFFERS"/>), in memory mapped by PipeWire.
     /// </summary>
     public static byte[] BuildBuffers()
     {
@@ -119,7 +118,7 @@ internal static class SpaPod
 
             ReadOnlySpan<byte> value = properties.Slice(16, valueSize);
 
-            // A choice: its body (kind, flags), the header of its values (size, type), then the values (the first is the default).
+            // A choice: kind and flags, the header of its values, then the values (the first is the default).
             if (valueType == SPA_TYPE_Choice)
             {
                 if (value.Length < 16) return false;
@@ -209,7 +208,7 @@ internal static class SpaPod
             PadTo8();
         }
 
-        // Every value of the types used here is a multiple of 4 bytes: Id and Int one, Rectangle and Fraction two.
+        // All values used here are multiples of 4 bytes.
         public void Choice(uint kind, uint childType, ReadOnlySpan<uint> values)
         {
             uint childSize = childType is SPA_TYPE_Rectangle or SPA_TYPE_Fraction ? 8u : 4u;

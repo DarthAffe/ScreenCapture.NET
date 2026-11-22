@@ -21,10 +21,10 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     public X11Error? LastError => _errors?.LastError;
 
     /// <summary>
-    /// Gets a value indicating whether the connection broke (e.g. the X server stopped). Every call on it fails from then on, mostly without an error in <see cref="LastError"/>.
+    /// Gets a value indicating whether the connection broke. Every call on it fails from then on, mostly without a <see cref="LastError"/>.
     /// </summary>
     /// <remarks>
-    /// Only with libX11 1.7 or newer: before, Xlib terminates the process when a connection breaks (see <see cref="X11ErrorHandler"/>).
+    /// Only with libX11 1.7+, older versions terminate the process (see <see cref="X11ErrorHandler"/>).
     /// </remarks>
     public bool IsConnectionLost => _errors?.IsConnectionLost ?? false;
 
@@ -44,8 +44,7 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     #region Methods
 
     /// <summary>
-    /// Opens a connection to an X server. X errors on it are recorded (<see cref="LastError"/>) instead of terminating the process,
-    /// with libX11 1.7 or newer also a broken connection (<see cref="IsConnectionLost"/>).
+    /// Opens a connection to an X server. Its errors are recorded (<see cref="LastError"/>, <see cref="IsConnectionLost"/>) instead of terminating the process.
     /// </summary>
     /// <param name="displayName">The name of the X display (e.g. <c>:0</c>); <c>null</c> for the one named by $DISPLAY.</param>
     /// <returns>The connection; invalid if it couldn't be opened.</returns>
@@ -91,7 +90,7 @@ internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
         _ = X11.XCloseDisplay(handle);
 
-        // Only after closing: XCloseDisplay flushes pending requests, and their errors (or a broken connection) must not reach Xlib's default handlers.
+        // Only after closing: errors of the requests XCloseDisplay flushes must not reach Xlib's default handlers.
         if (_errors != null)
             X11ErrorHandler.Unregister(handle, _errors);
 

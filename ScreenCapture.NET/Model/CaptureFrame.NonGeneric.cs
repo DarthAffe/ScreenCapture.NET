@@ -7,23 +7,20 @@ namespace ScreenCapture.NET;
 /// Represents the pixels of an <see cref="ICaptureZone"/> while it's held, for code that doesn't know the color format at compile time.
 /// </summary>
 /// <remarks>
-/// Get it from <see cref="ICaptureZone.AcquireFrame"/> and dispose it as soon as possible, preferably with <c>using</c>: while it's held, the capture writes the zone's second buffer, and a frame held over two captures makes the zone skip a capture.
+/// Get it from <see cref="ICaptureZone.AcquireFrame"/> and dispose it as soon as possible, preferably with <c>using</c>. A frame held too long makes the zone skip captures.
 /// <para>
-/// Use <see cref="Execute{TOperation, TResult}(TOperation)"/> to process the pixels without knowing their color format,
-/// or <see cref="AsRefImage{TColor}"/> if the format is known.
+/// Use <see cref="Execute{TOperation, TResult}(TOperation)"/> to process the pixels without knowing their color format, or <see cref="AsRefImage{TColor}"/> if it's known.
 /// </para>
 /// <para>
-/// The pixels are only valid until the frame is disposed. Don't keep the spans or images obtained from it, use <see cref="CopyImage"/> to keep a copy.
-/// </para>
-/// <para>
-/// The frame is a view of the zone at the time it was acquired and keeps its size if the zone is changed later. Dispose it exactly once and on the thread that acquired it, and don't copy it.
+/// The pixels are only valid until the frame is disposed. Use <see cref="CopyImage"/> to keep them.
+/// Dispose it exactly once, on the thread that acquired it, and don't copy it.
 /// </para>
 /// </remarks>
 public ref struct CaptureFrame
 {
     #region Properties & Fields
 
-    // The buffer stays for the typed access after the frame released it as a reader (_reader is cleared then).
+    // Kept after Dispose cleared _reader.
     private readonly ZoneBuffer _zoneBuffer;
     private ZoneBuffer? _reader;
     private readonly ReadOnlySpan<byte> _buffer;
@@ -122,12 +119,8 @@ public ref struct CaptureFrame
     }
 
     /// <summary>
-    /// Copies the pixels of the frame into a new <see cref="IImage"/> that you own.
+    /// Copies the pixels of the frame into a new <see cref="IImage"/>, e.g. to keep them after the frame is disposed.
     /// </summary>
-    /// <remarks>
-    /// Use it to keep the pixels after the frame is disposed, or to pass them to other threads or async code.
-    /// <see cref="RawBuffer"/> and the images from <see cref="AsRefImage{TColor}"/> are only valid while the frame is held.
-    /// </remarks>
     /// <returns>The copy of the pixels.</returns>
     public readonly IImage CopyImage() => ColorFormat.CreateImage(_buffer, Width, Height, Stride);
 

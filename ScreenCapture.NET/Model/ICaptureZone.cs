@@ -10,18 +10,17 @@ namespace ScreenCapture.NET;
 /// <b>Thread safety:</b> all members can be used from any thread, also while the zone is captured or changed (see <see cref="IScreenCapture"/>).
 /// <list type="bullet">
 /// <item><description>
-/// Every property returns a value the zone actually had: e.g. <see cref="Region"/> and <see cref="Display"/> never mix two changes.
-/// But properties read one after another can belong to different changes if another thread changes the zone meanwhile (e.g. <see cref="Region"/> and <see cref="Width"/>).
-/// The size of the pixels is reliable on a frame (see <see cref="AcquireFrame"/>), which keeps it while it's held.
+/// Every property is consistent on its own, but two properties read one after another can belong to different changes.
+/// Use the size of a frame (see <see cref="AcquireFrame"/>), it doesn't change while the frame is held.
 /// </description></item>
 /// <item><description>
-/// A frame is used and disposed on the thread that acquired it. Frames can be held by any number of threads at once, and holding one never makes another thread wait.
+/// A frame is used and disposed on the thread that acquired it. Any number of frames can be held at once without blocking anything.
 /// </description></item>
 /// <item><description>
-/// <see cref="Updated"/> is raised on the thread of the capture that wrote the zone, with no lock of the library held.
+/// <see cref="Updated"/> is raised on the thread of the capture, without a lock of the library held.
 /// </description></item>
 /// <item><description>
-/// <see cref="RequestUpdate"/> can be called at any time: a request made while the zone is written is kept for the next capture.
+/// <see cref="RequestUpdate"/> can be called at any time. A request made while the zone is written is kept for the next capture.
 /// </description></item>
 /// </list>
 /// </remarks>
@@ -31,7 +30,7 @@ public interface ICaptureZone
     /// Gets the display this zone is on.
     /// </summary>
     /// <remarks>
-    /// Follows the <see cref="IScreenCapture.Display"/> of the capture when it changes (see <see cref="IScreenCapture.DisplayChanged"/>).
+    /// Follows the <see cref="IScreenCapture.Display"/> of the capture.
     /// </remarks>
     Display Display { get; }
 
@@ -39,9 +38,8 @@ public interface ICaptureZone
     /// Gets if the <see cref="Region"/> lies within the <see cref="Display"/>, so the zone can be captured.
     /// </summary>
     /// <remarks>
-    /// A zone is valid when it's registered. It becomes invalid if the display gets smaller (e.g. a lower resolution or a rotation, see <see cref="IScreenCapture.DisplayChanged"/>)
-    /// so that the region doesn't fit anymore. The region isn't changed: an invalid zone isn't written and keeps its pixels
-    /// until <see cref="IScreenCapture.UpdateCaptureZone"/> gives it a region that fits, or the display gets large enough again.
+    /// A zone becomes invalid if the display gets too small for its region (see <see cref="IScreenCapture.DisplayChanged"/>).
+    /// An invalid zone isn't written and keeps its pixels, until <see cref="IScreenCapture.UpdateCaptureZone"/> gives it a region that fits or the display grows again.
     /// </remarks>
     bool IsValid { get; }
 
@@ -54,7 +52,7 @@ public interface ICaptureZone
     /// Gets the region of the display this zone captures, in display pixels (before downscaling).
     /// </summary>
     /// <remarks>
-    /// Change it with <see cref="IScreenCapture.UpdateCaptureZone"/>, e.g. <c>screenCapture.UpdateCaptureZone(zone, zone.Region with { X = 100 })</c>.
+    /// Changed with <see cref="IScreenCapture.UpdateCaptureZone"/>.
     /// </remarks>
     CaptureRegion Region { get; }
 
@@ -77,7 +75,7 @@ public interface ICaptureZone
     /// Gets the level of downscaling applied to the image of this region before copying to local memory. The calculation is (width and height)/2^downscaleLevel.
     /// </summary>
     /// <remarks>
-    /// This can be lower than the requested level: downscaling stops once both sides of the region are down to 1 pixel.
+    /// Can be lower than the requested level: downscaling stops once both sides are down to 1 pixel.
     /// </remarks>
     int DownscaleLevel { get; }
 
@@ -85,10 +83,7 @@ public interface ICaptureZone
     /// Gets or sets if the <see cref="ICaptureZone"/> should be automatically updated on every captured frame.
     /// </summary>
     /// <remarks>
-    /// Captures without a new frame (<see cref="CaptureResult.NoChange"/>, <see cref="CaptureResult.Timeout"/>) don't write the zone again,
-    /// unless it doesn't show the last frame yet: it was registered or changed (<see cref="IScreenCapture.UpdateCaptureZone"/>) since,
-    /// or it missed the frame because a frame of the zone was still held (see <see cref="AcquireFrame"/>). So it's never left behind on a static screen.
-    /// Invalid zones (see <see cref="IsValid"/>) aren't written.
+    /// Captures without a new frame don't write the zone again, unless it doesn't show the last frame yet (e.g. it was changed or skipped a capture).
     /// </remarks>
     bool AutoUpdate { get; set; }
 
@@ -106,23 +101,21 @@ public interface ICaptureZone
     /// Acquires the current pixels of the zone. Release them by disposing the returned frame.
     /// </summary>
     /// <remarks>
-    /// Returns right away, with the pixels the last capture wrote: it doesn't wait for a capture or for other frames.
-    /// The pixels of the frame don't change while it's held: the zone has two buffers, the capture writes the one no frame reads and never waits for frames.
-    /// A frame that's still held when the capture after the next one starts makes the zone skip that capture (it's written by the next capture after the frame was disposed).
+    /// Returns right away with the pixels the last capture wrote. They don't change while the frame is held: the zone is double-buffered.
+    /// A zone whose frame is still held two captures later skips captures until it's disposed, so keep frames short.
     /// <para>
-    /// Any method of the <see cref="IScreenCapture"/> can be called while holding a frame, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
-    /// The frame keeps the size it was created with. Keep frames short anyway.
+    /// Any method of the <see cref="IScreenCapture"/> can be called while holding a frame. The frame keeps its size.
     /// </para>
     /// </remarks>
     /// <returns>The frame holding the pixels.</returns>
     CaptureFrame AcquireFrame();
 
     /// <summary>
-    /// Requests to update this <see cref="ICaptureZone"/> with the next capture, also if it has no new frame (from the last frame, which is still current).
+    /// Requests to update this <see cref="ICaptureZone"/> with the next capture, also if there's no new frame.
     /// Only necessary if <see cref="AutoUpdate"/> is set to <c>false</c>.
     /// </summary>
     /// <remarks>
-    /// The request stays until the zone is written: captures without a frame (e.g. <see cref="CaptureResult.Unavailable"/>) don't write zones.
+    /// The request stays until the zone is written.
     /// </remarks>
     void RequestUpdate();
 }

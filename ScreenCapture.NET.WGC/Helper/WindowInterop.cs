@@ -31,7 +31,7 @@ internal static partial class WindowInterop
     /// <summary>
     /// Gets the window of a <see cref="Display.Id"/> created by <see cref="GetWindowId"/>.
     /// </summary>
-    /// <returns><c>true</c> if the id is the one of a window; otherwise (e.g. the one of a display), <c>false</c>.</returns>
+    /// <returns><c>true</c> if the id is the one of a window; otherwise, <c>false</c>.</returns>
     public static bool TryGetWindow(string id, out nint window)
     {
         window = 0;
@@ -53,13 +53,12 @@ internal static partial class WindowInterop
     public static bool IsMinimized(nint window) => IsIconic(window);
 
     /// <summary>
-    /// Gets the monitor (<c>HMONITOR</c>) the window is on (mostly), or the nearest one.
+    /// Gets the monitor (<c>HMONITOR</c>) the window is mostly on, or the nearest one.
     /// </summary>
     public static nint GetMonitor(nint window) => MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
 
     /// <summary>
-    /// Creates the <see cref="Display"/> describing a window: its position on the desktop (the frame as it's shown, without the shadow), the given size (the one of its frames),
-    /// its title as <see cref="Display.FriendlyName"/>, and the device name and graphics card of the display it's on.
+    /// Creates the <see cref="Display"/> describing a window, with the given size of its frames.
     /// </summary>
     public static Display CreateDisplay(nint window, Display monitorDisplay, int width, int height)
     {
@@ -68,7 +67,7 @@ internal static partial class WindowInterop
     }
 
     /// <summary>
-    /// Creates the <see cref="Display"/> of a window capture before it knows the window (it isn't there anymore, or its display wasn't found): only the id is known.
+    /// Creates the <see cref="Display"/> of a window that isn't known (anymore), with only the id.
     /// </summary>
     public static Display CreateUnknownDisplay(nint window)
         => new(GetWindowId(window), -1, string.Empty, string.Empty, 0, 0, 0, 0, ImageRotation.None, new GraphicsCard(string.Empty, -1, string.Empty, 0, 0));
@@ -88,7 +87,7 @@ internal static partial class WindowInterop
         return (bounds.Left, bounds.Top);
     }
 
-    // The extended frame bounds are in physical pixels (also in a process that isn't DPI aware) and leave out the invisible resize borders and the shadow.
+    // In physical pixels (also without DPI awareness), without the invisible resize borders and the shadow.
     private static unsafe RECT GetBounds(nint window)
     {
         RECT bounds;

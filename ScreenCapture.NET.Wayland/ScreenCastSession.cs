@@ -11,7 +11,7 @@ namespace ScreenCapture.NET;
 /// A screen cast session of the xdg-desktop-portal (<c>org.freedesktop.portal.ScreenCast</c>) on its own connection to the session bus.
 /// </summary>
 /// <remarks>
-/// The portal ends the sessions of a connection that closes, so disposing the session (and with it the connection) always ends it.
+/// The portal ends the sessions of a closed connection, so disposing always ends the session.
 /// </remarks>
 internal sealed class ScreenCastSession : IDisposable
 {
@@ -36,7 +36,7 @@ internal sealed class ScreenCastSession : IDisposable
     // The version of the interface that has persist_mode and restore_token.
     internal const uint RESTORE_VERSION = 4;
 
-    // Disposing waits this long for the portal to confirm the end of the session; the connection is closed afterwards anyway.
+    // How long Dispose waits for the portal to confirm the end. The connection is closed anyway.
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(1);
 
     private static int _lastToken;
@@ -63,8 +63,7 @@ internal sealed class ScreenCastSession : IDisposable
     public IReadOnlyList<PortalStream> Streams { get; private set; } = [];
 
     /// <summary>
-    /// Gets a value indicating whether the session ended: the portal closed it (e.g. the user stopped sharing), the connection to the session bus closed,
-    /// or the connection to PipeWire broke (the nodes of the session are gone with it, e.g. when the daemon restarted).
+    /// Gets a value indicating whether the session ended: the portal closed it (e.g. the user stopped sharing), or the connection to the bus or to PipeWire broke.
     /// </summary>
     public bool IsClosed => _isClosed || _disconnected.IsCompleted || (_core?.IsDead ?? false);
 
@@ -74,7 +73,7 @@ internal sealed class ScreenCastSession : IDisposable
     public bool IsStarted => _isStarted;
 
     /// <summary>
-    /// Gets the token the portal returned to restore the session later; <c>null</c> if it returned none (e.g. without a persist mode, or before version 4).
+    /// Gets the token the portal returned to restore the session later; <c>null</c> if it returned none.
     /// </summary>
     public string? RestoreToken { get; private set; }
 
@@ -99,7 +98,7 @@ internal sealed class ScreenCastSession : IDisposable
     #region Methods
 
     /// <summary>
-    /// Creates the session, lets the user choose the monitors to share and starts sharing them. Waits until the user answered the dialog of the compositor.
+    /// Creates the session, lets the user choose the monitors and starts sharing them. Waits until the user answered the dialog.
     /// </summary>
     /// <param name="options">The options of the session.</param>
     /// <param name="restoreToken">The token of the session to restore; <c>null</c> for none.</param>
@@ -118,7 +117,7 @@ internal sealed class ScreenCastSession : IDisposable
 
             uint? cursorMode = GetCursorMode(options, await ReadPropertyAsync("AvailableCursorModes").ConfigureAwait(false));
 
-            // Before version 4 the portal can't restore sessions (the options would be ignored anyway).
+            // Before version 4 the portal can't restore sessions.
             bool canRestore = await ReadPropertyAsync("version").ConfigureAwait(false) >= RESTORE_VERSION;
             await RequestAsync("SelectSources", (ref MessageWriter writer) =>
             {
@@ -145,7 +144,7 @@ internal sealed class ScreenCastSession : IDisposable
     }
 
     /// <summary>
-    /// Gets the connection to PipeWire through which the streams of the session are received; the first call opens it.
+    /// Gets the connection to PipeWire for the streams of the session; the first call opens it.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The session was disposed.</exception>
     /// <exception cref="InvalidOperationException">The portal didn't open the connection, or libpipewire couldn't connect.</exception>
@@ -158,7 +157,7 @@ internal sealed class ScreenCastSession : IDisposable
 
             string sessionPath = _sessionPath ?? throw new InvalidOperationException("The screen cast session wasn't started.");
 
-            // On the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
+            // On the thread pool, so waiting can't deadlock with a synchronization context.
             SafeFileHandle socket = Task.Run(() => OpenPipeWireRemoteAsync(sessionPath)).GetAwaiter().GetResult();
             _core = PipeWireCore.Connect(socket);
             return _core;
@@ -194,10 +193,10 @@ internal sealed class ScreenCastSession : IDisposable
     }
 
     /// <summary>
-    /// Gets the cursor mode to ask for: only one the portal offers (asking for another one ends the session); <c>null</c> to ask for none (the portal hides the pointer then).
+    /// Gets the cursor mode to ask for, only one the portal offers (another one ends the session); <c>null</c> for none, which hides the pointer.
     /// </summary>
     /// <param name="options">The options of the session.</param>
-    /// <param name="availableCursorModes">The <c>AvailableCursorModes</c> of the portal (0 before version 2 of the interface, which has no cursor modes).</param>
+    /// <param name="availableCursorModes">The <c>AvailableCursorModes</c> of the portal (0 before version 2).</param>
     internal static uint? GetCursorMode(WaylandSessionOptions options, uint availableCursorModes)
     {
         uint mode = options.DrawCursor ? CURSOR_MODE_EMBEDDED : CURSOR_MODE_HIDDEN;
@@ -220,7 +219,7 @@ internal sealed class ScreenCastSession : IDisposable
 
     private Task<uint> ReadPropertyAsync(string name) => ReadPropertyAsync(_connection, name);
 
-    // A property of the ScreenCast interface; 0 if it doesn't exist (e.g. AvailableCursorModes before version 2, or no ScreenCast interface at all).
+    // 0 if the property (or the interface) doesn't exist.
     private static async Task<uint> ReadPropertyAsync(DBusConnection connection, string name)
     {
         MessageWriter writer = connection.GetMessageWriter();
@@ -248,13 +247,13 @@ internal sealed class ScreenCastSession : IDisposable
         }
     }
 
-    // A method of the ScreenCast interface that answers with a request and later with the Response signal of the request.
+    // A method answering with a request, and later with its Response signal.
     private async Task<Dictionary<string, VariantValue>> RequestAsync(string method, OptionsWriter? writeOptions, string? sessionPath = null, string? parentWindow = null)
     {
         string token = CreateToken();
         string requestPath = GetRequestPath(_connection.UniqueName ?? string.Empty, token);
 
-        // Watched before the call, so a response sent before the reply isn't missed.
+        // Watched before the call, so an early response isn't missed.
         TaskCompletionSource<(uint Code, Dictionary<string, VariantValue> Results)> response = new(TaskCreationOptions.RunContinuationsAsynchronously);
         using IDisposable watch = await _connection.WatchSignalAsync(PORTAL_NAME, requestPath, REQUEST_INTERFACE, "Response", ReadResponse,
                                                                      notification =>
@@ -266,11 +265,11 @@ internal sealed class ScreenCastSession : IDisposable
         string handle = await _connection.CallMethodAsync(CreateRequestCall(method, token, writeOptions, sessionPath, parentWindow), (message, _) => message.GetBodyReader().ReadObjectPathAsString(), null)
                                          .ConfigureAwait(false);
 
-        // Portals before xdg-desktop-portal 0.9 (2017) ignore the handle token; their response could be sent before it's watched.
+        // xdg-desktop-portal before 0.9 (2017) ignores the handle token.
         if (!string.Equals(handle, requestPath, StringComparison.Ordinal))
             throw new InvalidOperationException($"The screen cast portal answered {method} with the unexpected request {handle} (xdg-desktop-portal older than 0.9?).");
 
-        // The response of a dialog the user doesn't answer never comes; the disconnect (e.g. by Dispose) ends the wait.
+        // An unanswered dialog never responds, a disconnect (e.g. by Dispose) ends the wait.
         await Task.WhenAny(response.Task, _disconnected).ConfigureAwait(false);
         if (!response.Task.IsCompleted)
             throw new DBusConnectionClosedException($"The connection to the session bus closed while waiting for the response to {method}.");
@@ -342,7 +341,7 @@ internal sealed class ScreenCastSession : IDisposable
     }
 
     /// <summary>
-    /// Gets the path of the request with the given token: the portal puts it under the unique name of the caller, without the leading ':' and with '_' for '.'.
+    /// Gets the path of the request with the given token, under the unique name of the caller (without ':' and with '_' for '.').
     /// </summary>
     internal static string GetRequestPath(string uniqueName, string token)
         => $"{PORTAL_PATH}/request/{uniqueName.TrimStart(':').Replace('.', '_')}/{token}";
@@ -356,14 +355,14 @@ internal sealed class ScreenCastSession : IDisposable
                : new InvalidOperationException($"The screen cast portal ended the session ({method} failed with response {code}).");
 
     /// <summary>
-    /// Closes the PipeWire connection (destroying the streams of the captures), ends the session and closes the connection to the bus.
+    /// Closes the PipeWire connection, ends the session and closes the connection to the bus.
     /// Can be called while <see cref="StartAsync"/> waits, which then fails.
     /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0) return;
 
-        // The streams of the captures first: they're destroyed with it.
+        // Destroys the streams of the captures.
         lock (_coreLock)
         {
             _core?.Dispose();
@@ -391,7 +390,7 @@ internal sealed class ScreenCastSession : IDisposable
             }
             catch (Exception)
             {
-                // The connection closes anyway, which ends the session too.
+                // Closing the connection ends the session too.
             }
         }
 
@@ -401,6 +400,6 @@ internal sealed class ScreenCastSession : IDisposable
 
     #endregion
 
-    // MessageWriter is a ref struct: passed by value (e.g. as an Action<MessageWriter>) the options would be written into a copy and the bus would drop the connection.
+    // By ref: written into a copy, the bus would drop the connection.
     private delegate void OptionsWriter(ref MessageWriter writer);
 }

@@ -6,10 +6,10 @@ using Vortice.Direct3D9;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Creates <see cref="GraphicsCard"/>s and <see cref="Display"/>s from D3D9 adapters, for the service and for captures that read their display again.
+/// Creates <see cref="GraphicsCard"/>s and <see cref="Display"/>s from D3D9 adapters.
 /// </summary>
 /// <remarks>
-/// D3D9 has one adapter (ordinal) per display. A graphics card is identified by the LUID of its adapters and has the index of its first adapter.
+/// D3D9 has one adapter per display. A graphics card is identified by the LUID of its adapters and has the index of its first one.
 /// </remarks>
 internal static partial class DX9Devices
 {

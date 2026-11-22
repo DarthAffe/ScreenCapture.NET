@@ -10,7 +10,7 @@ internal sealed class WinRTHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     #region Properties & Fields
 
-    // If the object is closed (IClosable) before the reference is released: closing frees its resources even if Windows still holds references to it.
+    // Closing (IClosable) frees the resources even if Windows still holds references.
     private readonly bool _close;
 
     /// <summary>

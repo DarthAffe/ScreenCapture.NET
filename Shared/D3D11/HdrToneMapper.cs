@@ -10,8 +10,8 @@ namespace ScreenCapture.NET;
 /// Tone maps HDR frames (scRGB, <c>R16G16B16A16_FLOAT</c>) into 8-bit sRGB textures on the GPU (<c>Shaders/HdrToneMapping.hlsl</c>).
 /// </summary>
 /// <remarks>
-/// Colors up to SDR white keep the value they have on an SDR display; brighter ones are scaled down as a whole (keeping their hue), colors outside the sRGB gamut are clamped to it.
-/// Not thread-safe: used with the immediate context of its device under the capture lock.
+/// Colors up to SDR white look like on an SDR display, brighter ones are scaled down keeping their hue. Colors outside the sRGB gamut are clamped.
+/// Not thread-safe, used under the capture lock.
 /// </remarks>
 internal sealed class HdrToneMapper : IDisposable
 {
@@ -65,7 +65,7 @@ internal sealed class HdrToneMapper : IDisposable
     /// <summary>
     /// Converts an SDR white level to the factor the frame is multiplied with, so SDR white becomes 1.0.
     /// </summary>
-    /// <param name="sdrWhiteLevel">The luminance of SDR white on the display, in nits. Invalid values (not positive or not finite) use 80 nits (no scaling).</param>
+    /// <param name="sdrWhiteLevel">The luminance of SDR white on the display in nits. Invalid values mean no scaling.</param>
     public static float GetWhiteScale(float sdrWhiteLevel)
         => (float.IsFinite(sdrWhiteLevel) && (sdrWhiteLevel > 0)) ? SCRGB_WHITE_NITS / sdrWhiteLevel : 1;
 
@@ -80,7 +80,7 @@ internal sealed class HdrToneMapper : IDisposable
     /// <param name="whiteScale">The factor the frame is multiplied with (see <see cref="GetWhiteScale"/>).</param>
     public void Draw(ID3D11DeviceContext context, ID3D11ShaderResourceView frame, ID3D11RenderTargetView target, int width, int height, float whiteScale)
     {
-        // The value is the same for most frames: the buffer is only updated if the user changed the SDR brightness.
+        // Only updated if the SDR brightness changed.
         if (!whiteScale.Equals(_whiteScale))
         {
             Constants constants = new() { WhiteScale = whiteScale };
@@ -88,7 +88,7 @@ internal sealed class HdrToneMapper : IDisposable
             _whiteScale = whiteScale;
         }
 
-        // The device only draws this: no other state (input layout, blend, rasterizer) is ever changed from its default.
+        // The device draws nothing else, so all other state stays at its default.
         context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         context.VSSetShader(_vertexShader);
         context.PSSetShader(_pixelShader);
@@ -99,7 +99,7 @@ internal sealed class HdrToneMapper : IDisposable
 
         context.Draw(3, 0);
 
-        // Unbound, so the textures can be written (frame) and read (target) by copies without a binding conflict.
+        // Unbound, so copies can use the textures.
         context.PSSetShaderResource(0, null!);
         context.OMSetRenderTargets((ID3D11RenderTargetView)null!);
     }

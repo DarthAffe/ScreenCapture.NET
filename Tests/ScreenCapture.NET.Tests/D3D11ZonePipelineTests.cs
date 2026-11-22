@@ -7,7 +7,7 @@ using Vortice.DXGI;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// <see cref="D3D11ZonePipeline"/>: zones written from frames on the GPU, run on WARP (Direct3D's software rasterizer, available on every Windows, also without a GPU).
+/// <see cref="D3D11ZonePipeline"/> on WARP (Direct3D's software rasterizer, available on every Windows).
 /// The reference is the CPU zone write of <see cref="CaptureZoneWriter"/> from the same frame.
 /// </summary>
 [TestClass]
@@ -180,7 +180,7 @@ public sealed class D3D11ZonePipelineTests
         using WarpScreenCapture capture = new(display);
         CaptureZone<ColorBGRA> zone = capture.RegisterCaptureZone(new CaptureRegion(0, 0, 16, 16));
 
-        // SDR colors as Windows shows them on an HDR display with SDR white at 200 nits (1.0 = 80 nits); the pixel shader itself is covered by HdrToneMappingTests.
+        // SDR colors on an HDR display with SDR white at 200 nits. The shader itself is covered by HdrToneMappingTests.
         const float SDR_WHITE_LEVEL = 200;
         ColorBGRA[] colors = [.. Enumerable.Range(0, 256).Select(i => new ColorBGRA((byte)((i * 7) % 256), (byte)(255 - i), (byte)i, 255))];
         float scale = SDR_WHITE_LEVEL / HdrToneMapper.SCRGB_WHITE_NITS;
@@ -189,7 +189,7 @@ public sealed class D3D11ZonePipelineTests
         Assert.AreEqual(CaptureResult.NewFrame, capture.CaptureScreen());
         CollectionAssert.AreEqual(colors, GetPixels(zone), "first frame");
 
-        // Without a white level (the frame goes through SetFrame like in the captures), the last one is kept. Other colors, so a frame that isn't tone mapped is detected.
+        // Without a white level the last one is kept. Other colors, so a frame that isn't tone mapped shows.
         ColorBGRA[] otherColors = [.. Enumerable.Reverse(colors)];
         capture.SetHdrFrame(ToHdr(otherColors), null);
         Assert.AreEqual(CaptureResult.NewFrame, capture.CaptureScreen());
@@ -229,7 +229,7 @@ public sealed class D3D11ZonePipelineTests
     #endregion
 
     /// <summary>
-    /// A capture of frames set by the test, written through a <see cref="D3D11ZonePipeline"/> on a WARP device (like <see cref="DX11ScreenCapture"/> without the duplication).
+    /// A capture of frames set by the test, like <see cref="DX11ScreenCapture"/> without the duplication.
     /// </summary>
     private sealed class WarpScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
@@ -335,7 +335,7 @@ public sealed class D3D11ZonePipelineTests
             CaptureResult result = CaptureResult.NoChange;
             if (_nextFrame != null)
             {
-                // Like the captures (SetFrame picks by the format), unless the test sets a white level (there's no monitor to read it from).
+                // Like the captures, unless the test sets a white level (there's no monitor).
                 if (_nextFrameIsHdr && (_nextSdrWhiteLevel != null))
                     _zonePipeline.ToneMapFrame(_nextFrame, _nextSdrWhiteLevel);
                 else

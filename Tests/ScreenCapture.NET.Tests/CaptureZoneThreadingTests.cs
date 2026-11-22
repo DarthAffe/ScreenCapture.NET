@@ -102,7 +102,7 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
-    /// A zone unregistered while a capture runs (after it took its snapshot) isn't written by that capture: backends never see unregistered zones.
+    /// A zone unregistered after a capture took its snapshot isn't written by it. Backends never see unregistered zones.
     /// </summary>
     [TestMethod]
     public void ZoneUnregisteredDuringACaptureIsNotWritten()
@@ -129,7 +129,7 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
-    /// Unregistering waits for a capture that writes the zone: once it returned, no capture writes it anymore (so a backend can release the zone's resources).
+    /// Unregistering waits for a capture writing the zone, afterwards no capture writes it anymore.
     /// </summary>
     [TestMethod]
     public void UnregisterWaitsForTheWriteOfTheZone()
@@ -213,7 +213,7 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
-    /// One thread captures continuously (every capture fills the zone with one color, different for each capture), another one resizes the zone.
+    /// One thread captures (each capture fills the zone with another color), another one resizes the zone.
     /// Every frame must show the pixels of exactly one capture in one size, and they must not change while it's held.
     /// </summary>
     [TestMethod]
@@ -283,7 +283,7 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
-    /// The region and the display of a zone are structs that other threads read without a lock while they change: every read must give one of the values that were set.
+    /// Region and display of a zone are read without a lock while they change: every read must give a value that was set.
     /// </summary>
     [TestMethod]
     public void ZonePropertiesNeverTear()
@@ -346,7 +346,7 @@ public sealed class CaptureZoneThreadingTests
     }
 
     /// <summary>
-    /// An update requested while the zone is written (e.g. from another thread) wants a newer frame than the one being written: it must not be cleared by that write.
+    /// An update requested while the zone is written wants a newer frame, so that write must not clear it.
     /// </summary>
     [TestMethod]
     public void UpdateRequestedDuringTheWriteIsKept()

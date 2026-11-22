@@ -449,8 +449,8 @@ public sealed class WGCHardwareTests
     }
 
     /// <summary>
-    /// A capture after a pause shows the screen as it is, not a frame from before the pause: Windows drops new frames while the frame pool has no free buffer,
-    /// so the capture mustn't leave frames in it between captures. Shows two small windows in the center of a display one after another.
+    /// A capture after a pause shows the current screen, not a frame from before (Windows drops new frames while the pool is full).
+    /// Shows two small windows in the center of a display one after another.
     /// </summary>
     [TestMethod]
     public void CaptureAfterAPauseShowsTheNewestFrame()

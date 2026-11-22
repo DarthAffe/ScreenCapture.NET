@@ -14,22 +14,14 @@ public static class BlackBarDetection
 {
     #region Constants
 
-    /// <summary>
-    /// Number of rows of a column strip that are checked at once. A strip with content is usually decided by its first block,
-    /// so only black strips are read completely.
-    /// </summary>
+    // Rows of a column strip checked at once. Strips with content are usually decided by the first block.
     private const int ROW_BLOCK_HEIGHT = 32;
     
     #endregion
 
     #region Properties & Fields
     
-    /// <summary>
-    /// Widths of the column strips that are checked as a whole, from coarse to fine.
-    /// Columns are searched strip by strip at the first width, then inside the strip with content at the next, down to single columns.
-    /// Wide first strips keep the per-row overhead low in black bars; the finer strips are wide enough for the vectorized
-    /// <c>MinMax</c> paths (16 px = 64 bytes, 4 px = 16 bytes per row).
-    /// </summary>
+    // Columns are searched in strips, coarse to fine down to single columns. The finer widths match the vectorized MinMax paths (64 and 16 bytes).
     private static ReadOnlySpan<int> StripWidths => [256, 64, 16, 4, 1];
     
     #endregion
@@ -213,7 +205,7 @@ public static class BlackBarDetection
 
         int bottom = LastContentRow(image, threshold) + 1;
 
-        // Rows outside [top, bottom) are black, so the columns only need to be checked inside.
+        // Rows outside are black, so only the content rows are checked for columns.
         RefImage<T> content = image[0, top, image.Width, bottom - top];
         int left = removeLeft ? FirstContentColumn(content, threshold) : 0;
         int right = removeRight ? LastContentColumn(content, threshold) + 1 : image.Width;
@@ -272,7 +264,7 @@ public static class BlackBarDetection
                 }
             }
 
-            // Only possible at the first width: every later range contains content.
+            // Only possible at the first width.
             if (!found) return -1;
         }
 
@@ -302,7 +294,7 @@ public static class BlackBarDetection
                 }
             }
 
-            // Only possible at the first width: every later range contains content.
+            // Only possible at the first width.
             if (!found) return -1;
         }
 
@@ -313,9 +305,7 @@ public static class BlackBarDetection
         where T : unmanaged, IColor<T>
         => (image.Width == 0) || (image.Height == 0);
 
-    /// <summary>
-    /// Checks a column strip block by block, so a strip with content is usually decided after its first rows.
-    /// </summary>
+    // Block by block, so strips with content are decided early.
     private static bool HasContent<T>(RefImage<T> strip, int threshold)
         where T : unmanaged, IColor<T>
     {
@@ -328,9 +318,6 @@ public static class BlackBarDetection
         return false;
     }
 
-    /// <summary>
-    /// A region has content if at least one pixel has a red, green or blue component above the threshold.
-    /// </summary>
     private static bool HasContent(ColorMinMax minMax, int threshold)
         => (minMax.RedMax > threshold) || (minMax.GreenMax > threshold) || (minMax.BlueMax > threshold);
 

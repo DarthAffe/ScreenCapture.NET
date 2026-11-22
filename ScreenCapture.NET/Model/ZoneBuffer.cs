@@ -6,11 +6,10 @@ using HPPH;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// A pixel buffer of a capture zone together with the size it was created for.
+/// A pixel buffer of a capture zone, without row padding.
 /// </summary>
 /// <remarks>
-/// Zones count the frames reading a buffer, so the capture only writes buffers nobody reads.
-/// The rows have no padding.
+/// Counts the frames reading it, so the capture only writes buffers nobody reads.
 /// </remarks>
 internal abstract class ZoneBuffer
 {
@@ -28,7 +27,7 @@ internal abstract class ZoneBuffer
     public int Stride { get; }
 
     /// <summary>
-    /// Gets the pixels as bytes, for code that doesn't know the color format.
+    /// Gets the pixels as bytes.
     /// </summary>
     public abstract ReadOnlySpan<byte> RawData { get; }
 
@@ -64,7 +63,7 @@ internal abstract class ZoneBuffer
     public void RemoveReader() => Interlocked.Decrement(ref _readers);
 
     /// <summary>
-    /// Executes <paramref name="operation"/> on the pixels, typed with their color format (for code that doesn't know it).
+    /// Executes <paramref name="operation"/> on the pixels, typed with their color format.
     /// </summary>
     public abstract TResult Execute<TOperation, TResult>(TOperation operation)
         where TOperation : IImageOperation<TResult>, allows ref struct;

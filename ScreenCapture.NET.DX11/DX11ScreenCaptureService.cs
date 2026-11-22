@@ -17,7 +17,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
-    // Enumerations use the factory under this lock and Dispose releases it under it, so it's never released while it's used.
+    // So Dispose never releases the factory while it's used.
     private readonly Lock _factoryLock = new();
     private readonly IDXGIFactory1 _factory;
     private readonly ScreenCaptureCache<DX11ScreenCapture, DX11CaptureOptions> _screenCaptures;
@@ -51,8 +51,8 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     /// Checks if Desktop Duplication can be used on this system.
     /// </summary>
     /// <remarks>
-    /// It needs Windows with DXGI. It doesn't tell if every display can be duplicated: on systems with two graphics cards (e.g. laptops) it can fail
-    /// for a display driven by the other card, which Windows.Graphics.Capture (ScreenCapture.NET.WGC) can capture.
+    /// Doesn't tell if every display can be duplicated: with two graphics cards (e.g. laptops) it can fail for a display of the other card.
+    /// ScreenCapture.NET.WGC can capture those.
     /// </remarks>
     /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
     [SupportedOSPlatformGuard("windows")]
@@ -82,7 +82,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        // Read right away (not while enumerating), so the factory isn't used outside the lock.
+        // Read right away, so the factory isn't used outside the lock.
         lock (_factoryLock)
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
@@ -94,7 +94,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        // Read right away (not while enumerating), so the factory isn't used outside the lock.
+        // Read right away, so the factory isn't used outside the lock.
         lock (_factoryLock)
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
@@ -108,9 +108,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     /// <remarks>
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// A new capture gets the <see cref="Options"/> of the service, an existing one keeps its own.
     /// </remarks>
     public DX11ScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
 
@@ -118,9 +116,7 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
     /// Creates a <see cref="DX11ScreenCapture"/> with the given options for the given display.
     /// </summary>
     /// <remarks>
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// An existing capture is only returned if it was created with equal options.
+    /// There's one capture per <see cref="Display.Id"/>. An existing capture is only returned if it was created with equal options.
     /// </remarks>
     /// <param name="display">The display to duplicate.</param>
     /// <param name="options">The options of the capture.</param>
@@ -135,11 +131,11 @@ public sealed class DX11ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     /// <remarks>
-    /// Disposes all captures created by the service. It's thread-safe and can be called more than once.
+    /// Disposes all captures created by the service. Can be called more than once.
     /// </remarks>
     public void Dispose()
     {
-        // The captures use the factory too (when they restart): they're disposed first.
+        // The captures use the factory too.
         if (!_screenCaptures.DisposeAll()) return;
 
         lock (_factoryLock)

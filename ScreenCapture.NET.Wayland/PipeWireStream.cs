@@ -12,9 +12,8 @@ namespace ScreenCapture.NET;
 /// </summary>
 /// <remarks>
 /// <para>
-/// PipeWire calls it on the thread of its <see cref="PipeWireCore"/>: every buffer that arrives replaces the newest one (the older goes back to PipeWire right away),
-/// <see cref="TakeNewestFrame"/> makes the newest the current one (the frame the zones are read from) and gives the previous current one back.
-/// The capture reads the zones from the current one without copying it (under <see cref="BufferLock"/>): PipeWire doesn't write into a buffer while the stream holds it.
+/// Every arriving buffer replaces the newest one, which goes back to PipeWire. <see cref="TakeNewestFrame"/> makes the newest the current one and gives the previous back.
+/// The zones are read from the current one without copying (under <see cref="BufferLock"/>), PipeWire doesn't write into buffers the stream holds.
 /// </para>
 /// <para>
 /// Lock order: the lock of the core (<see cref="PipeWireCore.Enter"/>) before <see cref="BufferLock"/> and the frame lock, which are never held at the same time.
@@ -27,13 +26,12 @@ internal sealed unsafe class PipeWireStream : IDisposable
     private const string PROPERTIES = "media.type=Video media.category=Capture media.role=Screen";
 
     /// <summary>
-    /// How long a new stream may take to start streaming (it usually takes some 10 ms).
-    /// PipeWire reports a node that's gone or a format both ends don't support as an error of the stream; this catches a stream that hangs without one.
+    /// How long a new stream may take to start streaming (usually some 10 ms), for streams that hang without an error.
     /// </summary>
     public static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// How long a stream that streamed may stay paused (e.g. while it negotiates a new size) before it counts as failed: a stream whose node was removed is paused, without an error.
+    /// How long a stream may stay paused (e.g. while it negotiates a new size) before it counts as failed. A removed node only pauses the stream.
     /// </summary>
     public static readonly TimeSpan PauseTimeout = TimeSpan.FromSeconds(2);
 
@@ -43,18 +41,18 @@ internal sealed unsafe class PipeWireStream : IDisposable
 
     private readonly PipeWireCore _core;
 
-    // Only used under the lock of the PipeWire thread (on it or through PipeWireCore.Enter).
+    // Only used under the lock of the PipeWire thread.
     private nint _stream;
     private GCHandle _handle;
     private PwStreamEvents* _events;
     private void* _hook;
 
-    // Only used on the PipeWire thread: the negotiated format.
+    // The negotiated format, only used on the PipeWire thread.
     private uint _videoFormat;
     private int _width;
     private int _height;
 
-    // Guards the fields below; waited on with Monitor. A leaf lock.
+    // Leaf lock for the fields below, waited on with Monitor.
     private readonly object _frameLock = new();
     private PwBuffer* _newest;
     private PipeWireFrame _newestFrame;
@@ -65,7 +63,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     private int _frameWidth;
     private int _frameHeight;
 
-    // Only used under BufferLock (and swapped under the lock of the PipeWire thread too).
+    // Only used under BufferLock.
     private PwBuffer* _current;
     private PipeWireFrame? _currentFrame;
 
@@ -75,7 +73,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     public Lock BufferLock { get; } = new();
 
     /// <summary>
-    /// Gets the frame the zones are read from; <c>null</c> before the first <see cref="TakeNewestFrame"/>, and after PipeWire removed its buffer. Only valid under <see cref="BufferLock"/>.
+    /// Gets the frame the zones are read from; <c>null</c> before the first <see cref="TakeNewestFrame"/> or after PipeWire removed its buffer. Only valid under <see cref="BufferLock"/>.
     /// </summary>
     public PipeWireFrame? CurrentFrame
     {
@@ -87,7 +85,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Gets why the stream doesn't deliver frames anymore (e.g. PipeWire reported an error, the session ended); <c>null</c> while it works.
+    /// Gets why the stream doesn't deliver frames anymore; <c>null</c> while it works.
     /// </summary>
     public Exception? Failure
     {
@@ -99,11 +97,8 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Gets the size of the frames as negotiated with the compositor; 0x0 before the format is agreed.
+    /// Gets the negotiated size of the frames; 0x0 before the format is agreed, which happens before <see cref="WaitUntilStreaming"/> succeeds.
     /// </summary>
-    /// <remarks>
-    /// The format is agreed before the stream streams: once <see cref="WaitUntilStreaming"/> succeeded, this is the size of the frames.
-    /// </remarks>
     public (int Width, int Height) FrameSize
     {
         get
@@ -184,7 +179,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Waits until a frame arrived that wasn't taken yet, or the stream failed (also when it stays paused longer than <see cref="PauseTimeout"/>).
+    /// Waits until a new frame arrived or the stream failed (also by staying paused longer than <see cref="PauseTimeout"/>).
     /// </summary>
     /// <param name="deadline">Until when to wait, as a <see cref="Stopwatch"/> timestamp.</param>
     /// <returns><c>true</c> if a frame is there; <c>false</c> if none arrived in time or the stream failed (see <see cref="Failure"/>).</returns>
@@ -216,7 +211,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
             }
     }
 
-    // Under _frameLock. Rounded up to whole milliseconds: waking before the end would only wait again.
+    // Under _frameLock. Rounded up, waking early would only wait again.
     private void Wait(long ticks) => Monitor.Wait(_frameLock, (int)Math.Min(int.MaxValue, ((ticks * 1000) + Stopwatch.Frequency - 1) / Stopwatch.Frequency));
 
     private static long ToTicks(TimeSpan time) => (long)(time.TotalSeconds * Stopwatch.Frequency);
@@ -235,7 +230,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     /// <summary>
     /// Makes the newest frame the current one and gives the previous current one back to PipeWire.
     /// </summary>
-    /// <returns>The frame; <c>null</c> if there's none (anymore, e.g. PipeWire removed its buffer meanwhile) or the stream was destroyed.</returns>
+    /// <returns>The frame; <c>null</c> if there's none (anymore) or the stream was destroyed.</returns>
     public PipeWireFrame? TakeNewestFrame()
     {
         using PipeWireCore.Scope scope = _core.Enter();
@@ -273,7 +268,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     {
         using PipeWireCore.Scope scope = _core.Enter();
 
-        // A core that was disposed destroyed its streams already.
+        // A disposed core destroyed its streams already.
         if (!scope.IsAlive) return;
 
         DestroyLocked(new ObjectDisposedException(nameof(PipeWireStream)));
@@ -281,12 +276,12 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Destroys the stream; with the lock of the PipeWire thread held (or before its thread started).
+    /// Destroys the stream. Called with the lock of the PipeWire thread held.
     /// </summary>
     /// <param name="reason">The <see cref="Failure"/> from now on, unless it already failed.</param>
     internal void DestroyLocked(Exception? reason)
     {
-        // Nothing reads the frames afterwards; PipeWire frees all buffers with the stream.
+        // PipeWire frees all buffers with the stream.
         lock (BufferLock)
         {
             _current = null;
@@ -300,7 +295,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
             Monitor.PulseAll(_frameLock);
         }
 
-        // PipeWire calls the events while it destroys the stream (e.g. remove_buffer): the handle is freed afterwards.
+        // Destroying calls events (e.g. remove_buffer), so the handle is freed afterwards.
         if (_stream != 0)
             pw_stream_destroy(_stream);
         _stream = 0;
@@ -339,7 +334,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
                 Monitor.PulseAll(stream._frameLock);
             }
 
-            // E.g. the compositor removed the node (the user stopped sharing the monitor) or PipeWire went away.
+            // E.g. the user stopped sharing the monitor, or PipeWire went away.
             if (state == PW_STREAM_STATE_ERROR)
                 stream.Fail(new InvalidOperationException($"The PipeWire stream failed: {(error != null ? Marshal.PtrToStringUTF8((nint)error) : "unknown error")}."));
             else if ((state == PW_STREAM_STATE_UNCONNECTED) && (oldState != PW_STREAM_STATE_UNCONNECTED))
@@ -399,7 +394,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
             PipeWireStream? stream = FromData(data);
             if (stream == null) return;
 
-            // E.g. on a new format: the memory is unmapped after this returns.
+            // E.g. on a new format. The memory is unmapped after this returns.
             lock (stream._frameLock)
                 if (stream._newest == buffer)
                     stream._newest = null;
@@ -425,7 +420,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
             PipeWireStream? stream = FromData(data);
             if (stream == null) return;
 
-            // Only the newest frame is kept: the others go back right away, so the compositor always has a buffer to write the next one into.
+            // Only the newest frame is kept, so the compositor always has a free buffer.
             PwBuffer* newest = null;
             PipeWireFrame frame = default;
             PwBuffer* buffer;
@@ -464,11 +459,11 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Reads the frame of a buffer of the stream, checking that the pixels lie within its mapped memory.
+    /// Reads the frame of a buffer, checking that the pixels lie within its mapped memory.
     /// </summary>
     /// <remarks>
-    /// A buffer without (valid) pixels is no frame: e.g. one the compositor marked as corrupted, or (with cursor metadata) one that only moved the pointer.
-    /// The buffer is described by the producer: its chunk (offset and stride) is checked against the size of the memory, so a malformed one can't make the frame reach past it.
+    /// Buffers without valid pixels (e.g. marked as corrupted, or only moving the pointer) are no frame.
+    /// The chunk comes from the producer, so it's checked against the memory size.
     /// </remarks>
     /// <param name="buffer">The dequeued buffer.</param>
     /// <param name="width">The negotiated width of the frames.</param>
@@ -511,7 +506,7 @@ internal sealed unsafe class PipeWireStream : IDisposable
     }
 
     /// <summary>
-    /// Converts the presentation time of a frame (nanoseconds of CLOCK_MONOTONIC, the clock of the <see cref="Stopwatch"/> on Linux) to a <see cref="Stopwatch"/> timestamp; 0 if there's none.
+    /// Converts the presentation time of a frame (CLOCK_MONOTONIC in ns, the clock of the <see cref="Stopwatch"/>) to a <see cref="Stopwatch"/> timestamp; 0 if there's none.
     /// </summary>
     internal static long ToStopwatchTimestamp(long pts) => pts <= 0 ? 0 : (long)(((Int128)pts * Stopwatch.Frequency) / 1_000_000_000);
 

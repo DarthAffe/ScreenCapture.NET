@@ -8,30 +8,29 @@ namespace ScreenCapture.NET;
 /// Writes the pixels of capture zones in software, for backends whose hardware can't (fully) crop, downscale or rotate them.
 /// </summary>
 /// <remarks>
-/// Call the write methods from <see cref="AbstractScreenCapture{TColor}.PerformCaptureZoneUpdate"/>, with the buffer passed to it.
-/// A zone goes through crop, downscale and rotation in this order: the hardware may do the first steps, these methods do the rest.
+/// Call it from <see cref="AbstractScreenCapture{TColor}.PerformCaptureZoneUpdate"/> with the buffer passed to it.
+/// A zone is cropped, downscaled and rotated in this order; the hardware may do the first steps, these methods do the rest.
 /// </remarks>
 public static class CaptureZoneWriter
 {
     #region Methods
 
     /// <summary>
-    /// Writes the pixels of a zone from a captured frame into its buffer: the zone's region, downscaled by its level and rotated into the orientation of the display.
+    /// Writes the pixels of a zone from a captured frame into its buffer: cropped, downscaled and rotated into the orientation of the display.
     /// </summary>
     /// <remarks>
-    /// For backends that capture the whole frame into memory. This does all three steps; if the hardware already cropped and downscaled the region,
-    /// use <see cref="WriteFromScaled{TColor}"/> instead.
+    /// For backends that capture the whole frame into memory. If the hardware already cropped and downscaled, use <see cref="WriteFromScaled{TColor}"/>.
     /// <para>
-    /// Downscaling averages blocks of 2^level x 2^level pixels, starting at the top left of the region on the display;
-    /// columns on the right and rows at the bottom (on the display) that don't fill a whole block are ignored. A region smaller than a block is averaged as one block.
+    /// Downscaling averages blocks of 2^level x 2^level pixels from the top left of the region on the display. Partial blocks on the right and bottom are ignored;
+    /// a region smaller than a block is averaged as one block.
     /// </para>
     /// </remarks>
-    /// <param name="frame">The captured frame. Rotated by <paramref name="rotation"/> it covers the display: the region of the zone is in these coordinates.</param>
+    /// <param name="frame">The captured frame. Rotated by <paramref name="rotation"/> it covers the display.</param>
     /// <param name="captureZone">The zone to write.</param>
     /// <param name="buffer">The buffer passed to <see cref="AbstractScreenCapture{TColor}.PerformCaptureZoneUpdate"/>.</param>
     /// <param name="rotation">
     /// How <paramref name="frame"/> is rotated (clockwise) into the orientation of the display: <see cref="Display.Rotation"/> for a frame in the native orientation of the output,
-    /// <see cref="ImageRotation.None"/> for a frame that already is in the orientation of the display.
+    /// <see cref="ImageRotation.None"/> for one already in the orientation of the display.
     /// </param>
     /// <typeparam name="TColor">The color format of the zone.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="captureZone"/> is <c>null</c>.</exception>
@@ -52,12 +51,12 @@ public static class CaptureZoneWriter
     }
 
     /// <summary>
-    /// Writes the pixels of a zone from its already cropped and downscaled region into its buffer: rotated into the orientation of the display.
+    /// Writes the pixels of a zone from its already cropped and downscaled region into its buffer, rotated into the orientation of the display.
     /// </summary>
     /// <remarks>
-    /// For backends whose hardware crops and downscales the region (e.g. DX11, from a frame in the native orientation of the output).
+    /// For backends whose hardware crops and downscales (e.g. DX11).
     /// </remarks>
-    /// <param name="scaled">The downscaled region of the zone, rotated by <paramref name="rotation"/> it has the size of the zone.</param>
+    /// <param name="scaled">The downscaled region of the zone. Rotated by <paramref name="rotation"/> it has the size of the zone.</param>
     /// <param name="captureZone">The zone to write.</param>
     /// <param name="buffer">The buffer passed to <see cref="AbstractScreenCapture{TColor}.PerformCaptureZoneUpdate"/>.</param>
     /// <param name="rotation">How <paramref name="scaled"/> is rotated (clockwise) into the orientation of the display (see <see cref="Write{TColor}"/>).</param>
@@ -81,12 +80,8 @@ public static class CaptureZoneWriter
     /// <summary>
     /// Gets the region of a frame in the native orientation of the output that is shown at <paramref name="region"/> on the rotated display.
     /// </summary>
-    /// <remarks>
-    /// For backends whose hardware crops the zone's region out of a frame in the native orientation of the output
-    /// (the size of the frame is the one of the display rotated back, see <see cref="PixelHelper.GetRotatedSize"/>).
-    /// </remarks>
     /// <param name="region">The region on the display.</param>
-    /// <param name="display">The display, its <see cref="Display.Rotation"/> is the one of the frame.</param>
+    /// <param name="display">The display.</param>
     /// <returns>The region in the coordinates of the frame.</returns>
     public static CaptureRegion GetSourceRegion(CaptureRegion region, Display display)
         => GetSourceRegion(region, display.Width, display.Height, display.Rotation);
@@ -94,13 +89,9 @@ public static class CaptureZoneWriter
     /// <summary>
     /// Gets the region of a frame that is shown at <paramref name="region"/> once the frame is rotated by <paramref name="rotation"/>.
     /// </summary>
-    /// <remarks>
-    /// A pixel at (x, y) of the rotated frame is at (x, y) before a <see cref="ImageRotation.None"/>, at (y, width - 1 - x) before a <see cref="ImageRotation.Rotate90"/>,
-    /// at (width - 1 - x, height - 1 - y) before a <see cref="ImageRotation.Rotate180"/> and at (height - 1 - y, x) before a <see cref="ImageRotation.Rotate270"/>.
-    /// </remarks>
-    /// <param name="region">The region in the rotated frame (e.g. on the display).</param>
-    /// <param name="width">The width of the rotated frame (e.g. of the display).</param>
-    /// <param name="height">The height of the rotated frame (e.g. of the display).</param>
+    /// <param name="region">The region in the rotated frame.</param>
+    /// <param name="width">The width of the rotated frame.</param>
+    /// <param name="height">The height of the rotated frame.</param>
     /// <param name="rotation">How the frame is rotated (clockwise) into the orientation of <paramref name="region"/>.</param>
     /// <returns>The region in the coordinates of the frame before the rotation.</returns>
     public static CaptureRegion GetSourceRegion(CaptureRegion region, int width, int height, ImageRotation rotation)
@@ -112,7 +103,7 @@ public static class CaptureZoneWriter
             _ => region
         };
 
-    // source is the region of the zone before the rotation; width x height is its size after it (the size of the zone's region).
+    // width and height are the size of source after the rotation.
     private static void WriteRegion<TColor>(RefImage<TColor> source, int width, int height, CaptureZone<TColor> captureZone, Span<TColor> buffer, ImageRotation rotation)
         where TColor : unmanaged, IColor<TColor>
     {
@@ -132,8 +123,7 @@ public static class CaptureZoneWriter
             DownscaleAndRotate(source, width, height, factor, scaledWidth, scaledHeight, buffer, rotation);
     }
 
-    // Downscales before rotating, so only the smaller image is rotated.
-    // The blocks are the ones of the display: the region is cut to whole blocks there (dropping its right and bottom), which is another side before the rotation.
+    // Downscales first, so only the smaller image is rotated. The blocks are cut on the display, which is another side before the rotation.
     private static void DownscaleAndRotate<TColor>(RefImage<TColor> source, int width, int height, int factor, int scaledWidth, int scaledHeight,
                                                    Span<TColor> buffer, ImageRotation rotation)
         where TColor : unmanaged, IColor<TColor>

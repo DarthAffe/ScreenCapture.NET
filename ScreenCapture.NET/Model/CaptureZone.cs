@@ -11,7 +11,7 @@ namespace ScreenCapture.NET;
 /// Represents a duplicated region on the screen.
 /// </summary>
 /// <remarks>
-/// All members can be used from any thread; see <see cref="ICaptureZone"/> for what that means for the properties, frames and events.
+/// Thread-safe, see <see cref="ICaptureZone"/>.
 /// </remarks>
 public sealed class CaptureZone<TColor> : ICaptureZone
     where TColor : unmanaged, IColor<TColor>
@@ -26,14 +26,13 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     private long _writtenFrameNumber;
 
-    // Everything that describes where the zone is and how large its pixels are, replaced (never modified) under the zone lock.
-    // Read without a lock, so a property never mixes two changes (Display and Region are structs that could tear).
+    // Replaced as a whole under the zone lock and read without, so a property never mixes two changes.
     private ZoneLayout _layout;
 
-    // 1 while an update is requested; taken by the capture that writes the zone.
+    // 1 while an update is requested.
     private int _updateRequested;
 
-    // Set under the zone lock when the zone is unregistered: captures that hold it in their snapshot don't write it anymore.
+    // Set under the zone lock, so captures holding the zone in their snapshot skip it.
     private bool _isUnregistered;
 
     /// <inheritdoc />
@@ -108,18 +107,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     #region Methods
 
-    /// <summary>
-    /// Acquires the current pixels of the zone. Release them by disposing the returned frame.
-    /// </summary>
-    /// <remarks>
-    /// Returns right away, with the pixels the last capture wrote: it doesn't wait for a capture or for other frames.
-    /// The pixels of the frame don't change while it's held: the zone has two buffers, the capture writes the one no frame reads and never waits for frames.
-    /// A frame that's still held when the capture after the next one starts makes the zone skip that capture (it's written by the next capture after the frame was disposed).
-    /// <para>
-    /// Any method of the <see cref="IScreenCapture"/> can be called while holding a frame, including <see cref="IScreenCapture.UpdateCaptureZone"/> for this zone.
-    /// The frame keeps the size it was created with. Keep frames short anyway.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc cref="ICaptureZone.AcquireFrame" />
     /// <example>
     /// <code>
     /// using (CaptureFrame&lt;ColorBGRA&gt; frame = zone.AcquireFrame())
@@ -129,7 +117,6 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     /// }
     /// </code>
     /// </example>
-    /// <returns>The frame holding the pixels.</returns>
     public CaptureFrame<TColor> AcquireFrame() => new(AddFrontReader());
 
     /// <inheritdoc />
@@ -150,17 +137,14 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     internal Lock.Scope EnterUpdateScope() => _lock.EnterScope();
 
     /// <summary>
-    /// Gets the buffer the capture writes, sized for the current zone.
+    /// Gets the buffer the capture writes, sized for the current zone. Called under <see cref="EnterUpdateScope"/>, always followed by <see cref="EndWrite"/>.
     /// </summary>
-    /// <remarks>
-    /// Called under <see cref="EnterUpdateScope"/>. Every call is followed by <see cref="EndWrite"/>.
-    /// </remarks>
-    /// <returns>The buffer, or <c>null</c> if the zone has to skip this capture because a frame still reads its back buffer.</returns>
+    /// <returns>The buffer, or <c>null</c> if a frame still reads the back buffer.</returns>
     internal ZoneBuffer<TColor>? BeginWrite()
     {
         ZoneLayout layout = _layout;
 
-        // _back stopped being the front when it was swapped out (under _frontLock), so no frame can start reading it anymore.
+        // _back isn't the front anymore, so no new frame can start reading it.
         if (_back?.IsInUse == true) return null;
 
         if ((_back == null) || !_back.Fits(layout.Width, layout.Height))
@@ -170,10 +154,10 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <summary>
-    /// Finishes a write started with <see cref="BeginWrite"/>: the zone shows the written buffer from now on.
+    /// Finishes a write started with <see cref="BeginWrite"/>.
     /// </summary>
     /// <param name="buffer">The buffer returned by <see cref="BeginWrite"/>.</param>
-    /// <param name="written"><c>true</c> if the buffer was filled; otherwise the zone keeps showing its previous pixels.</param>
+    /// <param name="written"><c>true</c> if the buffer was filled and is shown from now on.</param>
     internal void EndWrite(ZoneBuffer<TColor> buffer, bool written)
     {
         if (!written) return;
@@ -189,15 +173,13 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     public void RequestUpdate() => Volatile.Write(ref _updateRequested, 1);
 
     /// <summary>
-    /// Takes the update request before the zone is written: a request made during the write stays for the next capture.
-    /// Called under <see cref="EnterUpdateScope"/>; if the zone isn't written after all, the capture requests the update again.
+    /// Takes the update request before the zone is written, so a request made during the write stays. Called under <see cref="EnterUpdateScope"/>.
     /// </summary>
     /// <returns><c>true</c> if an update was requested.</returns>
     internal bool TakeUpdateRequest() => Interlocked.Exchange(ref _updateRequested, 0) != 0;
 
     /// <summary>
-    /// Checks if the capture has to write the zone with the given frame: if it's valid and an update was requested,
-    /// or if it's updated automatically and doesn't show that frame yet (it's new, was changed, skipped or not written).
+    /// Checks if the zone has to be written with the given frame.
     /// </summary>
     /// <param name="frameNumber">The number of the frame the capture holds.</param>
     internal bool NeedsUpdate(long frameNumber) => IsValid && (IsUpdateRequested || (AutoUpdate && (Volatile.Read(ref _writtenFrameNumber) != frameNumber)));
@@ -213,7 +195,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     internal bool IsUnregistered => _isUnregistered;
 
     /// <summary>
-    /// Marks the zone as unregistered: no capture writes it anymore. Called under <see cref="EnterUpdateScope"/>.
+    /// Marks the zone as unregistered. Called under <see cref="EnterUpdateScope"/>.
     /// </summary>
     internal void SetUnregistered() => _isUnregistered = true;
 
@@ -239,7 +221,7 @@ public sealed class CaptureZone<TColor> : ICaptureZone
     }
 
     /// <summary>
-    /// Moves the zone to the changed display of its capture and checks if the region still fits. Called under <see cref="EnterUpdateScope"/>.
+    /// Moves the zone to the changed display and checks if the region still fits. Called under <see cref="EnterUpdateScope"/>.
     /// </summary>
     internal void SetDisplay(Display display)
     {
@@ -252,6 +234,5 @@ public sealed class CaptureZone<TColor> : ICaptureZone
 
     #endregion
 
-    // Immutable: a zone replaces its layout as a whole.
     private sealed record ZoneLayout(Display Display, CaptureRegion Region, int Width, int Height, int DownscaleLevel, bool IsValid);
 }

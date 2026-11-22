@@ -8,19 +8,11 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents the information supplied with an <see cref="IScreenCapture.Updated" />-event.
 /// </summary>
-/// <remarks>
-/// A struct, so raising the event on every capture allocates nothing.
-/// </remarks>
 /// <param name="Result">The result of the capture that raised the event.</param>
-/// <param name="FrameNumber">
-/// The number of the latest captured frame, counting <see cref="CaptureResult.NewFrame"/> results of this screen capture (the first frame is 1).
-/// For other results it's the number of the frame captured before. 0 if no frame was captured yet.
-/// </param>
+/// <param name="FrameNumber">The number of the latest captured frame, starting at 1. 0 if no frame was captured yet.</param>
 /// <param name="Timestamp">
-/// When the latest captured frame was shown, as a <see cref="Stopwatch"/> timestamp (e.g. <c>Stopwatch.GetElapsedTime(e.Timestamp)</c> is the age of the frame).
-/// DX11 and WGC report when the frame was presented on the display, Wayland the presentation time the compositor sends with the frame (or when it was read, if it sends none),
-/// DX9 and X11 when it was read.
-/// For results other than <see cref="CaptureResult.NewFrame"/> it's the timestamp of the frame captured before. 0 if no frame was captured yet.
+/// When the latest captured frame was shown, as a <see cref="Stopwatch"/> timestamp. 0 if no frame was captured yet.
+/// DX11 and WGC report when it was presented, Wayland the time the compositor sends (or when it was read), DX9 and X11 when it was read.
 /// </param>
-[SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "It is the argument of the Updated event. A struct can't derive from EventArgs, which EventHandler<T> doesn't require anymore.")]
+[SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "Event argument; a struct can't derive from EventArgs.")]
 public readonly record struct ScreenCaptureUpdatedEventArgs(CaptureResult Result, long FrameNumber, long Timestamp);

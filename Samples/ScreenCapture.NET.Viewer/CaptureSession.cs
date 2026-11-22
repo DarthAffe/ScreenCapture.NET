@@ -154,7 +154,7 @@ internal sealed class CaptureSession : IDisposable
 
     private void OnFrameReady() => FrameReady?.Invoke();
 
-    // The preview zone follows the display, e.g. after a resolution change or for a resized window. The zones of the user stay as they are (and may be invalid now).
+    // The preview zone follows the display. The zones of the user stay as they are and may be invalid now.
     private void OnDisplayChanged(object? sender, ScreenCaptureDisplayChangedEventArgs e)
     {
         ScreenCapture.UpdateCaptureZone(Preview.Zone, WholeDisplay(e.Display), PreviewLevel(e.Display));
@@ -172,7 +172,7 @@ internal sealed class CaptureSession : IDisposable
             _totalResults[(int)e.Result]++;
             _frameNumber = e.FrameNumber;
 
-            // How long ago the frame was shown when the capture returned it (WGC's timestamp is when it will be shown, so it's negative there).
+            // How old the frame was when the capture returned it. Negative with WGC, whose timestamp is when it will be shown.
             if ((e.Result == CaptureResult.NewFrame) && (e.Timestamp != 0))
             {
                 TimeSpan age = Stopwatch.GetElapsedTime(e.Timestamp, now);
@@ -193,7 +193,7 @@ internal sealed class CaptureSession : IDisposable
             _lastCaptureEnd = now;
         }
 
-        // NewFrame, NoChange and Timeout alternate on a still screen: only the changes between working and not working are logged, and every restart.
+        // Results alternate on a still screen, so only changes between working and not working are logged, and restarts.
         bool isWorking = e.Result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout;
         if ((isWorking != _isWorking) || (e.Result == CaptureResult.Restarting))
         {

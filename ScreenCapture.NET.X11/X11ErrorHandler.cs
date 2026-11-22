@@ -23,14 +23,12 @@ internal sealed record X11Error(byte ErrorCode, byte RequestCode, byte MinorCode
 /// The process-wide Xlib error handlers: <c>XSetErrorHandler</c> for errors of requests and, with libX11 1.7 or newer, <c>XSetIOErrorHandler</c> for broken connections.
 /// </summary>
 /// <remarks>
-/// Xlib's default handlers print the error and terminate the process, e.g. if <c>XGetImage</c> fails because the screen got smaller, or if the X server stops.
-/// These handlers record errors for the displays opened by this library (<see cref="X11DisplayHandle.Open"/>) and pass errors for any other display
-/// to the handlers that were installed before, so other X11 code in the process keeps its behavior.
-/// They're installed once, when the first display is opened, and never removed.
-/// Code that installs its own handlers afterwards and doesn't chain to the previous ones disables them.
+/// Xlib's default handlers terminate the process, e.g. if <c>XGetImage</c> fails or the X server stops.
+/// These record the errors of the displays of this library and pass all others to the handlers installed before.
+/// Installed with the first display and never removed. Handlers installed later that don't chain to these disable them.
 /// <para>
-/// A broken connection can only be survived with an exit handler for the display (<c>XSetIOErrorExitHandler</c>, libX11 1.7):
-/// older versions terminate the process after any I/O error handler returned. There the I/O error handler isn't installed, so Xlib's default handler still prints why.
+/// A broken connection can only be survived with <c>XSetIOErrorExitHandler</c> (libX11 1.7). Older versions terminate the process anyway,
+/// so the I/O error handler isn't installed there and Xlib's default one still prints why.
 /// </para>
 /// </remarks>
 internal static unsafe class X11ErrorHandler
@@ -40,7 +38,7 @@ internal static unsafe class X11ErrorHandler
     private static readonly Lock INSTALL_LOCK = new();
     private static bool _isInstalled;
 
-    // Only used under INSTALL_LOCK. Whether libX11 has exit handlers (1.7+), so broken connections can be survived.
+    // Only used under INSTALL_LOCK. libX11 1.7+ has exit handlers.
     private static bool _survivesBrokenConnections;
 
     private static readonly X11ErrorRouter ROUTER = new();
@@ -92,17 +90,16 @@ internal static unsafe class X11ErrorHandler
         }
     }
 
-    // Called by Xlib on the thread that made the failing call. Must not throw: an exception can't cross into native code.
+    // On the thread of the failing call. Must not throw.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static int OnError(nint display, X11.XErrorEvent* error) => ROUTER.OnError(display, error);
 
-    // Called by Xlib on the thread that found the broken connection, without the display locked.
+    // On the thread that found the broken connection, without the display locked.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static int OnIOError(nint display) => ROUTER.OnIOError(display);
 
-    // Only set for the displays of this library. Called after the I/O error handler returned, on the same thread.
-    // Returning makes the failing call return a failure. Xlib locked the display for this thread before calling the handlers (to keep other threads out while the process exits):
-    // without unlocking it, any other thread that uses or closes the display waits forever.
+    // Only for the displays of this library, after the I/O error handler. Returning makes the failing call fail.
+    // Xlib locked the display before; without unlocking it, every other thread using or closing it waits forever.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void OnIOErrorExit(nint display, nint userData) => X11.XUnlockDisplay(display);
 
@@ -110,11 +107,8 @@ internal static unsafe class X11ErrorHandler
 }
 
 /// <summary>
-/// Records the X errors and broken connections of the registered displays and passes those of any other display to <see cref="PreviousHandler"/> and <see cref="PreviousIOErrorHandler"/>.
+/// Records the X errors and broken connections of the registered displays and passes all others to <see cref="PreviousHandler"/> and <see cref="PreviousIOErrorHandler"/>.
 /// </summary>
-/// <remarks>
-/// <see cref="X11ErrorHandler"/> routes the errors of the process through one instance.
-/// </remarks>
 internal sealed unsafe class X11ErrorRouter
 {
     #region Properties & Fields
@@ -162,8 +156,7 @@ internal sealed unsafe class X11ErrorRouter
     /// Stops recording errors for the given display.
     /// </summary>
     /// <remarks>
-    /// Only removes the registration if it's still <paramref name="errors"/>:
-    /// after the display is closed, a new display can get the same address and register it before this is called.
+    /// Only if it's still <paramref name="errors"/>: a new display can get the same address and register before this is called.
     /// </remarks>
     /// <param name="display">The <c>Display*</c>.</param>
     /// <param name="errors">The errors returned by <see cref="Register"/>.</param>
@@ -225,7 +218,7 @@ internal sealed unsafe class X11ErrorRouter
         }
 
         /// <summary>
-        /// Gets or sets a value indicating whether the connection broke. It stays broken: <see cref="Clear"/> doesn't reset it.
+        /// Gets or sets a value indicating whether the connection broke. Not reset by <see cref="Clear"/>.
         /// </summary>
         public bool IsConnectionLost
         {

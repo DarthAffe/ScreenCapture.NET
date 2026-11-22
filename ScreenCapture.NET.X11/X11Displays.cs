@@ -7,8 +7,8 @@ using HPPH;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Enumerates the displays of an X server: one per RandR monitor (RandR 1.5), or one per screen if the server has no monitors.
-/// Shared by the service and the captures, so a capture finds exactly the display the service enumerated.
+/// Enumerates the displays of an X server: one per RandR 1.5 monitor, or one per screen without monitors.
+/// Shared by the service and the captures, so both see the same displays.
 /// </summary>
 internal static class X11Displays
 {
@@ -29,7 +29,7 @@ internal static class X11Displays
     #region Methods
 
     /// <summary>
-    /// Gets if the server is XWayland. Recent versions have the XWAYLAND extension; older ones are recognized by the names of their outputs (XWAYLAND0, ...).
+    /// Gets if the server is XWayland, by its extension or (older versions) the names of its outputs (XWAYLAND0, ...).
     /// </summary>
     /// <exception cref="InvalidOperationException">The connection broke meanwhile.</exception>
     public static bool IsXWayland(X11DisplayHandle display)
@@ -44,7 +44,7 @@ internal static class X11Displays
     }
 
     /// <summary>
-    /// Gets the graphics card of an X server. X11 doesn't tell which card shows a screen, so the server is the card.
+    /// Gets the graphics card of an X server, which is the server itself.
     /// </summary>
     public static GraphicsCard GetGraphicsCard(X11DisplayHandle display)
     {
@@ -53,7 +53,7 @@ internal static class X11Displays
     }
 
     /// <summary>
-    /// Gets all displays of the server: the active monitors of every screen in the order of the server, or the whole screen if it has none (or the server has no RandR 1.5).
+    /// Gets all displays of the server: the active monitors of every screen, or the whole screen if it has none.
     /// </summary>
     /// <exception cref="InvalidOperationException">The connection broke meanwhile.</exception>
     public static List<X11Display> GetDisplays(X11DisplayHandle display)

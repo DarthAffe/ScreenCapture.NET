@@ -13,10 +13,10 @@ namespace ScreenCapture.NET;
 /// A connection to PipeWire (on the socket of a screen cast session) with its own thread, on which PipeWire calls the streams.
 /// </summary>
 /// <remarks>
-/// Disposing it destroys its streams first: they're unusable afterwards (see <see cref="PipeWireStream"/>).
+/// Disposing it destroys its streams first.
 /// <para>
 /// Lock order: <see cref="Enter"/> (the managed lock, then the lock of the PipeWire thread) before the locks of the streams.
-/// The PipeWire thread holds its lock while it calls the streams, which only take their own locks: nothing waits for the managed lock on it.
+/// The PipeWire thread only takes the stream locks while holding its own, never the managed lock.
 /// </para>
 /// </remarks>
 [SuppressMessage("Usage", "CA2216:Disposable types should declare finalizer", Justification = "The session disposes it. A finalizer can't stop the PipeWire thread safely, and streams keep it reachable until they're destroyed.")]
@@ -24,7 +24,7 @@ internal sealed unsafe class PipeWireCore : IDisposable
 {
     #region Properties & Fields
 
-    // Held by everything that uses the thread loop from other threads, so Dispose can't destroy it meanwhile.
+    // Held by all users of the thread loop on other threads, so Dispose can't destroy it meanwhile.
     private readonly Lock _lock = new();
 
     private nint _loop;
@@ -40,7 +40,7 @@ internal sealed unsafe class PipeWireCore : IDisposable
     private volatile bool _isDead;
 
     /// <summary>
-    /// Gets a value indicating whether the connection to PipeWire broke (e.g. the daemon was restarted): its streams fail, and the nodes of the session are gone with it.
+    /// Gets a value indicating whether the connection to PipeWire broke (e.g. the daemon was restarted). The nodes of the session are gone with it.
     /// </summary>
     public bool IsDead => _isDead;
 
@@ -129,7 +129,7 @@ internal sealed unsafe class PipeWireCore : IDisposable
     }
 
     /// <summary>
-    /// Enters the lock of the PipeWire thread, so the streams can be used from another thread. Not alive (and not locked) after the connection was disposed.
+    /// Enters the lock of the PipeWire thread to use the streams from another thread. Not alive after the connection was disposed.
     /// </summary>
     public Scope Enter()
     {
@@ -185,7 +185,7 @@ internal sealed unsafe class PipeWireCore : IDisposable
         }
     }
 
-    // On the PipeWire thread. An error of the core itself (id 0) is the end of the connection (e.g. EPIPE); others belong to objects (a stream reports its own).
+    // On the PipeWire thread. Only an error of the core itself (id 0) ends the connection, streams report their own.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void OnError(nint data, uint id, int seq, int result, byte* message)
     {
@@ -210,7 +210,7 @@ internal sealed unsafe class PipeWireCore : IDisposable
         private readonly PipeWireCore _core;
 
         /// <summary>
-        /// Gets a value indicating whether the connection is alive: only then may the streams use PipeWire.
+        /// Gets a value indicating whether the connection is alive, only then may PipeWire be used.
         /// </summary>
         public bool IsAlive { get; }
 

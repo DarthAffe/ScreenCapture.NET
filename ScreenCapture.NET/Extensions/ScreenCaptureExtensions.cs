@@ -18,24 +18,22 @@ public static class ScreenCaptureExtensions
     /// Captures the screen continuously at a target frame rate, capturing the next frame when the consumer asks for it.
     /// </summary>
     /// <remarks>
-    /// The async counterpart of <see cref="ScreenCaptureLoop"/>, with the same pacing (see <see cref="ScreenCaptureLoop.TargetFrameRate"/>) and backoff after
-    /// <see cref="CaptureResult.Failed"/>. The next capture starts only when the consumer asks for the next result, so the zones aren't written while the consumer handles one
-    /// (unless another thread captures). The time the consumer takes counts towards the interval.
+    /// The async counterpart of <see cref="ScreenCaptureLoop"/>, with the same pacing and backoff.
+    /// The next capture starts only when the consumer asks for it, so the zones aren't written while it handles a result.
     /// <code>
     /// await foreach (CaptureResult result in screenCapture.CaptureLoopAsync(60, cancellationToken))
     ///     if (result == CaptureResult.NewFrame)
     ///         using (CaptureFrame frame = zone.AcquireFrame())
     ///             ...
     /// </code>
-    /// <see cref="IScreenCapture.CaptureScreen"/> runs on the thread pool, so the events of the capture and its zones are raised there.
-    /// A capture can block its thread for up to the timeout of the capture (DX11, WGC and Wayland) or its restart backoff (up to 2 s).
+    /// The captures run on the thread pool, so the events are raised there.
     /// <para>
-    /// The sequence ends when the capture is disposed. Cancellation throws an <see cref="OperationCanceledException"/>.
-    /// Other exceptions thrown by <see cref="IScreenCapture.CaptureScreen"/> (which a capture is not supposed to throw) end the sequence and are thrown to the consumer.
+    /// The sequence ends when the capture is disposed. Cancellation throws an <see cref="OperationCanceledException"/>,
+    /// other exceptions of <see cref="IScreenCapture.CaptureScreen"/> end the sequence and are passed on.
     /// </para>
     /// </remarks>
     /// <param name="screenCapture">The capture.</param>
-    /// <param name="targetFrameRate">The number of captures per second to aim for, or <c>null</c> to capture as soon as the consumer asks (see <see cref="ScreenCaptureLoop.TargetFrameRate"/>).</param>
+    /// <param name="targetFrameRate">The number of captures per second to aim for, or <c>null</c> for no limit (see <see cref="ScreenCaptureLoop.TargetFrameRate"/>).</param>
     /// <param name="cancellationToken">A token that ends the sequence.</param>
     /// <returns>The results of the captures.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="screenCapture"/> is <c>null</c>.</exception>
@@ -45,7 +43,7 @@ public static class ScreenCaptureExtensions
         ArgumentNullException.ThrowIfNull(screenCapture);
         TimeSpan interval = CapturePacer.GetInterval(targetFrameRate, nameof(targetFrameRate));
 
-        // Validated above, when called, instead of when the sequence is enumerated.
+        // Split, so the arguments are validated right away and not on the first enumeration.
         return CaptureLoopCoreAsync(screenCapture, interval, cancellationToken);
     }
 

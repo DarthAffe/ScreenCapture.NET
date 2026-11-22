@@ -173,7 +173,7 @@ public sealed class WaylandCaptureTests
     }
 
     /// <summary>
-    /// PipeWire frees the buffers of the old format when it negotiates a new one: a zone written before the next frame (here a new one, after a timeout) must not read them.
+    /// PipeWire frees the buffers of the old format with a new one: a zone written before the next frame must not read them.
     /// </summary>
     [TestMethod]
     public void ZonesArentReadFromRemovedBuffers()
@@ -270,7 +270,7 @@ public sealed class WaylandCaptureTests
     }
 
     /// <summary>
-    /// The portal tells another size (or none, like it may): the display has the size of the stream from the start, and keeps it when the capture restarts.
+    /// The portal tells another size (or none): the display has the size of the stream from the start, also after a restart.
     /// </summary>
     [TestMethod]
     [DataRow(1920, 1080)]

@@ -5,7 +5,7 @@ namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
 /// The X server of the session ($DISPLAY) for the X11 tests that capture the desktop.
-/// They're inconclusive without one, and on XWayland: its root window doesn't show the Wayland desktop (only the X clients), so XGetImage of it fails and XShmGetImage reads black.
+/// They're inconclusive without one and on XWayland, which doesn't show the Wayland desktop.
 /// Tests on a private Xvfb server (see <see cref="XvfbServer"/>) run without it.
 /// </summary>
 [SupportedOSPlatform("linux")]

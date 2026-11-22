@@ -19,7 +19,7 @@ public sealed partial class DPIAwarenessTests
         Assert.IsTrue(DPIAwareness.Initialize());
         Assert.IsTrue(AreDpiAwarenessContextsEqual(GetDpiAwarenessContextForProcess(0), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
 
-        // The awareness can only be set once, so this call fails in Windows, but the process already has the requested awareness.
+        // Fails in Windows since it's already set, but to the requested awareness.
         Assert.IsTrue(DPIAwareness.Initialize());
     }
 

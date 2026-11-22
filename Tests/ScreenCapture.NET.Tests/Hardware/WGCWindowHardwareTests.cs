@@ -89,7 +89,7 @@ public sealed class WGCWindowHardwareTests
     }
 
     /// <summary>
-    /// A window with a frame (title bar, borders) is captured with it: the display of the capture has the size of the frames from the start (the bounds of the window without the shadow).
+    /// A window is captured with its frame: the display has the size of the frames from the start (the window without the shadow).
     /// </summary>
     [TestMethod]
     public void FramedWindowHasTheSizeOfItsFrames()
@@ -133,7 +133,7 @@ public sealed class WGCWindowHardwareTests
     }
 
     /// <summary>
-    /// A resized window restarts the capture: the display of the capture gets the new size, zones that don't fit anymore become invalid, the others show the window as it's now.
+    /// A resized window restarts the capture with the new size. Zones that don't fit become invalid, the others show the window as it's now.
     /// Grown beyond its first size, the zones fit again and get new frames (which need buffers of the new size).
     /// </summary>
     [TestMethod]

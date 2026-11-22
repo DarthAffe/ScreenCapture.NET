@@ -18,10 +18,10 @@ internal sealed unsafe class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
 
     private X11.XImage _image;
 
-    // Only for images in shared memory. Native memory, since the image keeps a pointer to it (obdata).
+    // Native memory, since the image keeps a pointer to it (obdata).
     private X11.XShmSegmentInfo* _segment;
 
-    // The connection the segment is attached to. Referenced until the image is released, since detaching needs it.
+    // Referenced until the image is released, detaching needs it.
     private X11DisplayHandle? _attachedDisplay;
 
     /// <summary>
@@ -81,10 +81,9 @@ internal sealed unsafe class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
     #region Methods
 
     /// <summary>
-    /// Creates an image of the screen's default visual in a System V shared memory segment that is attached to the server (MIT-SHM).
+    /// Creates an image in a System V shared memory segment attached to the server (MIT-SHM).
     /// </summary>
-    /// <returns>The image with its description read; <c>null</c> if the server can't share memory with this process
-    /// (no MIT-SHM or libXext, a remote server, or one in another IPC namespace).</returns>
+    /// <returns>The image with its description read; <c>null</c> if the server can't share memory with this process.</returns>
     public static X11ImageHandle? CreateShared(X11DisplayHandle display, nint screen, int width, int height)
     {
         try
@@ -133,7 +132,7 @@ internal sealed unsafe class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
             _ = X11.XSync(display, false);
             attached &= display.LastError == null;
 
-            // Removed by the system once the last process detached it, also if this one crashes. The server has attached it by now, or never will.
+            // Removed once the last process detached it, also if this one crashes. The server has attached it by now or never will.
             _ = X11.shmctl(id, X11.IPC_RMID, 0);
 
             if (!attached)
@@ -163,7 +162,7 @@ internal sealed unsafe class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
     }
 
     /// <summary>
-    /// Reads the image description. Has to be called once after the image was created, before any other member is used.
+    /// Reads the image description. Call it once after creating the image, before using any other member.
     /// </summary>
     public void ReadDescription()
     {
@@ -190,7 +189,7 @@ internal sealed unsafe class X11ImageHandle : SafeHandleZeroOrMinusOneIsInvalid
         {
             if (_attachedDisplay != null)
             {
-                // Sent when the connection is flushed, at the latest when it's closed (possibly by this release).
+                // Sent with the next flush, at the latest when the connection is closed.
                 _ = X11.XShmDetach(_attachedDisplay.DangerousGetHandle(), _segment);
                 _attachedDisplay.DangerousRelease();
             }

@@ -258,8 +258,7 @@ public sealed class DisplayChangeTests
     }
 
     /// <summary>
-    /// A zone registered while another thread changes the display ends up with the current display: none is left with an old one.
-    /// Zones whose region only fits the original display are valid exactly if they fit the current one: none keeps the validation of an older display.
+    /// A zone registered while another thread changes the display ends up with the current display, and is valid exactly if it fits it.
     /// </summary>
     [TestMethod]
     public void ZonesRegisteredDuringChangesFollowTheDisplay()

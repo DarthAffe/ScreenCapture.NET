@@ -1,6 +1,6 @@
 @echo off
-rem Compiles HdrToneMapping.hlsl to the embedded bytecode. Needs fxc.exe from the Windows SDK (on the PATH, or set FXC to its path).
-rem The flags must match the ones in HdrToneMappingTests, which checks the embedded bytecode against the source.
+rem Compiles HdrToneMapping.hlsl. Needs fxc.exe from the Windows SDK (on the PATH, or set FXC).
+rem The flags must match HdrToneMappingTests.
 
 setlocal
 cd /d "%~dp0"

@@ -300,7 +300,7 @@ internal sealed unsafe partial class PipeWireVideoSource : IDisposable
     }
 
     /// <summary>
-    /// Sends a frame about every 16 ms from now on, like a monitor that changes all the time: a gradient (blue and green rise to the right and down) whose red changes with every frame.
+    /// Sends a frame about every 16 ms from now on, like a changing monitor: a gradient whose red changes with every frame.
     /// </summary>
     public void StartPump()
     {

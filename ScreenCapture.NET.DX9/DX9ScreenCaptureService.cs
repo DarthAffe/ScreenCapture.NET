@@ -17,7 +17,7 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
-    // Enumerations use the D3D9 instance under this lock and Dispose releases it under it, so it's never released while it's used.
+    // So Dispose never releases the D3D9 instance while it's used.
     private readonly Lock _direct3D9Lock = new();
     private readonly IDirect3D9Ex _direct3D9;
     private readonly ScreenCaptureCache<DX9ScreenCapture, DX9CaptureOptions> _screenCaptures;
@@ -48,11 +48,8 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
     #region Methods
 
     /// <summary>
-    /// Checks if Direct3D 9 can be used on this system.
+    /// Checks if Direct3D 9Ex can be used on this system.
     /// </summary>
-    /// <remarks>
-    /// It needs Windows with Direct3D 9Ex.
-    /// </remarks>
     /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
     [SupportedOSPlatformGuard("windows")]
     public static bool IsSupported()
@@ -101,7 +98,7 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        // Read right away (not while enumerating), so the D3D9 instance isn't used outside the lock.
+        // Read right away, so the D3D9 instance isn't used outside the lock.
         lock (_direct3D9Lock)
         {
             ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
@@ -129,9 +126,7 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     /// <remarks>
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// A new capture gets the <see cref="Options"/> of the service, an existing one keeps its own.
     /// </remarks>
     public DX9ScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
 
@@ -139,9 +134,7 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
     /// Creates a <see cref="DX9ScreenCapture"/> with the given options for the given display.
     /// </summary>
     /// <remarks>
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// An existing capture is only returned if it was created with equal options.
+    /// There's one capture per <see cref="Display.Id"/>. An existing capture is only returned if it was created with equal options.
     /// </remarks>
     /// <param name="display">The display to duplicate.</param>
     /// <param name="options">The options of the capture.</param>
@@ -156,11 +149,11 @@ public sealed class DX9ScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     /// <remarks>
-    /// Disposes all captures created by the service. It's thread-safe and can be called more than once.
+    /// Disposes all captures created by the service. Can be called more than once.
     /// </remarks>
     public void Dispose()
     {
-        // The captures use the D3D9 instance too: they're disposed first.
+        // The captures use the D3D9 instance too.
         if (!_screenCaptures.DisposeAll()) return;
 
         lock (_direct3D9Lock)

@@ -66,7 +66,7 @@ public sealed class DisposalTests
     }
 
     /// <summary>
-    /// A service releases the objects its captures share once their Dispose returned: a second Dispose must not return while the first still releases the backend.
+    /// A second Dispose must not return while the first still releases the backend, services rely on it.
     /// </summary>
     [TestMethod]
     public void SecondDisposeWaitsForTheFirst()

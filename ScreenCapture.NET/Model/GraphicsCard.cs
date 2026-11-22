@@ -9,20 +9,16 @@ namespace ScreenCapture.NET;
 /// Two values are only equal if all their properties are. To find the same graphics card again, compare the <see cref="Id"/>.
 /// </remarks>
 /// <param name="Id">
-/// The id of the graphics card. It identifies the card across restarts of the application and the system, so it can be stored in settings
-/// and the card found again with <see cref="ScreenCaptureServiceExtensions.TryGetGraphicsCard"/>.
+/// The id of the graphics card. It's stable across restarts, so it can be stored in settings and found again with <see cref="ScreenCaptureServiceExtensions.TryGetGraphicsCard"/>.
 /// <para>
-/// On Windows it's the device interface path of the adapter (<c>\\?\PCI#VEN_10DE&amp;DEV_2684&amp;...</c>). It contains the slot, so two identical cards have different ids;
-/// moving the card to another slot changes it. Adapters Windows has no path for (e.g. software renderers) use their LUID, which changes with every restart of the system.
-/// The DirectX 11 and the DirectX 9 backend report the same ids.
+/// On Windows it's the device interface path of the adapter (<c>\\?\PCI#VEN_10DE&amp;DEV_2684&amp;...</c>), the same for DX11 and DX9. It contains the slot,
+/// so it changes if the card is moved. Adapters without a path (e.g. software renderers) use their LUID, which changes with every reboot.
 /// </para>
 /// <para>
-/// On X11 it's the name of the X display as it was opened (e.g. <c>:0</c>, the value of <c>$DISPLAY</c> if no name was given).
-/// Different spellings of the same server (e.g. <c>:0</c>, <c>:0.0</c> and <c>unix:0</c>) give different ids, also for its displays: open it the same way to find stored ids again.
+/// On X11 it's the name of the X display as it was opened (e.g. <c>:0</c>, or <c>$DISPLAY</c>). Different spellings of the same server (<c>:0</c>, <c>:0.0</c>, <c>unix:0</c>) give different ids.
 /// </para>
 /// <para>
-/// On Wayland there's one graphics card, with the id <c>xdg-desktop-portal</c> and the desktop as its name (<c>$XDG_CURRENT_DESKTOP</c>, e.g. <c>KDE</c>):
-/// the portal doesn't tell which card shows a stream.
+/// On Wayland there's one graphics card with the id <c>xdg-desktop-portal</c> and the desktop as its name (e.g. <c>KDE</c>), since the portal doesn't tell the card.
 /// </para>
 /// </param>
 /// <param name="Index">The index of the graphics card in the backend. It can change when devices are added or removed.</param>

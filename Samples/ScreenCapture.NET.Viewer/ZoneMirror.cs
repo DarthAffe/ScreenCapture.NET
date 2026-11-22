@@ -10,7 +10,7 @@ namespace ScreenCapture.NET.Viewer;
 /// Keeps a copy of the latest frame of a zone, so the UI can show it without holding the frame.
 /// </summary>
 /// <remarks>
-/// The zone's <see cref="ICaptureZone.Updated"/> is raised on the thread of the loop: the handler only copies the pixels, the UI picks them up with <see cref="UpdateBitmap"/>.
+/// The handler copies the pixels on the thread of the loop, the UI picks them up with <see cref="UpdateBitmap"/>.
 /// </remarks>
 internal sealed class ZoneMirror : IDisposable
 {

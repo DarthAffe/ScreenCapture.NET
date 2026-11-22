@@ -5,8 +5,8 @@ using Wayland::ScreenCapture.NET;
 namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
-/// The shared contract of a backend (see <see cref="HardwareTestHelper"/>), for the Wayland one: a <see cref="FakeScreenCastPortal"/> shares a <see cref="PipeWireVideoSource"/>
-/// that sends frames all the time, like a monitor that changes. Needs PipeWire with a session manager (WirePlumber); inconclusive in a process that also runs the Interactive tests.
+/// The shared backend contract (see <see cref="HardwareTestHelper"/>) for Wayland: a <see cref="FakeScreenCastPortal"/> shares a constantly changing <see cref="PipeWireVideoSource"/>.
+/// Needs PipeWire with WirePlumber; inconclusive in a process that also runs the Interactive tests.
 /// </summary>
 [TestClass]
 [TestCategory(HardwareTestHelper.CATEGORY)]

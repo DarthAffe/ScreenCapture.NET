@@ -10,48 +10,43 @@ using MapFlags = Vortice.Direct3D11.MapFlags;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Writes the zones of a Direct3D 11 capture from its frames: holds the current frame in a capture texture, crops and downscales the zones on the GPU
-/// (through the mip chains of their scaling textures) and reads them back through their staging textures.
+/// Writes the zones of a Direct3D 11 capture: holds the frame in a capture texture, crops and downscales the zones on the GPU and reads them back through staging textures.
 /// </summary>
 /// <remarks>
-/// The capture creates the device and gets the frames. It initializes the pipeline after every restart, hands it every new frame,
-/// queues the zone copies after every capture that keeps a frame and lets the pipeline write the zones.
+/// The capture owns the device, initializes the pipeline after every restart and hands it the frames.
 /// <para>
-/// Every method except <see cref="RemoveZone"/> is called under the capture lock of the capture, which also guards the immediate context.
-/// The zone textures are guarded by a lock of their own, acquired after the capture lock: <see cref="RemoveZone"/> takes only that one,
-/// so unregistering a zone doesn't wait for a capture waiting for a frame.
+/// Everything except <see cref="RemoveZone"/> is called under the capture lock, which also guards the immediate context.
+/// The zone textures have their own lock, taken after the capture lock. <see cref="RemoveZone"/> takes only that one, so it doesn't wait for a capture waiting for a frame.
 /// </para>
 /// </remarks>
 internal sealed class D3D11ZonePipeline
 {
     #region Properties & Fields
 
-    // Guards _textures. Acquired after the capture lock; RemoveZone takes only this one.
     private readonly Lock _texturesLock = new();
     private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
 
-    // Owned by the capture, which disposes them after Release.
+    // Owned by the capture.
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
 
     private ID3D11Texture2D? _captureTexture;
     private Box _captureTextureBox;
 
-    // The display shown by the capture texture and the rotation that turns the capture texture into its orientation.
+    // The display of the capture texture and how the texture is rotated into its orientation.
     private Display _display;
     private ImageRotation _sourceRotation;
 
-    // If _captureTexture holds a frame: a new one is empty until the first frame is copied to it.
     private bool _hasFrame;
 
-    // Counts the frames copied to _captureTexture, so the staging texture of a zone knows if it holds the current one.
+    // Counts the frames copied to _captureTexture, so a staging texture knows if it holds the current one.
     private long _version;
 
-    // Only for HDR frames: created on the first one, tone maps them into _captureTexture.
+    // Created with the first HDR frame.
     private HdrFrame? _hdrFrame;
 
     /// <summary>
-    /// Gets a value indicating whether the pipeline was initialized (and not released since).
+    /// Gets a value indicating whether the pipeline was initialized.
     /// </summary>
     public bool IsInitialized => _captureTexture != null;
 
@@ -67,13 +62,10 @@ internal sealed class D3D11ZonePipeline
     /// <summary>
     /// Releases the textures of the previous device and creates the capture texture for the frames of <paramref name="display"/>.
     /// </summary>
-    /// <param name="device">The device of the frames. It stays owned by the capture, which keeps it until <see cref="Release"/>.</param>
-    /// <param name="context">The immediate context of <paramref name="device"/>, owned by the capture like the device.</param>
+    /// <param name="device">The device of the frames, owned by the capture.</param>
+    /// <param name="context">The immediate context of <paramref name="device"/>.</param>
     /// <param name="display">The display the frames show.</param>
-    /// <param name="sourceRotation">
-    /// How the frames are rotated (clockwise) into the orientation of the display: <see cref="Display.Rotation"/> for frames in the native orientation of the output,
-    /// <see cref="ImageRotation.None"/> for frames that already are in the orientation of the display.
-    /// </param>
+    /// <param name="sourceRotation">How the frames are rotated (clockwise) into the orientation of the display (see <see cref="CaptureZoneWriter.Write{TColor}"/>).</param>
     public void Initialize(ID3D11Device device, ID3D11DeviceContext context, Display display, ImageRotation sourceRotation)
     {
         Release();
@@ -102,11 +94,8 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Disposes all textures (the ones of the zones included) and forgets the device. Errors while disposing are ignored.
+    /// Disposes all textures and forgets the device. Called before the capture disposes the device.
     /// </summary>
-    /// <remarks>
-    /// Called before the capture disposes the device. Zone textures are created again for the next frame after <see cref="Initialize"/>.
-    /// </remarks>
     public void Release()
     {
         lock (_texturesLock)
@@ -127,16 +116,15 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Takes a frame of the capture into the capture texture: tone maps an HDR frame (<c>R16G16B16A16_Float</c>), copies any other (<c>B8G8R8A8_UNorm</c>).
-    /// Only queues the work on the GPU.
+    /// Takes a frame into the capture texture: tone maps HDR frames, copies all others. Only queues the work on the GPU.
     /// </summary>
-    /// <param name="frame">The frame: at least the size of the capture texture, its top left part is used (e.g. the content of a larger texture of a frame pool).</param>
-    /// <param name="monitorTarget">The monitor of the display, to read its SDR white level for HDR frames; <c>null</c> if it's unknown (the last white level is kept).</param>
+    /// <param name="frame">The frame, at least the size of the capture texture. Its top left part is used.</param>
+    /// <param name="monitorTarget">The monitor, to read its SDR white level for HDR frames; <c>null</c> keeps the last one.</param>
     public void SetFrame(ID3D11Texture2D frame, WindowsDisplayDevices.MonitorTarget? monitorTarget)
     {
         if (frame.Description.Format == Format.R16G16B16A16_Float)
         {
-            // Read on every frame (a few microseconds): the user can change the SDR content brightness at any time, without a mode change.
+            // Read on every frame (a few µs): the SDR brightness can change at any time.
             float? sdrWhiteLevel = (monitorTarget is { } target) && target.TryGetSdrWhiteLevel(out float whiteLevel) ? whiteLevel : null;
             ToneMapFrame(frame, sdrWhiteLevel);
         }
@@ -147,7 +135,7 @@ internal sealed class D3D11ZonePipeline
     /// <summary>
     /// Copies a frame (<c>B8G8R8A8_UNorm</c>) to the capture texture. Only queues the work on the GPU.
     /// </summary>
-    /// <param name="frame">The frame: at least the size of the capture texture, its top left part is copied (e.g. the content of a larger texture of a frame pool).</param>
+    /// <param name="frame">The frame, at least the size of the capture texture. Its top left part is used.</param>
     public void CopyFrame(ID3D11Texture2D frame)
     {
         ID3D11DeviceContext context = _context ?? throw CreateNotInitializedException();
@@ -159,13 +147,13 @@ internal sealed class D3D11ZonePipeline
     /// <summary>
     /// Tone maps an HDR frame (scRGB, <c>R16G16B16A16_Float</c>) into the capture texture. Only queues the work on the GPU.
     /// </summary>
-    /// <param name="frame">The frame: at least the size of the capture texture, its top left part is used (e.g. the content of a larger texture of a frame pool).</param>
-    /// <param name="sdrWhiteLevel">The current SDR white level of the display in nits (see <see cref="HdrToneMapper.GetWhiteScale"/>); <c>null</c> keeps the last one.</param>
+    /// <param name="frame">The frame, at least the size of the capture texture. Its top left part is used.</param>
+    /// <param name="sdrWhiteLevel">The SDR white level of the display in nits; <c>null</c> keeps the last one.</param>
     public void ToneMapFrame(ID3D11Texture2D frame, float? sdrWhiteLevel)
     {
         ID3D11DeviceContext context = _context ?? throw CreateNotInitializedException();
 
-        // The frame can't be bound to a shader (e.g. the one of a duplication): it's copied to a texture that can.
+        // Frames (e.g. of a duplication) can't be bound to a shader.
         _hdrFrame ??= HdrFrame.Create(_device!, _captureTexture!);
         context.CopySubresourceRegion(_hdrFrame.Texture, 0, 0, 0, 0, frame, 0, _captureTextureBox);
 
@@ -185,17 +173,16 @@ internal sealed class D3D11ZonePipeline
     private static InvalidOperationException CreateNotInitializedException() => new("The zone pipeline isn't initialized.");
 
     /// <summary>
-    /// Queues the copies of the current frame to the staging textures of all zones that are probably written by this capture, without waiting for them.
+    /// Queues the copies of the current frame to the staging textures of all zones this capture will probably write.
     /// </summary>
     /// <remarks>
-    /// Called after a capture that keeps a frame, before the zones are written; does nothing without a frame. Mapping a staging texture waits for the GPU;
-    /// with all copies queued first, the first map waits for all of them at once instead of every zone waiting for its own copy.
+    /// With all copies queued first, only the first map waits for the GPU instead of every zone.
     /// <para>
-    /// Without the zone locks: a zone can change until it's written. Its staging texture remembers what it holds, and the write copies again if that doesn't match.
-    /// Only zones that already have textures of their size are copied here: new and resized zones get their textures, and their copy, when they're written.
+    /// Called without the zone locks, so a zone can still change. The write copies again if the staging texture doesn't match.
+    /// New and resized zones get their textures and copy when they're written.
     /// </para>
     /// </remarks>
-    /// <param name="captureZones">The zones of the capture (its snapshot).</param>
+    /// <param name="captureZones">The zones of the capture.</param>
     public void QueueZoneCopies(IReadOnlyList<CaptureZone<ColorBGRA>> captureZones)
     {
         if (!_hasFrame || (_context == null) || (_captureTexture == null)) return;
@@ -205,10 +192,9 @@ internal sealed class D3D11ZonePipeline
         lock (_texturesLock)
             foreach (CaptureZone<ColorBGRA> captureZone in captureZones)
             {
-                // Zones that aren't written by this capture (not updated automatically, already showing this frame) skip the copy.
                 if (!captureZone.IsValid || !(captureZone.AutoUpdate || captureZone.IsUpdateRequested)) continue;
 
-                // Region and level are read separately and can belong to different changes: then the textures don't fit, or the write copies again.
+                // Region and level can belong to different changes. Then the textures don't fit or the write copies again.
                 CaptureRegion region = captureZone.Region;
                 if (!region.IsWithin(_display.Width, _display.Height)) continue;
 
@@ -220,7 +206,7 @@ internal sealed class D3D11ZonePipeline
                 queued = true;
             }
 
-        // Hands the copies to the GPU now: it works on them while the capture raises its events.
+        // The GPU works on them while the capture raises its events.
         if (queued)
             _context.Flush();
     }
@@ -229,30 +215,30 @@ internal sealed class D3D11ZonePipeline
     /// Writes a zone from the current frame. Called under the zone lock (and the capture lock), only for registered zones.
     /// </summary>
     /// <param name="captureZone">The zone.</param>
-    /// <param name="buffer">The buffer of the zone (see <see cref="AbstractScreenCapture{TColor}.PerformCaptureZoneUpdate"/>).</param>
+    /// <param name="buffer">The buffer of the zone.</param>
     /// <returns><c>true</c> if the zone was written; <c>false</c> if there's no frame or the zone doesn't lie within it.</returns>
     public bool WriteZone(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
     {
         lock (_texturesLock)
         {
-            // E.g. a Restart on another thread replaced the capture texture after this capture got its frame.
+            // A restart on another thread can have replaced the capture texture.
             if ((_context == null) || (_captureTexture == null) || !_hasFrame) return false;
 
-            // The display of the capture texture: the zone's own one can still be the previous one.
+            // The zone's own display can still be the previous one.
             if (!captureZone.Region.IsWithin(_display.Width, _display.Height)) return false;
 
             CaptureRegion region = captureZone.Region;
             ZoneTextures textures = GetTextures(captureZone);
 
-            // Usually queued by QueueZoneCopies. Not if the zone is new, changed since, or wasn't expected to be written (e.g. an update requested meanwhile).
+            // Usually queued by QueueZoneCopies already.
             if (!textures.HoldsCopy(_version, region))
                 CopyToStaging(_context, _captureTexture, textures, region);
 
-            // Waits until the GPU did the copy. The copies of all zones were queued before and run meanwhile, so mostly only the first zone waits.
+            // Waits for the GPU.
             MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
             try
             {
-                // The staging texture is the downscaled region in the orientation of the capture texture; only the rotation is left.
+                // Already cropped and downscaled, only the rotation is left.
                 ReadOnlySpan<byte> source = mapSource.AsSpan((int)mapSource.RowPitch * textures.StagingHeight);
                 CaptureZoneWriter.WriteFromScaled(RefImage<ColorBGRA>.Wrap(source, textures.StagingWidth, textures.StagingHeight, (int)mapSource.RowPitch), captureZone, buffer, _sourceRotation);
             }
@@ -266,7 +252,7 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Disposes the textures of an unregistered zone. Called after the zone was unregistered (no capture writes it anymore), without the capture lock.
+    /// Disposes the textures of an unregistered zone. Called without the capture lock.
     /// </summary>
     public void RemoveZone(CaptureZone<ColorBGRA> captureZone)
     {
@@ -276,7 +262,7 @@ internal sealed class D3D11ZonePipeline
     }
 
     /// <summary>
-    /// Copies the zone's region of the frame to its staging texture (downscaled through the mip chain of its scaling texture). Only queues the work on the GPU.
+    /// Copies the zone's region to its staging texture, downscaled through the mip chain of its scaling texture. Only queues the work on the GPU.
     /// </summary>
     private void CopyToStaging(ID3D11DeviceContext context, ID3D11Texture2D captureTexture, ZoneTextures textures, CaptureRegion region)
     {
@@ -298,9 +284,8 @@ internal sealed class D3D11ZonePipeline
     /// Gets the textures of a zone and (re)creates them if the zone is new or was resized.
     /// </summary>
     /// <remarks>
-    /// Called under the zone lock, the capture lock and <see cref="_texturesLock"/>: the region and the size of the zone belong together (and to its buffer).
-    /// Creating them here instead of on register/update means a capture never sees a zone without textures or with textures of the wrong size.
-    /// The zone is registered (unregistering it waits for the zone lock), and <see cref="RemoveZone"/> disposes the textures after it was unregistered, so none are left behind.
+    /// Called under the zone lock, so region and size of the zone belong together.
+    /// Created here instead of on register or update, so a capture never sees textures of the wrong size.
     /// </remarks>
     /// <param name="captureZone">The zone.</param>
     /// <returns>The textures.</returns>
@@ -325,7 +310,7 @@ internal sealed class D3D11ZonePipeline
 
     private ZoneTextures CreateTextures(CaptureRegion region, int scaledWidth, int scaledHeight, int downscaleLevel)
     {
-        // Textures only depend on the size, not on the position of the zone. Initialize releases them, so they're never left with another rotation.
+        // Only the size matters, not the position. Initialize releases them, so the rotation always matches.
         (int unscaledWidth, int unscaledHeight) = PixelHelper.GetRotatedSize(region.Width, region.Height, _sourceRotation);
         (int width, int height) = PixelHelper.GetRotatedSize(scaledWidth, scaledHeight, _sourceRotation);
 
@@ -387,7 +372,7 @@ internal sealed class D3D11ZonePipeline
         public ID3D11RenderTargetView CaptureTextureTarget { get; }
         public HdrToneMapper ToneMapper { get; }
 
-        // The last SDR white level read (see HdrToneMapper.GetWhiteScale); no scaling until one was read.
+        // No scaling until a white level was read.
         public float WhiteScale { get; set; } = 1;
 
         #endregion
@@ -460,12 +445,12 @@ internal sealed class D3D11ZonePipeline
     {
         #region Properties & Fields
 
-        // The zone size (display orientation) the textures were created for.
+        // In the orientation of the display.
         public int UnscaledWidth { get; }
         public int UnscaledHeight { get; }
         public int DownscaleLevel { get; }
 
-        // The size of the staging texture (orientation of the capture texture).
+        // In the orientation of the capture texture.
         public int StagingWidth { get; }
         public int StagingHeight { get; }
 
@@ -473,7 +458,7 @@ internal sealed class D3D11ZonePipeline
         public ID3D11Texture2D? ScalingTexture { get; }
         public ID3D11ShaderResourceView? ScalingTextureView { get; }
 
-        // What the staging texture holds: the region of the capture texture's frame with this version (0: nothing yet).
+        // What the staging texture holds (version 0: nothing).
         private long _copiedVersion;
         private CaptureRegion _copiedRegion;
 
@@ -498,20 +483,12 @@ internal sealed class D3D11ZonePipeline
 
         #region Methods
 
-        /// <summary>
-        /// Checks if the textures were created for a zone of the given size and downscale level.
-        /// </summary>
         public bool Fits(int unscaledWidth, int unscaledHeight, int downscaleLevel)
             => (unscaledWidth == UnscaledWidth) && (unscaledHeight == UnscaledHeight) && (downscaleLevel == DownscaleLevel);
 
-        /// <summary>
-        /// Checks if the staging texture holds (or the GPU is writing) <paramref name="region"/> of the frame with the given version. Called under the capture lock.
-        /// </summary>
+        // Also true while the GPU is still copying.
         public bool HoldsCopy(long version, CaptureRegion region) => (version == _copiedVersion) && (region == _copiedRegion);
 
-        /// <summary>
-        /// Records that a copy of <paramref name="region"/> of the frame with the given version to the staging texture was queued. Called under the capture lock.
-        /// </summary>
         public void SetCopy(long version, CaptureRegion region)
         {
             _copiedVersion = version;

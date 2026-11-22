@@ -7,9 +7,8 @@ using Tmds.DBus.Protocol;
 namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
-/// A ScreenCast portal on the <see cref="PrivateSessionBus"/> that answers like xdg-desktop-portal: requests under the path of their handle token,
-/// responses as <c>Response</c> signals of the requests, the session under the path of its token. The "dialog" is answered with <see cref="StartResponse"/>.
-/// <c>OpenPipeWireRemote</c> hands out a socket of the PipeWire daemon of the user (unlike the real portal's, it isn't limited to the nodes of the session).
+/// A ScreenCast portal on the <see cref="PrivateSessionBus"/> that answers like xdg-desktop-portal. The "dialog" is answered with <see cref="StartResponse"/>.
+/// <c>OpenPipeWireRemote</c> hands out a socket of the user's PipeWire daemon, not limited to the nodes of the session.
 /// Disposing it removes the portal from the bus.
 /// </summary>
 [SupportedOSPlatform("linux")]
@@ -36,7 +35,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
     private int _lastRestoreToken;
     private int _dialogs;
 
-    // The sockets handed out (as duplicates: the reply disposes the handle it sends), so they can be broken.
+    // Duplicates of the sockets handed out, so they can be broken.
     private readonly List<Socket> _sockets = [];
 
     public string Path => "/org/freedesktop/portal/desktop";
@@ -58,7 +57,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
     public uint Version { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets a value indicating whether every session gets a new restore token and the old one becomes invalid (like GNOME); otherwise a restored session keeps its token (like KDE).
+    /// Gets or sets a value indicating whether every session gets a new restore token (like GNOME) instead of keeping it (like KDE).
     /// </summary>
     public bool RotatesRestoreTokens { get; set; } = true;
 
@@ -90,7 +89,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
     public bool RespondBeforeReply { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the session handle is sent as an object path (like the specification says) instead of a string (like KDE does).
+    /// Gets or sets a value indicating whether the session handle is an object path (the specification) instead of a string (KDE).
     /// </summary>
     public bool SessionHandleAsObjectPath { get; set; }
 
@@ -341,7 +340,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
         return ValueTask.CompletedTask;
     }
 
-    // Under _lock, for Start: restores with the token of SelectSources (or shows the dialog) and hands out the token of the session, if it's to be remembered.
+    // Under _lock. Restores with the token of SelectSources (or shows the dialog) and hands out the new token.
     private string? GetRestoreToken()
     {
         string? requested = (_selectSourcesOptions?.TryGetValue("restore_token", out VariantValue token) ?? false) ? token.GetString() : null;
@@ -367,7 +366,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
         return false;
     }
 
-    // Replies with the request and sends its response, like the portal does once the backend answered (after `answered`; ignored with RespondBeforeReply).
+    // Replies with the request and sends its response after `answered` (ignored with RespondBeforeReply).
     private void Respond(MethodContext context, Dictionary<string, VariantValue> options, uint code, string? session, List<FakeStream>? streams, Task? answered = null, string? restoreToken = null)
     {
         string requestPath = $"{Path}/request/{GetSender(context.Request)}/{options["handle_token"].GetString()}";
@@ -468,7 +467,7 @@ internal sealed partial class FakeScreenCastPortal : IPathMethodHandler, IDispos
         writer.WriteInt32(second);
     }
 
-    // The unique name of the caller without the ':' and with '_' for '.' (computed here on its own, not with the code under test).
+    // Computed on its own, not with the code under test.
     private static string GetSender(Message request) => request.SenderAsString![1..].Replace('.', '_');
 
     [LibraryImport("libc")]

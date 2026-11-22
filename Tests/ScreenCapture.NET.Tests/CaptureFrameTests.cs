@@ -55,7 +55,7 @@ public sealed class CaptureFrameTests
     }
 
     /// <summary>
-    /// A frame held across two captures blocks the back buffer of the second one: the zone skips it, and the next capture after the frame is disposed fills it.
+    /// A frame held across two captures makes the zone skip the second, the next capture after the dispose fills it.
     /// </summary>
     [TestMethod]
     public void FrameHeldAcrossTwoCapturesMakesTheZoneSkipOne()

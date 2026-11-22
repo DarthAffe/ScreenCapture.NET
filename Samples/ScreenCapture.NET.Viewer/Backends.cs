@@ -38,7 +38,7 @@ internal static class Backends
     }
 
     /// <summary>
-    /// Creates the service of a backend. Only the Wayland session options are used here, the others are passed to each capture (see <see cref="GetCapture"/>).
+    /// Creates the service of a backend. Only the Wayland session options are used here, the others go to each capture.
     /// </summary>
     public static IScreenCaptureService Create(string backend, ViewerOptions options)
     {
@@ -66,7 +66,7 @@ internal static class Backends
     }
 
     /// <summary>
-    /// Gets what the service can capture: its displays (on Wayland the first call shows the dialog of the desktop), and with WGC the main windows of all processes.
+    /// Gets what the service can capture: its displays, and with WGC the main windows of all processes.
     /// </summary>
     public static List<CaptureSource> GetSources(IScreenCaptureService service)
     {
@@ -88,7 +88,7 @@ internal static class Backends
     }
 
     /// <summary>
-    /// Creates the capture of a source with the options of its backend. The capture of a source is created anew on every start (the last one was disposed), so changed options apply.
+    /// Creates the capture of a source with the options of its backend. Created anew on every start, so changed options apply.
     /// </summary>
     public static IScreenCapture GetCapture(IScreenCaptureService service, CaptureSource source, ViewerOptions options)
     {

@@ -10,12 +10,12 @@ namespace ScreenCapture.NET;
 /// Represents a <see cref="IScreenCaptureService"/> that captures the monitors of a Wayland desktop through the ScreenCast portal (xdg-desktop-portal) and PipeWire.
 /// </summary>
 /// <remarks>
-/// Wayland compositors only share the screen with the consent of the user: the first <see cref="GetDisplays"/> starts a screen cast session,
-/// for which the compositor shows a dialog where the user chooses the monitors to share. The displays are the shared monitors (see <see cref="GetDisplays"/>).
-/// It works wherever xdg-desktop-portal with a backend for the desktop runs (e.g. KDE Plasma, GNOME, or wlroots compositors with xdg-desktop-portal-wlr), and needs libpipewire.
+/// Wayland only shares the screen with the consent of the user: the first <see cref="GetDisplays"/> starts a screen cast session,
+/// and the compositor shows a dialog to choose the monitors. The displays are the shared monitors.
+/// Works wherever xdg-desktop-portal with a backend runs (e.g. KDE Plasma, GNOME, xdg-desktop-portal-wlr), and needs libpipewire.
 /// <para>
-/// The portal can remember the shared monitors (<see cref="WaylandSessionOptions.PersistMode"/>): it returns a <see cref="RestoreToken"/> that starts a later session without the dialog,
-/// also in a later process if the app stores it and passes it back (<see cref="WaylandSessionOptions.RestoreToken"/>).
+/// The portal can remember the shared monitors (<see cref="WaylandSessionOptions.PersistMode"/>). Its <see cref="RestoreToken"/> starts a later session without the dialog,
+/// also in a later process (<see cref="WaylandSessionOptions.RestoreToken"/>).
 /// </para>
 /// <para>Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, WaylandCaptureOptions)"/>.</para>
 /// </remarks>
@@ -23,17 +23,17 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
 {
     #region Constants
 
-    // Asking the portal can take a moment if the session bus has to start it first.
+    // The session bus may have to start the portal first.
     private static readonly TimeSpan SupportCheckTimeout = TimeSpan.FromSeconds(5);
 
     #endregion
 
     #region Properties & Fields
 
-    // Held while a session starts (which waits for the user), so only one session starts at a time.
+    // Held while a session starts (waiting for the user), so only one starts at a time.
     private readonly Lock _startLock = new();
 
-    // Held briefly for the state below; Dispose only takes this one, so it doesn't wait for the user.
+    // Dispose only takes this one, so it doesn't wait for the user.
     private readonly Lock _stateLock = new();
     private ScreenCastSession? _session;
     private volatile bool _isDisposed;
@@ -52,11 +52,10 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     public WaylandSessionOptions SessionOptions { get; }
 
     /// <summary>
-    /// Gets the token to restore the shared monitors in a later session without the dialog: the latest one the portal returned,
-    /// or the one of the <see cref="SessionOptions"/> until a session returned one. <c>null</c> if there's none.
+    /// Gets the token to restore the shared monitors without the dialog: the latest one of the portal, or the one of the <see cref="SessionOptions"/>. <c>null</c> if there's none.
     /// </summary>
     /// <remarks>
-    /// A new session (after one ended) restores with it on its own. Store it to restore the session in a later process (<see cref="WaylandSessionOptions.RestoreToken"/>):
+    /// New sessions of this service use it on their own. Store it for a later process (<see cref="WaylandSessionOptions.RestoreToken"/>);
     /// the portal may hand out a new one with every session (see <see cref="RestoreTokenChanged"/>).
     /// </remarks>
     public string? RestoreToken => _restoreToken;
@@ -69,8 +68,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// Occurs when a session started and the portal returned another <see cref="RestoreToken"/> than the current one.
     /// </summary>
     /// <remarks>
-    /// Raised by <see cref="GetDisplays"/> (where sessions start) on its thread, after the session started and before it returns.
-    /// Exceptions thrown by a handler are ignored: <see cref="GetDisplays"/> returns the displays of the session anyway.
+    /// Raised by <see cref="GetDisplays"/> on its thread, before it returns. Exceptions thrown by a handler are ignored.
     /// </remarks>
     public event EventHandler<WaylandRestoreTokenChangedEventArgs>? RestoreTokenChanged;
 
@@ -82,7 +80,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// Initializes a new instance of the <see cref="WaylandScreenCaptureService"/> class.
     /// </summary>
     /// <remarks>
-    /// Nothing is connected yet: the screen cast session starts with the first <see cref="GetDisplays"/>.
+    /// The screen cast session starts with the first <see cref="GetDisplays"/>.
     /// </remarks>
     /// <param name="options">The options of captures created without their own options; <c>null</c> for <see cref="WaylandCaptureOptions.Default"/>.</param>
     /// <param name="sessionOptions">The options of the screen cast session; <c>null</c> for <see cref="WaylandSessionOptions.Default"/>.</param>
@@ -99,11 +97,11 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     #region Methods
 
     /// <summary>
-    /// Checks if the ScreenCast portal can be used: libpipewire is installed, and a portal on the session bus offers the ScreenCast interface.
+    /// Checks if the ScreenCast portal can be used: libpipewire is installed and a portal on the session bus offers ScreenCast.
     /// </summary>
     /// <remarks>
-    /// It doesn't start a session, so no dialog is shown. It asks the portal, which can take a moment if the session bus has to start it first (it gives up after 5 s).
-    /// Desktops like KDE Plasma and GNOME offer the portal in X11 sessions too: prefer ScreenCapture.NET.X11 there (it needs no dialog); its check fails in Wayland sessions.
+    /// Shows no dialog. Asking the portal can take up to 5 s if the session bus has to start it.
+    /// KDE Plasma and GNOME offer the portal in X11 sessions too; prefer ScreenCapture.NET.X11 there, it needs no dialog.
     /// </remarks>
     /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
     [SupportedOSPlatformGuard("linux")]
@@ -115,7 +113,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
         {
             if (!PipeWire.IsAvailable()) return false;
 
-            // On the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
+            // On the thread pool, so waiting can't deadlock with a synchronization context.
             Task<uint> version = Task.Run(ScreenCastSession.ReadPortalVersionAsync);
             return version.Wait(SupportCheckTimeout) && (version.Result > 0);
         }
@@ -127,8 +125,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     /// <remarks>
-    /// The portal doesn't tell which graphics card shows a monitor, so there's one graphics card (id <c>xdg-desktop-portal</c>, named after $XDG_CURRENT_DESKTOP).
-    /// It doesn't start a session.
+    /// The portal doesn't tell the graphics card, so there's one (id <c>xdg-desktop-portal</c>, named after $XDG_CURRENT_DESKTOP). Doesn't start a session.
     /// </remarks>
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
@@ -140,13 +137,12 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// The displays are the monitors the user shares: the first call starts a screen cast session and <b>blocks until the user answered the dialog of the compositor</b>.
-    /// Later calls return the displays of that session without a dialog. If the session ended (e.g. the user stopped sharing), the next call starts a new one,
-    /// again with the dialog unless the portal restores it (see <see cref="RestoreToken"/>).
+    /// The displays are the monitors the user shares. The first call starts a screen cast session and <b>blocks until the user answered the dialog</b>.
+    /// Later calls return the displays of that session. If it ended (e.g. the user stopped sharing), the next call starts a new one,
+    /// with the dialog unless the portal restores it (see <see cref="RestoreToken"/>).
     /// </para>
     /// <para>
-    /// The ids of the displays are <c>stream:</c> and the id the portal gives the stream, or its index if the portal gives none (e.g. KDE).
-    /// The position is the one of the monitor in the compositor's space if the portal tells it, otherwise 0.
+    /// For the ids see <see cref="Display.Id"/>. The position is the one in the compositor's space if the portal tells it, otherwise 0.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The ScreenCast portal isn't available, the user cancelled the dialog, or the portal ended the session before it started.</exception>
@@ -166,12 +162,12 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
             {
                 RestoreTokenChanged?.Invoke(this, new WaylandRestoreTokenChangedEventArgs(newRestoreToken));
             }
-            catch { /* Exceptions of handlers aren't errors of the service: the session started, and the token is in RestoreToken. */ }
+            catch { /* Exceptions of handlers aren't errors of the service. */ }
 
         return WaylandDisplays.GetDisplays(session.Streams, portal);
     }
 
-    // Returns the current session, or starts a new one. newRestoreToken is the token a new session returned if it's another than the current one.
+    // newRestoreToken is set if a new session returned another token.
     private ScreenCastSession GetSession(out string? newRestoreToken)
     {
         newRestoreToken = null;
@@ -194,7 +190,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
 
             try
             {
-                // Started on the thread pool: waiting on it here can't deadlock with a synchronization context of the caller.
+                // On the thread pool, so waiting can't deadlock with a synchronization context.
                 string? restoreToken = _restoreToken;
                 Task.Run(() => session.StartAsync(SessionOptions, restoreToken)).GetAwaiter().GetResult();
 
@@ -221,7 +217,7 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// <summary>
     /// Finds the stream of a display in the current session.
     /// </summary>
-    /// <returns>The session, the stream and its display; <c>null</c> if there's no started session (anymore) or it doesn't share the display.</returns>
+    /// <returns>The session, the stream and its display; <c>null</c> if there's no running session or it doesn't share the display.</returns>
     internal (ScreenCastSession Session, PortalStream Stream, Display Display)? FindStream(string displayId)
     {
         ScreenCastSession? session;
@@ -243,10 +239,8 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
     /// <remarks>
-    /// The display has to be one of the current session (see <see cref="GetDisplays"/>); otherwise the capture is <see cref="CaptureResult.Unavailable"/>.
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// A new capture gets the <see cref="Options"/> of the service; an existing one is returned with the options it was created with.
+    /// The display has to be one of the current session, otherwise the capture is <see cref="CaptureResult.Unavailable"/>.
+    /// A new capture gets the <see cref="Options"/> of the service, an existing one keeps its own.
     /// </remarks>
     public WaylandScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
 
@@ -254,10 +248,8 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
     /// Creates a <see cref="WaylandScreenCapture"/> with the given options for the given display.
     /// </summary>
     /// <remarks>
-    /// The display has to be one of the current session (see <see cref="GetDisplays"/>); otherwise the capture is <see cref="CaptureResult.Unavailable"/>.
-    /// The service creates one capture per display and returns it again for every display with the same <see cref="Display.Id"/>, also if other values of the display changed.
-    /// A capture that was disposed is replaced by a new one.
-    /// An existing capture is only returned if it was created with equal options.
+    /// The display has to be one of the current session, otherwise the capture is <see cref="CaptureResult.Unavailable"/>.
+    /// There's one capture per <see cref="Display.Id"/>. An existing capture is only returned if it was created with equal options.
     /// </remarks>
     /// <param name="display">The display to capture.</param>
     /// <param name="options">The options of the capture.</param>
@@ -272,8 +264,8 @@ public sealed class WaylandScreenCaptureService : IScreenCaptureService
 
     /// <inheritdoc />
     /// <remarks>
-    /// Disposes all captures created by the service and ends the screen cast session; a <see cref="GetDisplays"/> waiting for the user then throws an <see cref="ObjectDisposedException"/>.
-    /// It's thread-safe and can be called more than once.
+    /// Disposes all captures created by the service and ends the session. A <see cref="GetDisplays"/> waiting for the user throws an <see cref="ObjectDisposedException"/>.
+    /// Can be called more than once.
     /// </remarks>
     public void Dispose()
     {

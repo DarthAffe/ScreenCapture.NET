@@ -259,7 +259,7 @@ internal static unsafe partial class PipeWire
     public static partial int pw_core_disconnect(nint core);
 
     /// <summary>
-    /// Adds a listener to the events of a core. <c>pw_core_add_listener</c> is an inline function before libpipewire 1.4 (no symbol), so it's called through the method table like it does.
+    /// Adds a listener to the events of a core, through the method table: <c>pw_core_add_listener</c> is inline before libpipewire 1.4.
     /// </summary>
     public static int AddCoreListener(nint core, void* hook, PwCoreEvents* events, nint data)
     {

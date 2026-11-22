@@ -6,11 +6,10 @@ using Vortice.DXGI;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Enumerates the DXGI adapters and outputs as <see cref="GraphicsCard"/>s and <see cref="Display"/>s, for the services and for captures that read their display again.
+/// Enumerates the DXGI adapters and outputs as <see cref="GraphicsCard"/>s and <see cref="Display"/>s.
 /// </summary>
 /// <remarks>
-/// A factory keeps showing the adapters it was created with. If they changed since (e.g. after a driver update, or a graphics card was added or removed),
-/// the methods enumerate with a new factory, so the shared one of a service can be kept.
+/// A factory only knows the adapters it was created with. If they changed, a new factory is used, so the one of a service can be kept.
 /// </remarks>
 internal static class DXGIDevices
 {
@@ -39,14 +38,14 @@ internal static class DXGIDevices
     /// <summary>
     /// Reads all outputs of the adapter with the id of <paramref name="graphicsCard"/>.
     /// </summary>
-    /// <returns>The displays, with the card as it is now (its index can have changed); empty if the card isn't there anymore.</returns>
+    /// <returns>The displays, with the current card; empty if the card isn't there anymore.</returns>
     public static List<Display> GetDisplays(IDXGIFactory1 factory, GraphicsCard graphicsCard) => WithCurrentFactory(factory, current => ReadDisplays(current, graphicsCard));
 
     private static List<Display> ReadDisplays(IDXGIFactory1 factory, GraphicsCard graphicsCard)
     {
         List<Display> displays = [];
 
-        // The card is found by its id: its index can point to another adapter by now (e.g. after an adapter was added or removed).
+        // By id, the index can point to another adapter by now.
         if (FindAdapter(factory, graphicsCard.Id) is not (IDXGIAdapter1 adapter, int index)) return displays;
         using IDXGIAdapter1 _ = adapter;
 
@@ -103,10 +102,7 @@ internal static class DXGIDevices
     /// <summary>
     /// Finds the output showing the display with the given id, on any adapter.
     /// </summary>
-    /// <returns>
-    /// The adapter and the output (the caller disposes them), the current state of the display and the target of its monitor (<c>null</c> if unknown);
-    /// <c>null</c> if the display isn't connected.
-    /// </returns>
+    /// <returns>The adapter and output (disposed by the caller), the current display and its monitor target; <c>null</c> if the display isn't connected.</returns>
     public static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory, string id)
         => FindDisplay(factory, (description, devices) => string.Equals(devices.GetMonitor(description.DeviceName).Id, id, StringComparison.Ordinal));
 
@@ -119,7 +115,7 @@ internal static class DXGIDevices
 
     private static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? FindDisplay(IDXGIFactory1 factory,
                                                                                                                                          Func<OutputDescription, WindowsDisplayDevices, bool> matches)
-        // The adapter and output keep their factory alive: the new factory can be released when they're returned.
+        // The adapter and output keep their factory alive.
         => WithCurrentFactory(factory, current => ReadDisplay(current, matches));
 
     private static (IDXGIAdapter1 Adapter, IDXGIOutput Output, Display Display, WindowsDisplayDevices.MonitorTarget? Target)? ReadDisplay(IDXGIFactory1 factory,
@@ -166,7 +162,6 @@ internal static class DXGIDevices
         }
     }
 
-    // Runs the enumeration with the factory, or with a new one if the adapters changed since the factory was created.
     private static T WithCurrentFactory<T>(IDXGIFactory1 factory, Func<IDXGIFactory1, T> enumerate)
     {
         if (factory.IsCurrent) return enumerate(factory);

@@ -9,32 +9,29 @@ namespace ScreenCapture.NET;
 /// Captures a screen continuously on a background thread, at a target frame rate.
 /// </summary>
 /// <remarks>
-/// The loop calls <see cref="IScreenCapture.CaptureScreen"/> over and over; the results arrive through the events of the capture and its zones
-/// (<see cref="IScreenCapture.Updated"/>, <see cref="ICaptureZone.Updated"/>), which are raised on the thread of the loop.
+/// The results arrive through the events of the capture and its zones, raised on the thread of the loop.
 /// <para>
-/// Restarts and their backoff are handled by the capture (see <see cref="IScreenCapture.CaptureScreen"/>).
-/// The loop only adds a delay after <see cref="CaptureResult.Failed"/>: 100 ms, doubling with every further failure up to 2 s,
-/// so a capture that keeps failing doesn't flood <see cref="IScreenCapture.ErrorOccurred"/>.
+/// After <see cref="CaptureResult.Failed"/> the loop waits 100 ms, doubling up to 2 s. Restarts are handled by the capture itself.
 /// </para>
 /// <para>
-/// The loop doesn't own the capture: disposing the loop stops it, but doesn't dispose the capture. Disposing the capture ends the loop.
-/// All members are thread-safe. For an <c>async</c> consumer, see <see cref="ScreenCaptureExtensions.CaptureLoopAsync"/>.
+/// Disposing the loop doesn't dispose the capture. Disposing the capture ends the loop.
+/// All members are thread-safe. For <c>async</c> code, see <see cref="ScreenCaptureExtensions.CaptureLoopAsync"/>.
 /// </para>
 /// </remarks>
 public sealed class ScreenCaptureLoop : IDisposable
 {
     #region Properties & Fields
 
-    // Guards _targetFrameRate, _interval, _run, _lastRun and _isDisposed. Never held while capturing or waiting.
+    // Never held while capturing or waiting.
     private readonly Lock _lock = new();
 
     private double? _targetFrameRate;
     private TimeSpan _interval;
 
-    // The run Start started and Stop didn't stop yet; null after the loop ended by itself.
+    // null once stopped or ended.
     private LoopRun? _run;
 
-    // The run started last (running or not).
+    // Running or not.
     private LoopRun? _lastRun;
 
     private bool _isDisposed;
@@ -48,11 +45,10 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// Gets or sets the number of captures per second the loop aims for, or <c>null</c> to capture again as soon as the last capture returned.
     /// </summary>
     /// <remarks>
-    /// The rate is measured from the start of one capture to the start of the next. The loop waits with the OS timer, which is coarse (e.g. about 15.6 ms on Windows):
-    /// single captures can start late, but the following ones start sooner, so the average rate is kept as long as the capture is fast enough.
+    /// Measured from start to start. The OS timer is coarse (about 15.6 ms on Windows), so single captures can start late, but the average rate is kept.
     /// <para>
-    /// Without a limit, captures that wait for frames (DX11, WGC and Wayland) are paced by the display: a capture waits for the next frame (up to its timeout).
-    /// DX9 and X11 captures return right away, so without a limit the loop keeps a CPU core busy.
+    /// Without a limit DX11, WGC and Wayland are paced by the display, since they wait for the next frame.
+    /// DX9 and X11 return right away and keep a CPU core busy.
     /// </para>
     /// A change applies to the next capture, also while the loop is waiting.
     /// </remarks>
@@ -81,7 +77,7 @@ public sealed class ScreenCaptureLoop : IDisposable
     }
 
     /// <summary>
-    /// Gets a value indicating whether the loop runs: it was started and neither stopped nor ended (see <see cref="Completion"/>).
+    /// Gets a value indicating whether the loop runs.
     /// </summary>
     public bool IsRunning
     {
@@ -96,8 +92,8 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// Gets a task that completes when the loop started last has ended (a completed task if it was never started).
     /// </summary>
     /// <remarks>
-    /// The task completes successfully when the loop was stopped or the capture was disposed.
-    /// It faults with the exception if <see cref="IScreenCapture.CaptureScreen"/> threw anything else (which a capture is not supposed to do); the loop ends then.
+    /// Completes successfully when the loop was stopped or the capture was disposed.
+    /// Faults if <see cref="IScreenCapture.CaptureScreen"/> threw anything else, which ends the loop.
     /// </remarks>
     public Task Completion
     {
@@ -113,7 +109,7 @@ public sealed class ScreenCaptureLoop : IDisposable
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ScreenCaptureLoop"/> class. The loop doesn't run until it's started (see <see cref="Start"/>).
+    /// Initializes a new instance of the <see cref="ScreenCaptureLoop"/> class. It doesn't run until <see cref="Start"/> is called.
     /// </summary>
     /// <param name="screenCapture">The capture to drive.</param>
     /// <param name="targetFrameRate">The number of captures per second the loop aims for, or <c>null</c> for no limit (see <see cref="TargetFrameRate"/>).</param>
@@ -137,8 +133,7 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// Starts the loop on a new background thread. Does nothing if it already runs.
     /// </summary>
     /// <remarks>
-    /// The loop can be started again after it stopped or ended. A loop that is still finishing a capture after <see cref="Stop"/> was called on its own thread
-    /// finishes it before the new one captures, so captures of this loop never overlap.
+    /// Can be started again after it stopped or ended. Captures of the old and the new run never overlap.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The loop is disposed.</exception>
     public void Start()
@@ -165,9 +160,8 @@ public sealed class ScreenCaptureLoop : IDisposable
     /// Stops the loop and waits until it has ended. Does nothing if it doesn't run.
     /// </summary>
     /// <remarks>
-    /// The loop ends after the current capture, which can take up to the timeout of the capture (DX11, WGC and Wayland) or its restart backoff (up to 2 s).
-    /// Called on the thread of the loop (e.g. from an <see cref="IScreenCapture.Updated"/> handler) it doesn't wait: the loop ends when the handler returned.
-    /// That also holds for a loop started again on that thread meanwhile (e.g. <c>Stop(); Start(); Stop();</c> in one handler), which waits for the handler before it captures.
+    /// The loop ends after the current capture, which can take up to the timeout of the capture or its restart backoff (up to 2 s).
+    /// Called from an event handler on the thread of the loop, it doesn't wait; the loop ends when the handler returned.
     /// </remarks>
     public void Stop()
     {
@@ -224,7 +218,7 @@ public sealed class ScreenCaptureLoop : IDisposable
                 TimeSpan delay = pacer.GetDelay(Stopwatch.GetTimestamp(), interval);
                 if (delay > TimeSpan.Zero)
                 {
-                    // Ends early on Stop or a changed frame rate; either way, check again.
+                    // Ends early on Stop or a changed frame rate.
                     run.Wait(delay);
                     continue;
                 }
@@ -274,19 +268,18 @@ public sealed class ScreenCaptureLoop : IDisposable
 
     #endregion
 
-    // One Start until the loop ended: its thread, the stop request and the signal that ends its waits.
+    // One run of the loop, from Start until it ended.
     private sealed class LoopRun(LoopRun? previous)
     {
         #region Properties & Fields
 
-        // Guards _stopRequested and _woken; waited on and pulsed to end waits early.
+        // Guards _stopRequested and _woken, pulsed to end waits early.
         private readonly object _signal = new();
 
         private bool _stopRequested;
         private bool _woken;
 
-        // The run before this one, whose thread may still finish a capture (cleared once it has ended, so runs don't keep each other alive).
-        // Cleared by the thread of this run, read by others (WaitsFor).
+        // Its thread may still finish a capture. Cleared once it ended, so runs don't keep each other alive.
         private LoopRun? _previous = previous;
 
         public Thread Thread { get; set; } = null!;
@@ -314,8 +307,7 @@ public sealed class ScreenCaptureLoop : IDisposable
             Volatile.Write(ref _previous, null);
         }
 
-        // If this run waits for the thread before it captures: the thread of a run before this one that hasn't ended yet.
-        // A run whose previous one is cleared doesn't wait for anything anymore: the runs before it have ended.
+        // If the thread belongs to an earlier run this one still waits for.
         public bool WaitsFor(Thread thread)
         {
             for (LoopRun? run = Volatile.Read(ref _previous); run != null; run = Volatile.Read(ref run._previous))

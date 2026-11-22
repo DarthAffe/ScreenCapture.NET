@@ -11,8 +11,8 @@ namespace ScreenCapture.NET.Tests.Hardware;
 /// They only run on request: <c>dotnet test --filter TestCategory=Interactive</c>, one TFM at a time (<c>-f</c>), in a Wayland session.
 /// Not part of a <c>TestCategory=Hardware</c> run.
 /// <para>
-/// The restore token of the last session is stored in <c>$XDG_CACHE_HOME/ScreenCapture.NET.Tests/wayland-restore-token</c> (outside the repository):
-/// once a session was remembered, the tests restore it without the dialog. Delete the file (or revoke the permission in the settings of the desktop) to see the dialog again.
+/// The restore token is stored in <c>$XDG_CACHE_HOME/ScreenCapture.NET.Tests/wayland-restore-token</c>, so later runs skip the dialog.
+/// Delete the file (or revoke the permission) to see it again.
 /// </para>
 /// </summary>
 [TestClass]

@@ -41,7 +41,7 @@ public sealed class ThreadSafetyStressTests
         HashSet<Display> displays = [BIG, SMALL];
         HashSet<(int Width, int Height)> sizes = [.. regions.SelectMany(r => LEVELS.Select(l => StressRun.ScaledSize(r, l)))];
 
-        // Every zone write gets its own color, so a frame that mixes two writes is detected. Writes run under CaptureLock (like a backend's frame), so the hook and the pattern match.
+        // Every zone write gets its own color, so a frame mixing two writes shows. Writes run under CaptureLock like a backend's.
         int writes = 0;
         ColorARGB color = default;
         screenCapture.ZoneUpdating = _ =>
@@ -62,7 +62,7 @@ public sealed class ThreadSafetyStressTests
         int displayChanges = 0;
         screenCapture.DisplayChanged += (_, _) => Interlocked.Increment(ref displayChanges);
 
-        // Handlers run on the capturing threads and use the capture and its zones too (their exceptions are swallowed by the capture, so they're recorded here).
+        // Handlers use the capture and its zones too. The capture swallows their exceptions, so they're recorded here.
         screenCapture.Updated += (_, _) => first.RequestUpdate();
         second.Updated += (_, _) => stress.Check("zone handler", () => AssertFrame(first, sizes));
 
@@ -142,7 +142,7 @@ public sealed class ThreadSafetyStressTests
         Thread.Sleep(DURATION);
         int writesBeforeDispose = Volatile.Read(ref writes);
 
-        // Disposed while everything runs: running calls finish, later ones throw ObjectDisposedException (which ends the workers that make them).
+        // Running calls finish, later ones throw ObjectDisposedException, which ends their workers.
         screenCapture.Dispose();
         Thread.Sleep(100);
 

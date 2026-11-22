@@ -13,7 +13,7 @@ internal static class WaylandDisplays
     #region Constants
 
     /// <summary>
-    /// The id of the only graphics card: the portal doesn't tell which card shows a stream.
+    /// The id of the only graphics card, the portal doesn't tell the real one.
     /// </summary>
     public const string GRAPHICS_CARD_ID = "xdg-desktop-portal";
 
@@ -53,7 +53,7 @@ internal static class WaylandDisplays
 /// A stream of a screen cast session: a PipeWire node with what the portal tells about it.
 /// </summary>
 /// <param name="NodeId">The PipeWire node of the stream.</param>
-/// <param name="Id">The id the portal gives the stream (version 4 and later; optional, e.g. KDE doesn't send it); unique in the session and kept by restored sessions.</param>
+/// <param name="Id">The id the portal gives the stream (version 4+, optional); kept by restored sessions.</param>
 /// <param name="X">The x-coordinate of the monitor in the compositor's space; 0 if the portal doesn't send it.</param>
 /// <param name="Y">The y-coordinate of the monitor in the compositor's space; 0 if the portal doesn't send it.</param>
 /// <param name="Width">The width of the stream; 0 if the portal doesn't send it.</param>

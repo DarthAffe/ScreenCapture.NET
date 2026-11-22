@@ -8,12 +8,11 @@ using Vortice.DXGI;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// The calls into Windows.Graphics.Capture (WinRT) and its Direct3D 11 interop, as plain COM calls through the vtables of the interfaces.
+/// Windows.Graphics.Capture (WinRT) and its Direct3D 11 interop, as plain COM calls through the vtables.
 /// </summary>
 /// <remarks>
-/// The interface ids and the order of their methods are the ones of the Windows SDK headers (<c>winrt/windows.graphics.capture.h</c>, <c>winrt/windows.foundation.h</c>,
+/// Interface ids and method order from the Windows SDK headers (<c>winrt/windows.graphics.capture.h</c>, <c>winrt/windows.foundation.h</c>,
 /// <c>winrt/windows.graphics.directx.direct3d11.h</c>, <c>um/windows.graphics.capture.interop.h</c>, <c>um/windows.graphics.directx.direct3d11.interop.h</c>).
-/// WinRT interfaces derive from <c>IInspectable</c>: their own methods start after its 6 (<c>IUnknown</c>'s 3 and <c>GetIids</c>, <c>GetRuntimeClassName</c>, <c>GetTrustLevel</c>).
 /// </remarks>
 // ReSharper disable InconsistentNaming
 internal static unsafe partial class WGCInterop
@@ -35,17 +34,17 @@ internal static unsafe partial class WGCInterop
     private static readonly Guid IID_IDirect3DDxgiInterfaceAccess = new("a9b3d012-3df2-4ee3-b8d1-8695f457d3c1");
     private static readonly Guid IID_IClosable = new("30d5a829-7fa4-4026-83bb-d75bae4ea99e");
 
-    // The first method of a WinRT interface (after IUnknown and IInspectable) and of a COM interface (after IUnknown).
+    // The first own method of a WinRT interface (after IInspectable) and of a COM interface (after IUnknown).
     private const int WINRT = 6;
     private const int COM = 3;
 
     /// <summary>
-    /// <c>DirectXPixelFormat.B8G8R8A8UIntNormalized</c> (the value of <c>DXGI_FORMAT_B8G8R8A8_UNORM</c>).
+    /// <c>DirectXPixelFormat.B8G8R8A8UIntNormalized</c>.
     /// </summary>
     public const int PIXEL_FORMAT_BGRA8 = 87;
 
     /// <summary>
-    /// <c>DirectXPixelFormat.R16G16B16A16Float</c> (the value of <c>DXGI_FORMAT_R16G16B16A16_FLOAT</c>): scRGB, used for HDR.
+    /// <c>DirectXPixelFormat.R16G16B16A16Float</c> (scRGB, for HDR).
     /// </summary>
     public const int PIXEL_FORMAT_RGBA16F = 10;
 
@@ -61,7 +60,7 @@ internal static unsafe partial class WGCInterop
     #region Methods
 
     /// <summary>
-    /// Checks if Windows.Graphics.Capture is supported (<c>GraphicsCaptureSession.IsSupported</c>); <c>false</c> if it doesn't exist on this Windows.
+    /// Checks if Windows.Graphics.Capture is supported (<c>GraphicsCaptureSession.IsSupported</c>).
     /// </summary>
     public static bool IsSupported()
     {
@@ -163,7 +162,7 @@ internal static unsafe partial class WGCInterop
         => Check(((delegate* unmanaged[Stdcall]<nint, long, int>)VTable(item.Pointer)[WINRT + 3])(item.Pointer, token));
 
     /// <summary>
-    /// Creates the WinRT device (<c>IDirect3DDevice</c>, used by the frame pool) of a Direct3D 11 device.
+    /// Creates the WinRT device (<c>IDirect3DDevice</c>) of a Direct3D 11 device.
     /// </summary>
     public static WinRTHandle CreateDirect3DDevice(ID3D11Device device)
     {
@@ -180,7 +179,7 @@ internal static unsafe partial class WGCInterop
     }
 
     /// <summary>
-    /// Creates a free-threaded frame pool (<c>Direct3D11CaptureFramePool.CreateFreeThreaded</c>): its events are raised on threads of Windows.
+    /// Creates a free-threaded frame pool (<c>Direct3D11CaptureFramePool.CreateFreeThreaded</c>), raising its events on threads of Windows.
     /// </summary>
     public static WinRTHandle CreateFreeThreadedFramePool(WinRTHandle device, int pixelFormat, int numberOfBuffers, SizeInt32 size)
     {
@@ -198,13 +197,13 @@ internal static unsafe partial class WGCInterop
     }
 
     /// <summary>
-    /// Gives a frame pool new buffers (<c>IDirect3D11CaptureFramePool.Recreate</c>), e.g. of another size. Its session and event handlers stay.
+    /// Gives a frame pool new buffers (<c>IDirect3D11CaptureFramePool.Recreate</c>). Session and event handlers stay.
     /// </summary>
     public static void RecreateFramePool(WinRTHandle framePool, WinRTHandle device, int pixelFormat, int numberOfBuffers, SizeInt32 size)
         => Check(((delegate* unmanaged[Stdcall]<nint, nint, int, int, SizeInt32, int>)VTable(framePool.Pointer)[WINRT])(framePool.Pointer, device.Pointer, pixelFormat, numberOfBuffers, size));
 
     /// <summary>
-    /// Takes the next frame (<c>IDirect3D11CaptureFrame</c>) out of a frame pool (<c>IDirect3D11CaptureFramePool.TryGetNextFrame</c>).
+    /// Takes the next frame out of a frame pool (<c>IDirect3D11CaptureFramePool.TryGetNextFrame</c>).
     /// </summary>
     /// <returns>The frame (give it back with <see cref="ReleaseFrame"/>), or 0 if there's none.</returns>
     public static nint TryGetNextFrame(nint framePool)
@@ -271,7 +270,7 @@ internal static unsafe partial class WGCInterop
     /// <summary>
     /// Sets if Windows draws a border around the captured display (<c>IGraphicsCaptureSession3.IsBorderRequired</c>).
     /// </summary>
-    /// <returns><c>false</c> if this Windows doesn't support it (Windows 10, where the border is always drawn).</returns>
+    /// <returns><c>false</c> if this Windows doesn't support it (Windows 10).</returns>
     public static bool TrySetBorderRequired(WinRTHandle session, bool required)
     {
         if (Marshal.QueryInterface(session.Pointer, IID_IGraphicsCaptureSession3, out nint session3) < 0) return false;
@@ -295,7 +294,7 @@ internal static unsafe partial class WGCInterop
         if (Marshal.QueryInterface(session.Pointer, IID_IGraphicsCaptureSession5, out nint session5) < 0) return false;
         try
         {
-            // Windows.Foundation.TimeSpan is a struct with one Int64 (100 ns units), passed like an Int64.
+            // Windows.Foundation.TimeSpan is passed as an Int64 in 100 ns units.
             Check(((delegate* unmanaged[Stdcall]<nint, long, int>)VTable(session5)[WINRT + 1])(session5, interval.Ticks));
             return true;
         }
@@ -316,7 +315,7 @@ internal static unsafe partial class WGCInterop
     }
 
     /// <summary>
-    /// Gets the time of a frame (<c>SystemRelativeTime</c>, a QueryPerformanceCounter time in 100 ns units).
+    /// Gets the time of a frame (<c>SystemRelativeTime</c>, QueryPerformanceCounter in 100 ns units).
     /// </summary>
     public static long GetSystemRelativeTime(nint frame)
     {
@@ -371,7 +370,7 @@ internal static unsafe partial class WGCInterop
     }
 
     /// <summary>
-    /// Closes an object (<c>IClosable.Close</c>), ignoring errors (e.g. an object that's closed already).
+    /// Closes an object (<c>IClosable.Close</c>), ignoring errors.
     /// </summary>
     public static void TryClose(nint inspectable)
     {
@@ -390,7 +389,7 @@ internal static unsafe partial class WGCInterop
         nint factory;
         fixed (char* name = className)
         {
-            // A reference to the (null-terminated) string: nothing to free, but it's only valid while the string is pinned.
+            // Nothing to free, but only valid while the string is pinned.
             Check(WindowsCreateStringReference(name, (uint)className.Length, &header, &hstring));
             Check(RoGetActivationFactory(hstring, &iid, &factory));
         }
@@ -398,15 +397,14 @@ internal static unsafe partial class WGCInterop
         return factory;
     }
 
-    // WinRT objects can only be used on threads that joined an apartment. With the multithreaded apartment kept alive for the process,
-    // threads that never initialized COM (e.g. the main thread of a console application) belong to it implicitly.
+    // WinRT needs an apartment. With the MTA kept alive, threads that never initialized COM (e.g. the main thread of a console app) belong to it.
     private static void EnsureMTA()
     {
         lock (MTA_LOCK)
         {
             if (_mtaUsed) return;
 
-            // Never decremented: the apartment stays for the lifetime of the process.
+            // Never decremented.
             Check(CoIncrementMTAUsage(out _));
             _mtaUsed = true;
         }
@@ -444,7 +442,7 @@ internal static unsafe partial class WGCInterop
     [StructLayout(LayoutKind.Sequential)]
     public readonly record struct SizeInt32(int Width, int Height);
 
-    // HSTRING_HEADER: room for the string reference (24 bytes on 64-bit, 20 on 32-bit), only used by Windows.
+    // HSTRING_HEADER: 24 bytes on 64-bit, 20 on 32-bit.
     [StructLayout(LayoutKind.Sequential, Size = 24)]
     private struct HStringHeader;
 

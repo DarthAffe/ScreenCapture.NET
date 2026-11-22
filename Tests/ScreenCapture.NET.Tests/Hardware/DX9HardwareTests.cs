@@ -195,7 +195,7 @@ public sealed class DX9HardwareTests
     [DataRow(3)]
     public void DownscaledZonesMatchDX11(int downscaleLevel)
     {
-        // DX11 with CaptureHdr: without it, a display showing HDR is captured far too bright (Windows' own conversion), while DX9 gets its SDR colors.
+        // Without CaptureHdr, DX11 captures HDR displays far too bright, while DX9 gets their SDR colors.
         Assert.IsTrue(DPIAwareness.Initialize());
 
         using DX9ScreenCaptureService service = new();

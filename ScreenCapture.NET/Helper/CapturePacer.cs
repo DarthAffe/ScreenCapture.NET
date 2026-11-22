@@ -4,14 +4,13 @@ using System.Diagnostics;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Decides when a capture loop captures next: at a target frame rate (from the start of one capture to the start of the next),
-/// and with a growing delay while captures keep failing.
+/// Decides when a capture loop captures next: at a target frame rate, with a growing delay while captures keep failing.
 /// </summary>
 /// <remarks>
 /// Not thread-safe. Times are <see cref="Stopwatch"/> timestamps.
 /// <para>
-/// Captures are scheduled on a fixed grid, so waking up late (the OS timer is coarse, e.g. about 15.6 ms on Windows) doesn't lower the average rate:
-/// a capture that started late is followed sooner. A capture that started a whole interval or more late starts a new grid instead, so the loop doesn't catch up in a burst.
+/// Captures are scheduled on a fixed grid, so waking up late doesn't lower the average rate.
+/// A capture a whole interval late starts a new grid, so the loop doesn't catch up in a burst.
 /// </para>
 /// </remarks>
 internal sealed class CapturePacer
@@ -27,12 +26,12 @@ internal sealed class CapturePacer
 
     #region Properties & Fields
 
-    // Failed captures (unexpected errors) are retried with the same delays as failed restarts.
+    // Same delays as failed restarts.
     private readonly Backoff _failureBackoff = new();
 
     private bool _hasCaptured;
 
-    // When the last capture was due on the grid (or when it started, if that started a new grid).
+    // When the last capture was due on the grid.
     private long _lastDue;
 
     #endregion
@@ -58,7 +57,7 @@ internal sealed class CapturePacer
     }
 
     /// <summary>
-    /// Converts a delay to whole milliseconds for a wait, rounded up so the wait doesn't end before the delay.
+    /// Converts a delay to whole milliseconds, rounded up.
     /// </summary>
     /// <param name="delay">The delay.</param>
     /// <returns>The milliseconds to wait.</returns>
@@ -101,7 +100,7 @@ internal sealed class CapturePacer
         long intervalTicks = ToStopwatchTicks(interval);
         long due = _hasCaptured ? _lastDue + intervalTicks : started;
 
-        // Early (only after the interval was shortened) or late by a whole interval: start a new grid.
+        // Early (after the interval was shortened) or a whole interval late: start a new grid.
         _lastDue = ((started < due) || ((started - due) >= intervalTicks)) ? started : due;
         _hasCaptured = true;
 

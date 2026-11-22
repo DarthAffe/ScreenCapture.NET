@@ -124,7 +124,7 @@ public sealed class CapturePacerTests
         CapturePacer pacer = new();
         Capture(pacer, 0, 1, interval: TimeSpan.FromMilliseconds(100));
 
-        // Captured at 3 ms, before it was due even with the new interval (5 ms; e.g. the wait ended early): the grid starts at this capture, the next one is due at 8 ms.
+        // Captured at 3 ms, early even for the new 5 ms interval: the grid starts here, the next one is due at 8 ms.
         Capture(pacer, 3, 4, interval: TimeSpan.FromMilliseconds(5));
         AssertDelay(4, pacer.GetDelay(At(4), TimeSpan.FromMilliseconds(5)));
     }

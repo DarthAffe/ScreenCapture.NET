@@ -72,7 +72,7 @@ internal static partial class X11
     internal static partial nint XSetIOErrorHandler(nint handler);
 
     /// <summary>
-    /// Sets what Xlib calls on a broken connection after the I/O error handler returned (<c>void (*)(Display*, void*)</c>), instead of terminating the process. libX11 1.7 and newer.
+    /// Sets what Xlib calls on a broken connection after the I/O error handler (<c>void (*)(Display*, void*)</c>) instead of terminating the process. libX11 1.7+.
     /// </summary>
     /// <remarks>
     /// If it returns, the failing call returns a failure and every later call on the display returns at once.
@@ -141,7 +141,7 @@ internal static partial class X11
     internal static unsafe partial X11ImageHandle XShmCreateImage(X11DisplayHandle display, nint visual, uint depth, int format, nint data, XShmSegmentInfo* segment, uint width, uint height);
 
     /// <summary>
-    /// Asks the server to attach the segment. Only returns <c>false</c> if the request couldn't be sent: a server that can't attach it reports BadAccess asynchronously.
+    /// Asks the server to attach the segment. A server that can't reports BadAccess asynchronously.
     /// </summary>
     [LibraryImport("libXext.so.6")]
     [return: MarshalAs(UnmanagedType.Bool)]

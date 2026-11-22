@@ -9,8 +9,8 @@ namespace ScreenCapture.NET.Tests.Hardware;
 /// It activates no services, so a missing fake is a missing portal.
 /// </summary>
 /// <remarks>
-/// Tmds.DBus keeps the session bus address it read first, so the bus is shared by the whole test process and has to be set up before anything reads the address:
-/// tests that use the real session bus (the <c>Interactive</c> ones) can't run in the same process. The tests are inconclusive if they do or if dbus-daemon isn't installed.
+/// Tmds.DBus keeps the first address it read, so the bus is shared by the whole test process and the <c>Interactive</c> tests can't run in it.
+/// Inconclusive then, or without dbus-daemon.
 /// The bus is stopped when the process exits.
 /// </remarks>
 internal static class PrivateSessionBus

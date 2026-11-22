@@ -323,8 +323,8 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
-    /// A restart between the read of a frame and the zone updates (here from DisplayChanged, which runs right there) leaves an empty shared image:
-    /// the zones must not be written from it (they would show a black frame).
+    /// A restart between the read and the zone updates (here from DisplayChanged, which runs right there) leaves an empty shared image.
+    /// The zones must not be written from it.
     /// </summary>
     [TestMethod]
     public void RestartAfterTheReadDoesntWriteTheEmptyImage()
@@ -333,7 +333,7 @@ public sealed partial class X11HardwareTests
         using X11ScreenCaptureService service = X11DesktopServer.CreateService(displayName: server.DisplayName);
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
 
-        // Created with an outdated size: the restart in the constructor corrects it, so the first capture raises DisplayChanged.
+        // With an outdated size, so the first capture raises DisplayChanged.
         using X11ScreenCapture screenCapture = new(display with { Width = display.Width - 8 }, X11CaptureOptions.Default, server.DisplayName);
         CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
 
@@ -416,8 +416,8 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
-    /// Xlib locks a broken connection for the thread that found it before it calls the handlers (see <see cref="X11ErrorHandler"/>):
-    /// unless the lock is released, any other thread that uses or closes the connection waits forever.
+    /// Xlib locks a broken connection for the thread that found it (see <see cref="X11ErrorHandler"/>).
+    /// Unless it's released, every other thread using or closing the connection waits forever.
     /// </summary>
     [TestMethod]
     public void BrokenConnectionCanBeClosedFromAnotherThread()
@@ -430,7 +430,7 @@ public sealed partial class X11HardwareTests
         Assert.IsFalse(display.IsConnectionLost);
         server.Kill();
 
-        // Xlib compares pthread_t, which a new thread can reuse once a thread ended: the thread that found the broken connection lives until the other one is done.
+        // Xlib compares pthread_t, which a new thread can reuse: the finder lives until the closer is done.
         using ManualResetEventSlim found = new();
         using ManualResetEventSlim release = new();
         nuint foundOn = 0;
@@ -471,8 +471,7 @@ public sealed partial class X11HardwareTests
     private static partial nuint pthread_self();
 
     /// <summary>
-    /// The fourth byte of a depth-24 visual is padding that every server fills as it likes (Xvfb: 0, xorgxrdp: 255),
-    /// and <c>XGetSubImage</c> sets it to 0 on every server (Xlib copies the pixels masked to the depth).
+    /// The fourth byte of a depth-24 visual is padding (Xvfb: 0, xorgxrdp: 255), and <c>XGetSubImage</c> always clears it.
     /// </summary>
     [TestMethod]
     [DataRow(false, 0)]
@@ -522,7 +521,7 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
-    /// Like a remote server: without the extension, or with one that can't attach this process's segments (BadAccess), there's no shared image, no error and no segment left.
+    /// Like a remote server: without the extension, or if it can't attach the segment (BadAccess), there's no shared image, no error and no segment left.
     /// </summary>
     [TestMethod]
     [DataRow(false)]
@@ -633,7 +632,7 @@ public sealed partial class X11HardwareTests
         using X11ScreenCaptureService service = X11DesktopServer.CreateService();
         (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
 
-        // The capture reads the size of the screen when it starts. With the outdated size, XGetImage would fail with BadMatch (see XErrorIsRecordedInsteadOfTerminating).
+        // With the outdated size XGetImage would fail with BadMatch.
         Display outdated = display with { Width = display.Width + 16, Height = display.Height / 2 };
 
         HardwareTestHelper.AssertOutdatedDisplayIsReadAgain(display, outdated, d => new X11ScreenCapture(d, X11CaptureOptions.Default, null));
@@ -661,7 +660,7 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
-    /// Every RandR monitor is a display (incl. monitors without output, as <c>xrandr --setmonitor</c> defines them), with its name and its position on the screen.
+    /// Every RandR monitor is a display (also ones without output, from <c>xrandr --setmonitor</c>), with its name and position.
     /// </summary>
     [TestMethod]
     public void DisplaysAreTheMonitors()
@@ -810,10 +809,10 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
-    /// A connection the server breaks (here it's killed, like a crash or a restart) made Xlib's default I/O error handler end the process, here the test host.
+    /// A killed server made Xlib's default I/O error handler end the test host.
     /// The capture is unavailable while the server is gone and captures again once it's back.
     /// </summary>
-    /// <param name="randrExtension">With RandR the display is a monitor, and the monitor check runs into the broken connection first; without it the read of the screen does.</param>
+    /// <param name="randrExtension">With RandR the monitor check runs into the broken connection first, without it the read of the screen.</param>
     /// <param name="useSharedMemory">Whether the screen is read with <c>XShmGetImage</c> or <c>XGetSubImage</c>.</param>
     /// <param name="failedCall">The call that runs into the broken connection.</param>
     [TestMethod]

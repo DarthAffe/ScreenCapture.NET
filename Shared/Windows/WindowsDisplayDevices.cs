@@ -11,11 +11,11 @@ using System.Runtime.InteropServices;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Reads the ids and names Windows uses for graphics cards and monitors (<c>QueryDisplayConfig</c>). Shared by the Windows backends, so they report the same ids.
+/// Reads the ids and names Windows uses for graphics cards and monitors (<c>QueryDisplayConfig</c>), so all Windows backends report the same ids.
 /// </summary>
 /// <remarks>
-/// The ids are the device interface paths of the adapter and the monitor. They survive reboots, driver updates and changes of the GDI device names (<c>\\.\DISPLAY1</c>);
-/// they change if the card is moved to another slot or the monitor to another port.
+/// The ids are the device interface paths of the adapter and the monitor. They survive reboots and driver updates,
+/// but change if the card is moved to another slot or the monitor to another port.
 /// </remarks>
 internal sealed unsafe partial class WindowsDisplayDevices
 {
@@ -55,7 +55,7 @@ internal sealed unsafe partial class WindowsDisplayDevices
     #region Methods
 
     /// <summary>
-    /// Reads the monitors of the active displays. If that fails (e.g. without a desktop), all ids fall back to the values the backends report.
+    /// Reads the monitors of the active displays. If that fails, the ids fall back to the device names.
     /// </summary>
     public static WindowsDisplayDevices Query()
     {
@@ -94,7 +94,7 @@ internal sealed unsafe partial class WindowsDisplayDevices
     }
 
     /// <summary>
-    /// Gets the id of the adapter with the given LUID: its device interface path, or the LUID (hexadecimal) if Windows has none.
+    /// Gets the id of the adapter with the given LUID: its device interface path, or the LUID in hex if it has none.
     /// </summary>
     public static string GetGraphicsCardId(long luid)
     {
@@ -107,12 +107,12 @@ internal sealed unsafe partial class WindowsDisplayDevices
     /// <summary>
     /// Gets the id and the friendly name of the monitor of the display with the given GDI device name.
     /// </summary>
-    /// <returns>The device interface path of the monitor (the device name if Windows has none) and its name (empty if unknown).</returns>
+    /// <returns>The device interface path of the monitor (or the device name) and its name (empty if unknown).</returns>
     public (string Id, string FriendlyName) GetMonitor(string deviceName)
         => _monitors.TryGetValue(deviceName, out Monitor? monitor) ? (monitor.Id, monitor.FriendlyName) : (deviceName, string.Empty);
 
     /// <summary>
-    /// Gets the target (the monitor's connection) of the display with the given GDI device name, to read values of the monitor later without querying all displays.
+    /// Gets the target of the display with the given GDI device name, to read values of the monitor later.
     /// </summary>
     /// <returns>The target, or <c>null</c> if the display isn't known.</returns>
     public MonitorTarget? GetTarget(string deviceName)
@@ -158,7 +158,7 @@ internal sealed unsafe partial class WindowsDisplayDevices
     private sealed record Monitor(string Id, string FriendlyName, MonitorTarget Target);
 
     /// <summary>
-    /// The connection of a monitor to its adapter (a path target of <c>QueryDisplayConfig</c>). It stays the same until the display configuration changes.
+    /// The connection of a monitor to its adapter (a path target of <c>QueryDisplayConfig</c>). Valid until the display configuration changes.
     /// </summary>
     public readonly struct MonitorTarget
     {
@@ -172,10 +172,10 @@ internal sealed unsafe partial class WindowsDisplayDevices
         }
 
         /// <summary>
-        /// Reads the luminance SDR content has on the monitor while it shows HDR (the "SDR content brightness" setting). Takes a few microseconds.
+        /// Reads the "SDR content brightness" of the monitor while it shows HDR. Takes a few µs.
         /// </summary>
-        /// <param name="nits">The luminance of SDR white, in nits (80 if the monitor doesn't show HDR).</param>
-        /// <returns><c>false</c> if Windows doesn't know the target anymore (e.g. after a display change).</returns>
+        /// <param name="nits">The luminance of SDR white in nits (80 without HDR).</param>
+        /// <returns><c>false</c> if the target isn't known anymore.</returns>
         public bool TryGetSdrWhiteLevel(out float nits)
         {
             SdrWhiteLevel request = new() { Header = CreateHeader(DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL, sizeof(SdrWhiteLevel), _adapterId, _id) };

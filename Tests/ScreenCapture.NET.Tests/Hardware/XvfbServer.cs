@@ -8,7 +8,7 @@ using System.Text;
 namespace ScreenCapture.NET.Tests.Hardware;
 
 /// <summary>
-/// A private Xvfb server (virtual framebuffer X server) for X11 tests that need a server with known behavior, e.g. one that leaves the padding byte of its pixels 0.
+/// A private Xvfb server for X11 tests that need known behavior (e.g. a padding byte of 0).
 /// The test is inconclusive if Xvfb isn't installed.
 /// </summary>
 internal sealed partial class XvfbServer : IDisposable
@@ -51,7 +51,7 @@ internal sealed partial class XvfbServer : IDisposable
     /// </summary>
     /// <param name="screen">The size and depth of the screen (<c>WxHxD</c>).</param>
     /// <param name="sharedMemoryExtension">Whether the server offers MIT-SHM.</param>
-    /// <param name="ownIpcNamespace">Whether the server runs in its own IPC namespace (<c>unshare</c>): it offers MIT-SHM but can't attach this process's segments, like a remote server.</param>
+    /// <param name="ownIpcNamespace">Whether the server runs in its own IPC namespace: it offers MIT-SHM but can't attach the segments, like a remote server.</param>
     /// <param name="randrExtension">Whether the server offers RandR (its screen has one monitor named <c>screen</c>).</param>
     public static XvfbServer Start(string screen = "640x480x24", bool sharedMemoryExtension = true, bool ownIpcNamespace = false, bool randrExtension = true)
     {
@@ -74,7 +74,7 @@ internal sealed partial class XvfbServer : IDisposable
     /// <summary>
     /// Kills the server, like a crash: its clients' connections break.
     /// </summary>
-    /// <param name="reserveDisplay">Whether the display number stays reserved until <see cref="Restart"/> (or <see cref="Dispose"/>), so a server of the other TFM's test host can't take it in between.</param>
+    /// <param name="reserveDisplay">Whether the display number stays reserved until <see cref="Restart"/>, so the other TFM's test host can't take it.</param>
     public void Kill(bool reserveDisplay = false)
     {
         if (reserveDisplay)
@@ -89,7 +89,7 @@ internal sealed partial class XvfbServer : IDisposable
     }
 
     /// <summary>
-    /// Kills the server if it's still running and starts it again with the same display name and arguments (but none of its state, e.g. the root pattern).
+    /// Kills the server if it's still running and starts it again with the same display name and arguments, without its state.
     /// </summary>
     public void Restart()
     {
@@ -112,7 +112,7 @@ internal sealed partial class XvfbServer : IDisposable
     }
 
     /// <summary>
-    /// Locks the display numbers against the other TFM's test host (both run at once): held while a server picks a free number with -displayfd and while a killed server's number is reserved for its restart.
+    /// Locks the display numbers against the other TFM's test host, while a server picks one or a killed server's number is reserved.
     /// The lock is a file lock (flock), which the system releases if a test host crashes.
     /// </summary>
     private static FileStream LockDisplayNumbers()
@@ -237,7 +237,7 @@ internal sealed partial class XvfbServer : IDisposable
     }
 
     /// <summary>
-    /// Sets the EDID of the output of the server's automatic monitor <c>screen</c> to a base block with the given monitor name (display descriptor 0xFC, up to 13 characters).
+    /// Sets the EDID of the monitor <c>screen</c> to a base block with the given monitor name (up to 13 characters).
     /// </summary>
     [SupportedOSPlatform("linux")]
     public unsafe void SetMonitorName(string monitorName)

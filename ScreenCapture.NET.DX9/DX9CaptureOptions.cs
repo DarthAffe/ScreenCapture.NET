@@ -4,9 +4,8 @@
 /// Options of a <see cref="DX9ScreenCapture"/>.
 /// </summary>
 /// <remarks>
-/// Passed to the <see cref="DX9ScreenCaptureService"/> for all its captures, or to <see cref="DX9ScreenCaptureService.GetScreenCapture(Display, DX9CaptureOptions)"/> for one capture.
-/// Two options are equal if all their values are.
-/// There are no options yet; the type exists so options can be added without changing the API of the service.
+/// Passed to the <see cref="DX9ScreenCaptureService"/> for all its captures, or to <see cref="DX9ScreenCaptureService.GetScreenCapture(Display, DX9CaptureOptions)"/> for one.
+/// There are no options yet, the type exists so they can be added without changing the API.
 /// </remarks>
 public sealed record DX9CaptureOptions
 {

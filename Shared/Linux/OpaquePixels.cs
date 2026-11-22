@@ -6,8 +6,7 @@ using HPPH;
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Makes pixels whose fourth byte is padding (X11 depth-24 visuals, PipeWire BGRx) opaque.
-/// Compiled into the X11 and the Wayland package.
+/// Makes pixels whose fourth byte is padding (X11 depth-24, PipeWire BGRx) opaque.
 /// </summary>
 internal static class OpaquePixels
 {

@@ -9,7 +9,7 @@ using Vortice.DXGI;
 namespace ScreenCapture.NET.Tests;
 
 /// <summary>
-/// <see cref="HdrToneMapper"/>: the tone mapping of HDR frames, run with the embedded shader on WARP (Direct3D's software rasterizer, available on every Windows, also without a GPU).
+/// <see cref="HdrToneMapper"/> with the embedded shader on WARP (Direct3D's software rasterizer, available on every Windows).
 /// </summary>
 [TestClass]
 [OSCondition(OperatingSystems.Windows)]

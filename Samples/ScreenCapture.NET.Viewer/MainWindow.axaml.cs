@@ -313,7 +313,7 @@ public sealed partial class MainWindow : Window
 
         text.AppendLine();
         text.AppendLine($"Frame number   {stats.FrameNumber}");
-        // The time since the frame's timestamp when the capture returned it: negative with WGC, whose timestamp is when the frame will be shown.
+        // Negative with WGC, whose timestamp is when the frame will be shown.
         text.AppendLine($"Frame age      {Milliseconds(stats.MinAge)} / {Milliseconds(stats.AverageAge)} / {Milliseconds(stats.MaxAge)} ms (min/avg/max)");
         text.AppendLine($"Interval       {Milliseconds(stats.AverageInterval)} / {Milliseconds(stats.MaxInterval)} ms (avg/max)");
         text.AppendLine($"Display        {Backends.Describe(session.ScreenCapture.Display)}");
@@ -477,7 +477,7 @@ public sealed partial class MainWindow : Window
         ZoneLevelBox.Value = view.Mirror.Zone.DownscaleLevel;
     }
 
-    // The values are passed as they are, so the library's checks can be tried out (e.g. a zone that doesn't lie within the display).
+    // Passed as they are, so the library's checks can be tried out.
     private void ApplyZoneProperties()
     {
         if (_selectedZone is not { } view) return;

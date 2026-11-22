@@ -8,9 +8,8 @@ namespace ScreenCapture.NET;
 /// Holds the captures of a <see cref="IScreenCaptureService"/>: one per display (by <see cref="Display.Id"/>), created when it's first requested.
 /// </summary>
 /// <remarks>
-/// It implements the caching rules of <see cref="IScreenCaptureService.GetScreenCapture"/> and is used by the services of this library; services of other backends can use it too.
-/// All members are thread-safe. Concurrent requests for the same display get the same capture.
-/// A capture disposed by its user (<see cref="IScreenCapture.IsDisposed"/>) is replaced by a new one the next time it's requested.
+/// Implements the caching rules of <see cref="IScreenCaptureService.GetScreenCapture"/>, for services of other backends too.
+/// Thread-safe, concurrent requests for the same display get the same capture. A disposed capture is replaced the next time it's requested.
 /// </remarks>
 /// <typeparam name="TCapture">The type of the captures.</typeparam>
 /// <typeparam name="TOptions">The type of the options of a capture. Compared with <see cref="object.Equals(object)"/>, so a record is a good fit.</typeparam>
@@ -41,7 +40,7 @@ public sealed class ScreenCaptureCache<TCapture, TOptions>
     /// <summary>
     /// Initializes a new instance of the <see cref="ScreenCaptureCache{TCapture, TOptions}"/> class.
     /// </summary>
-    /// <param name="owner">The service owning the captures; named by the <see cref="ObjectDisposedException"/> after <see cref="DisposeAll"/>.</param>
+    /// <param name="owner">The service owning the captures, named by the <see cref="ObjectDisposedException"/>.</param>
     /// <param name="create">Creates a capture of the display with the options. Called under the lock of the cache.</param>
     /// <param name="getOptions">Gets the options a capture was created with.</param>
     public ScreenCaptureCache(object owner, Func<Display, TOptions, TCapture> create, Func<TCapture, TOptions> getOptions)
@@ -63,15 +62,11 @@ public sealed class ScreenCaptureCache<TCapture, TOptions>
     /// Gets the capture of the display, or creates one with the given options if there's none (or it was disposed).
     /// </summary>
     /// <remarks>
-    /// The lock is held while a capture is created, so requests for other displays wait for it.
-    /// An exception of the creation is passed on and nothing is cached.
+    /// Requests for other displays wait while a capture is created. If the creation throws, nothing is cached.
     /// </remarks>
     /// <param name="display">The display.</param>
     /// <param name="options">The options of a new capture.</param>
-    /// <param name="requireEqualOptions">
-    /// <c>true</c> to return an existing capture only if it was created with equal options;
-    /// <c>false</c> to return an existing capture whatever its options.
-    /// </param>
+    /// <param name="requireEqualOptions"><c>true</c> to return an existing capture only if it was created with equal options.</param>
     /// <returns>The capture of the display.</returns>
     /// <exception cref="ObjectDisposedException">The cache was disposed (<see cref="DisposeAll"/>).</exception>
     /// <exception cref="InvalidOperationException"><paramref name="requireEqualOptions"/> is <c>true</c> and the capture of the display exists with other options.</exception>
@@ -102,12 +97,12 @@ public sealed class ScreenCaptureCache<TCapture, TOptions>
     }
 
     /// <summary>
-    /// Disposes all captures (also the ones their users disposed already); afterwards <see cref="GetOrCreate"/> throws.
+    /// Disposes all captures. Afterwards <see cref="GetOrCreate"/> throws.
     /// </summary>
     /// <remarks>
-    /// Call it from the <see cref="IDisposable.Dispose"/> of the service, and release the resources the captures share (e.g. a DirectX factory) only if it returns <c>true</c>.
+    /// Call it from the Dispose of the service, and release the resources the captures share only if it returns <c>true</c>.
     /// </remarks>
-    /// <returns><c>true</c> on the first call; <c>false</c> if the cache was disposed already (nothing is done then).</returns>
+    /// <returns><c>true</c> on the first call; otherwise <c>false</c>.</returns>
     public bool DisposeAll()
     {
         List<TCapture> captures;
@@ -120,8 +115,7 @@ public sealed class ScreenCaptureCache<TCapture, TOptions>
             _captures.Clear();
         }
 
-        // Outside the lock: disposing a capture waits for its running capture (e.g. up to the DX11 timeout).
-        // No new capture can be created meanwhile, since the cache is marked as disposed.
+        // Outside the lock: disposing waits for a running capture.
         foreach (TCapture capture in captures)
             capture.Dispose();
 

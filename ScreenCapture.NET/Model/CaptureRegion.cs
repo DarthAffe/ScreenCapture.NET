@@ -22,7 +22,7 @@ public readonly record struct CaptureRegion(int X, int Y, int Width, int Height)
     /// </summary>
     /// <param name="width">The width of the area.</param>
     /// <param name="height">The height of the area.</param>
-    /// <returns><c>true</c> if <see cref="X"/> and <see cref="Y"/> aren't negative, <see cref="Width"/> and <see cref="Height"/> are greater than 0 and the region ends within the area; otherwise <c>false</c>.</returns>
+    /// <returns><c>true</c> if the region isn't empty and lies within the area; otherwise <c>false</c>.</returns>
     public bool IsWithin(int width, int height)
         => (X >= 0) && (Y >= 0) && (Width > 0) && (Height > 0) && (Width <= (width - X)) && (Height <= (height - Y));
 }
