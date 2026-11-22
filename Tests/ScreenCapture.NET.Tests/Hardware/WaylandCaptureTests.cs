@@ -270,25 +270,29 @@ public sealed class WaylandCaptureTests
     }
 
     /// <summary>
-    /// The portal tells another size (or none, like it may), the frames have the size of the stream.
+    /// The portal tells another size (or none, like it may): the display has the size of the stream from the start, and keeps it when the capture restarts.
     /// </summary>
     [TestMethod]
     [DataRow(1920, 1080)]
     [DataRow(0, 0)]
-    public void FramesOfAnotherSizeChangeTheDisplay(int portalWidth, int portalHeight)
+    public void DisplayHasTheSizeOfTheStream(int portalWidth, int portalHeight)
     {
         using Setup setup = Setup.Start(portalWidth: portalWidth, portalHeight: portalHeight);
-        Assert.AreEqual((portalWidth, portalHeight), (setup.Capture.Display.Width, setup.Capture.Display.Height));
+        Assert.AreEqual((WIDTH, HEIGHT), (setup.Capture.Display.Width, setup.Capture.Display.Height));
+        Assert.AreEqual("stream:0", setup.Capture.Display.Id);
+
+        setup.CaptureFrame(Color);
 
         List<Display> changes = [];
         setup.Capture.DisplayChanged += (_, args) => changes.Add(args.Display);
 
+        setup.Capture.Restart();
+        Assert.AreEqual((WIDTH, HEIGHT), (setup.Capture.Display.Width, setup.Capture.Display.Height));
+
         setup.CaptureFrame(Color);
 
-        Display display = setup.Capture.Display;
-        Assert.AreEqual((WIDTH, HEIGHT), (display.Width, display.Height));
-        Assert.AreEqual("stream:0", display.Id);
-        CollectionAssert.AreEqual(new[] { display }, changes);
+        Assert.AreEqual((WIDTH, HEIGHT), (setup.Capture.Display.Width, setup.Capture.Display.Height));
+        Assert.IsEmpty(changes, $"The display changed: {string.Join(", ", changes)}.");
     }
 
     [TestMethod]

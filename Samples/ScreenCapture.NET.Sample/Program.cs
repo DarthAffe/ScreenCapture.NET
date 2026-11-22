@@ -27,7 +27,7 @@ using IScreenCapture screenCapture = screenCaptureService.GetScreenCapture(displ
 
 // Capture the whole display, scaled down to an eighth of its size (downscale level 3)
 // That's plenty for an average color and a lot cheaper than the full size
-ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, display.Width, display.Height), downscaleLevel: 3);
+ICaptureZone zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, screenCapture.Display.Width, screenCapture.Display.Height), downscaleLevel: 3);
 
 // If the display changes (e.g. its resolution) the zone has to be fitted to it - a zone that doesn't lie within the display isn't captured anymore
 screenCapture.DisplayChanged += (_, e) =>

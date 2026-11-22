@@ -17,7 +17,8 @@ namespace ScreenCapture.NET;
 /// The timestamp of a frame (<see cref="ScreenCaptureUpdatedEventArgs.Timestamp"/>) is when the compositor produced it, if it tells.
 /// </para>
 /// <para>
-/// The frames have the size the compositor sends: if it differs from the size of the display (e.g. the portal didn't tell the size), the display gets it (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// The frames have the size the compositor sends, and so does <see cref="IScreenCapture.Display"/>: it can differ from the display <see cref="WaylandScreenCaptureService.GetDisplays"/> returned
+/// (e.g. the portal didn't tell the size). A stream that changes its size changes the display (see <see cref="IScreenCapture.DisplayChanged"/>).
 /// The pixels of the zones are opaque if the compositor sends BGRx (its fourth byte is padding); BGRA is passed on as it is.
 /// </para>
 /// <para>
@@ -176,8 +177,9 @@ public sealed class WaylandScreenCapture : AbstractScreenCapture<ColorBGRA>
                 // E.g. the node is gone (the compositor stopped sharing the monitor): PipeWire reports it while the stream connects.
                 if (_stream.WaitUntilStreaming() is { } failure) throw failure;
 
-                // The size of the frames is only known with the first one; a display without size keeps its old one until then.
-                SetDisplay((display.Width > 0) && (display.Height > 0) ? display : display with { Width = Display.Width, Height = Display.Height });
+                // The size the portal reported can differ from the frames (e.g. the logical size on a scaled monitor) or be missing; the negotiated one is the size of the frames.
+                (int width, int height) = _stream.FrameSize;
+                SetDisplay(display with { Width = width, Height = height });
 
                 return true;
             }

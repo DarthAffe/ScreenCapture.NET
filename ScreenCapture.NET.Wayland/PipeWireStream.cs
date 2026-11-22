@@ -62,6 +62,8 @@ internal sealed unsafe class PipeWireStream : IDisposable
     private int _state = PW_STREAM_STATE_UNCONNECTED;
     private long _stateTimestamp = Stopwatch.GetTimestamp();
     private bool _hasStreamed;
+    private int _frameWidth;
+    private int _frameHeight;
 
     // Only used under BufferLock (and swapped under the lock of the PipeWire thread too).
     private PwBuffer* _current;
@@ -93,6 +95,21 @@ internal sealed unsafe class PipeWireStream : IDisposable
         {
             lock (_frameLock)
                 return _failure;
+        }
+    }
+
+    /// <summary>
+    /// Gets the size of the frames as negotiated with the compositor; 0x0 before the format is agreed.
+    /// </summary>
+    /// <remarks>
+    /// The format is agreed before the stream streams: once <see cref="WaitUntilStreaming"/> succeeded, this is the size of the frames.
+    /// </remarks>
+    public (int Width, int Height) FrameSize
+    {
+        get
+        {
+            lock (_frameLock)
+                return (_frameWidth, _frameHeight);
         }
     }
 
@@ -355,6 +372,9 @@ internal sealed unsafe class PipeWireStream : IDisposable
             stream._videoFormat = videoFormat;
             stream._width = width;
             stream._height = height;
+
+            lock (stream._frameLock)
+                (stream._frameWidth, stream._frameHeight) = (width, height);
 
             byte[] buffers = SpaPod.BuildBuffers();
             byte[] metaHeader = SpaPod.BuildMetaHeader();
