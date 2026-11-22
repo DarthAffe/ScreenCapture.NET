@@ -1,0 +1,123 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ScreenCapture.NET.Viewer.MainWindow"
+        Title="ScreenCapture.NET Viewer"
+        Width="1400" Height="850">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
+      <TextBlock Text="Backend" VerticalAlignment="Center" />
+      <ComboBox x:Name="BackendBox" MinWidth="120" />
+      <TextBlock Text="Source" VerticalAlignment="Center" Margin="8,0,0,0" />
+      <ComboBox x:Name="SourceBox" MinWidth="420" MaxWidth="700" />
+      <Button x:Name="RefreshButton" Content="Refresh" />
+      <Button x:Name="StartButton" Content="Start" MinWidth="70" />
+      <Button x:Name="RestartButton" Content="Restart" />
+      <TextBlock Text="Frame rate" VerticalAlignment="Center" Margin="16,0,0,0" />
+      <Slider x:Name="FrameRateSlider" Minimum="1" Maximum="240" Value="60" Width="160" VerticalAlignment="Center" TickFrequency="1" IsSnapToTickEnabled="True" />
+      <TextBlock x:Name="FrameRateText" Text="60" MinWidth="28" VerticalAlignment="Center" />
+      <CheckBox x:Name="UnlimitedBox" Content="Unlimited" />
+    </StackPanel>
+
+    <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Margin="8,4,8,8" TextTrimming="CharacterEllipsis" />
+
+    <Grid ColumnDefinitions="*,4,380">
+      <!-- The preview with the stats and the log below it; the right panel takes the full height. -->
+      <Grid Grid.Column="0" RowDefinitions="*,4,230" Margin="8,0,4,0">
+        <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+          <!-- The surface has the size of the display, so the zones are laid out in display coordinates; the viewbox scales it to the window. -->
+          <Viewbox x:Name="PreviewBox" Stretch="Uniform">
+            <Grid x:Name="DisplaySurface" IsVisible="False">
+              <Image x:Name="PreviewImage" Stretch="Fill" />
+              <!-- The black bars lie below the zones. -->
+              <Canvas x:Name="BlackBarCanvas" IsHitTestVisible="False" ClipToBounds="True" />
+              <Canvas x:Name="OverlayCanvas" Background="Transparent" ClipToBounds="True" />
+            </Grid>
+          </Viewbox>
+        </Border>
+
+        <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
+
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Margin="0,4,0,0" ColumnSpacing="8">
+          <Border Grid.Column="0" MinWidth="340" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="1" Padding="8">
+            <TextBlock x:Name="StatsText" FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="12" Text="Not capturing" />
+          </Border>
+          <DockPanel Grid.Column="1">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+              <Button x:Name="ClearLogButton" DockPanel.Dock="Right" Content="Clear" Padding="8,2" />
+              <TextBlock Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+            <ListBox x:Name="LogList" FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="12">
+              <ListBox.Styles>
+                <!-- The Fluent theme gives every item a lot of padding and a minimum height. -->
+                <Style Selector="ListBoxItem">
+                  <Setter Property="Padding" Value="6,1" />
+                  <Setter Property="MinHeight" Value="0" />
+                </Style>
+              </ListBox.Styles>
+            </ListBox>
+          </DockPanel>
+        </Grid>
+      </Grid>
+
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+
+      <DockPanel Grid.Column="2" Margin="4,0,8,0">
+        <Expander DockPanel.Dock="Top" Header="Options" IsExpanded="True" HorizontalAlignment="Stretch" Margin="0,0,0,8">
+          <StackPanel Spacing="6">
+            <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="12"
+                       Text="Capture options apply on the next Start, the Wayland session options on Refresh. Each backend only offers the options it has." />
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+              <TextBlock Text="Timeout (ms)" VerticalAlignment="Center" />
+              <NumericUpDown Grid.Column="1" x:Name="TimeoutBox" Minimum="0" Maximum="60000" Increment="100" FormatString="0" Value="1000" />
+            </Grid>
+            <WrapPanel>
+              <CheckBox x:Name="CaptureHdrBox" Content="Capture HDR" Margin="0,0,12,0" />
+              <CheckBox x:Name="DrawCursorBox" Content="Draw cursor" Margin="0,0,12,0" />
+              <CheckBox x:Name="ShowBorderBox" Content="Show border" Margin="0,0,12,0" />
+              <CheckBox x:Name="SharedMemoryBox" Content="Shared memory" IsChecked="True" />
+            </WrapPanel>
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+              <TextBlock Text="Persist" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" x:Name="PersistModeBox" HorizontalAlignment="Stretch" SelectedIndex="2">
+                <ComboBoxItem Content="None" />
+                <ComboBoxItem Content="While running" />
+                <ComboBoxItem Content="Persistent" />
+              </ComboBox>
+              <Button Grid.Column="2" x:Name="ForgetTokenButton" Content="Forget token" />
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+              <CheckBox x:Name="BlackBarsBox" Content="Black bars, threshold" />
+              <NumericUpDown Grid.Column="1" x:Name="BlackBarThresholdBox" Minimum="0" Maximum="255" Increment="1" FormatString="0" Value="8" />
+            </Grid>
+          </StackPanel>
+        </Expander>
+
+        <StackPanel DockPanel.Dock="Top" Spacing="6">
+          <TextBlock x:Name="SelectedZoneText" Text="No zone selected" FontWeight="SemiBold" />
+          <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="6">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="X" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="ZoneXBox" Minimum="0" Increment="1" FormatString="0" />
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="Y" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="3" x:Name="ZoneYBox" Minimum="0" Increment="1" FormatString="0" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Width" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="ZoneWidthBox" Minimum="1" Increment="1" FormatString="0" />
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="Height" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="3" x:Name="ZoneHeightBox" Minimum="1" Increment="1" FormatString="0" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Level" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="ZoneLevelBox" Minimum="0" Maximum="10" Increment="1" FormatString="0" Value="0" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Button x:Name="ApplyZoneButton" Content="Apply" />
+            <Button x:Name="RemoveZoneButton" Content="Remove" />
+          </StackPanel>
+          <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="12"
+                     Text="Drag on the preview to add a zone (with the level above), drag a zone to move it and its edges to resize it. Delete removes the selected zone. Dashed zones are invalid (not within the display)." />
+        </StackPanel>
+
+        <ScrollViewer Margin="0,8,0,0">
+          <StackPanel x:Name="ZoneList" Spacing="8" />
+        </ScrollViewer>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</Window>

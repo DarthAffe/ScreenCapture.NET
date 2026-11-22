@@ -25,6 +25,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{3106
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.Sample", "Samples\ScreenCapture.NET.Sample\ScreenCapture.NET.Sample.csproj", "{38E6ABC0-1AAB-4AC0-A78B-F214504E5ED5}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenCapture.NET.Viewer", "Samples\ScreenCapture.NET.Viewer\ScreenCapture.NET.Viewer.csproj", "{D994763D-C61E-4079-B405-D4643D93B358}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -67,6 +69,10 @@ Global
 		{38E6ABC0-1AAB-4AC0-A78B-F214504E5ED5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{38E6ABC0-1AAB-4AC0-A78B-F214504E5ED5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{38E6ABC0-1AAB-4AC0-A78B-F214504E5ED5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D994763D-C61E-4079-B405-D4643D93B358}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D994763D-C61E-4079-B405-D4643D93B358}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D994763D-C61E-4079-B405-D4643D93B358}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D994763D-C61E-4079-B405-D4643D93B358}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -75,6 +81,7 @@ Global
 		{AA1829BB-EFA7-4BB8-8041-76374659A42B} = {CF7A1475-3A44-4870-A80F-5988DA25418B}
 		{C61A80F0-47F9-4C94-B429-08E4E631E274} = {CF7A1475-3A44-4870-A80F-5988DA25418B}
 		{38E6ABC0-1AAB-4AC0-A78B-F214504E5ED5} = {3106164D-4733-42E6-93B2-5C9C9AB109D0}
+		{D994763D-C61E-4079-B405-D4643D93B358} = {3106164D-4733-42E6-93B2-5C9C9AB109D0}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B5111031-6E65-4331-9E6E-A07165289860}
