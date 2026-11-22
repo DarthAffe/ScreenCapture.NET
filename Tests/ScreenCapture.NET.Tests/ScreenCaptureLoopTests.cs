@@ -1,0 +1,408 @@
+using System.Diagnostics;
+using HPPH;
+
+namespace ScreenCapture.NET.Tests;
+
+/// <summary>
+/// The background loop, in real time (see <see cref="CapturePacerTests"/> for the exact pacing and backoff).
+/// </summary>
+[TestClass]
+public sealed class ScreenCaptureLoopTests
+{
+    private static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(10);
+
+    // Waits that must end early are much shorter than the 2 s they cut.
+    private static readonly TimeSpan CUT_SHORT = TimeSpan.FromSeconds(1);
+
+    [TestMethod]
+    public void LoopCapturesUntilStopped()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+        Assert.IsTrue(loop.IsRunning);
+
+        counter.WaitFor(3);
+        loop.Stop();
+
+        Assert.IsFalse(loop.IsRunning);
+        Assert.IsTrue(loop.Completion.IsCompletedSuccessfully);
+
+        // Stop waited for the loop to end: nothing is captured anymore.
+        int captures = counter.Count;
+        Thread.Sleep(50);
+        Assert.AreEqual(captures, counter.Count);
+    }
+
+    [TestMethod]
+    public void LoopIsPaced()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture, 50);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        loop.Start();
+        Thread.Sleep(300);
+        loop.Stop();
+        stopwatch.Stop();
+
+        // One capture right away, then at most one per 20 ms (+1 for timing at the edges).
+        int maximum = (int)(stopwatch.Elapsed.TotalMilliseconds / 20) + 2;
+        Assert.IsGreaterThanOrEqualTo(2, counter.Count);
+        Assert.IsLessThanOrEqualTo(maximum, counter.Count);
+    }
+
+    [TestMethod]
+    public void FailedCapturesBackOff()
+    {
+        using TestScreenCapture screenCapture = new() { Result = CaptureResult.Failed };
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+        Thread.Sleep(350);
+        loop.Stop();
+
+        // Without a limit, but after failures: at 0, 100 and 300 ms.
+        Assert.IsGreaterThanOrEqualTo(2, counter.Count);
+        Assert.IsLessThanOrEqualTo(4, counter.Count);
+    }
+
+    [TestMethod]
+    public void ChangedFrameRateEndsTheWait()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture, 0.5);
+        loop.Start();
+        counter.WaitFor(1);
+
+        // The loop waits 2 s for the next capture, but the new rate applies right away.
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        loop.TargetFrameRate = null;
+        counter.WaitFor(2);
+
+        Assert.IsLessThan(CUT_SHORT, stopwatch.Elapsed);
+        Assert.IsNull(loop.TargetFrameRate);
+    }
+
+    [TestMethod]
+    public void StopEndsTheWait()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture, 0.5);
+        loop.Start();
+        counter.WaitFor(1);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        loop.Stop();
+
+        Assert.IsLessThan(CUT_SHORT, stopwatch.Elapsed);
+        Assert.AreEqual(1, counter.Count);
+    }
+
+    [TestMethod]
+    public void StopInAHandlerDoesntWait()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        int captures = 0;
+        screenCapture.Updated += (_, _) =>
+        {
+            captures++;
+            loop.Stop();
+        };
+
+        loop.Start();
+
+        Assert.IsTrue(loop.Completion.Wait(TIMEOUT));
+        Assert.IsFalse(loop.IsRunning);
+        Assert.AreEqual(1, captures);
+    }
+
+    [TestMethod]
+    public void RestartInAHandlerDoesntOverlapCaptures()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        int active = 0;
+        int captures = 0;
+        bool overlapped = false;
+        using ManualResetEventSlim captured = new();
+
+        screenCapture.Updated += (_, _) =>
+        {
+            if (Interlocked.Increment(ref active) > 1)
+                overlapped = true;
+
+            // The first capture restarts the loop and is still running for a while: the new run must wait for it.
+            if (Interlocked.Increment(ref captures) == 1)
+            {
+                loop.Stop();
+                loop.Start();
+                Thread.Sleep(50);
+            }
+            else if (captures >= 3)
+                captured.Set();
+
+            Interlocked.Decrement(ref active);
+        };
+
+        loop.Start();
+        Assert.IsTrue(captured.Wait(TIMEOUT));
+        loop.Stop();
+
+        Assert.IsFalse(overlapped);
+    }
+
+    /// <summary>
+    /// A run started in a handler waits for the handler's thread before it captures: stopping (or disposing) it in the same handler must not wait for it,
+    /// also when it waits through a run started before it.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, DisplayName = "Stop")]
+    [DataRow(true, DisplayName = "Dispose")]
+    public void StopAfterARestartInAHandlerDoesntDeadlock(bool dispose)
+    {
+        using TestScreenCapture screenCapture = new();
+
+        ScreenCaptureLoop loop = new(screenCapture);
+        int captures = 0;
+        using ManualResetEventSlim handled = new();
+
+        screenCapture.Updated += (_, _) =>
+        {
+            if (Interlocked.Increment(ref captures) != 1) return;
+
+            // The third run waits for the second, which waits for this thread.
+            loop.Stop();
+            loop.Start();
+            loop.Stop();
+            loop.Start();
+            if (dispose)
+                loop.Dispose();
+            else
+                loop.Stop();
+
+            handled.Set();
+        };
+
+        loop.Start();
+        bool returned = handled.Wait(TIMEOUT);
+
+        // Not disposed after a deadlock: Dispose would wait for the deadlocked threads forever.
+        if (returned)
+            loop.Dispose();
+
+        Assert.IsTrue(returned, "The handler didn't return (deadlock).");
+        Assert.IsTrue(loop.Completion.Wait(TIMEOUT));
+        Assert.AreEqual(1, Volatile.Read(ref captures), "The stopped run captured.");
+    }
+
+    [TestMethod]
+    public void StopAsyncDoesntWaitForTheRunningCapture()
+    {
+        using TestScreenCapture screenCapture = new();
+        screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 4, 4));
+
+        using ManualResetEventSlim capturing = new();
+        using ManualResetEventSlim release = new();
+        screenCapture.ZoneUpdating = _ =>
+        {
+            capturing.Set();
+            release.Wait(TIMEOUT);
+        };
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+        Assert.IsTrue(capturing.Wait(TIMEOUT));
+
+        // The capture of the loop now waits in the zone update.
+        Task stopped = loop.StopAsync();
+
+        Assert.IsFalse(loop.IsRunning);
+        Assert.IsFalse(stopped.Wait(50));
+
+        release.Set();
+
+        Assert.IsTrue(stopped.Wait(TIMEOUT));
+        Assert.AreSame(loop.Completion, stopped);
+    }
+
+    [TestMethod]
+    public void DisposedCaptureEndsTheLoop()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture, 100);
+        loop.Start();
+        counter.WaitFor(1);
+
+        screenCapture.Dispose();
+
+        Assert.IsTrue(loop.Completion.Wait(TIMEOUT));
+        Assert.IsTrue(loop.Completion.IsCompletedSuccessfully);
+        Assert.IsFalse(loop.IsRunning);
+    }
+
+    [TestMethod]
+    public void UnexpectedExceptionEndsTheLoop()
+    {
+        InvalidOperationException exception = new("test");
+        using ThrowingScreenCapture screenCapture = new(exception);
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+
+        AggregateException thrown = Assert.ThrowsExactly<AggregateException>(() => loop.Completion.Wait(TIMEOUT));
+        Assert.AreSame(exception, thrown.InnerException);
+        Assert.IsFalse(loop.IsRunning);
+    }
+
+    [TestMethod]
+    public void StartRunsOnce()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        using ScreenCaptureLoop loop = new(screenCapture, 100);
+        loop.Start();
+        Task completion = loop.Completion;
+        loop.Start();
+
+        Assert.AreSame(completion, loop.Completion);
+    }
+
+    [TestMethod]
+    public void StoppedLoopCanBeStartedAgain()
+    {
+        using TestScreenCapture screenCapture = new();
+        CaptureCounter counter = new(screenCapture);
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+        counter.WaitFor(1);
+        Task first = loop.Completion;
+        loop.Stop();
+
+        int captures = counter.Count;
+        loop.Start();
+        counter.WaitFor(captures + 1);
+
+        Assert.IsTrue(loop.IsRunning);
+        Assert.IsTrue(first.IsCompletedSuccessfully);
+        Assert.AreNotSame(first, loop.Completion);
+    }
+
+    [TestMethod]
+    public void NeverStartedLoopIsCompleted()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        using ScreenCaptureLoop loop = new(screenCapture);
+        loop.Stop();
+
+        Assert.IsFalse(loop.IsRunning);
+        Assert.IsTrue(loop.Completion.IsCompletedSuccessfully);
+        Assert.IsTrue(loop.StopAsync().IsCompletedSuccessfully);
+    }
+
+    [TestMethod]
+    public void DisposeStopsTheLoopButNotTheCapture()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        ScreenCaptureLoop loop = new(screenCapture);
+        loop.Start();
+        loop.Dispose();
+        loop.Dispose();
+
+        Assert.IsFalse(loop.IsRunning);
+        Assert.IsTrue(loop.Completion.IsCompletedSuccessfully);
+        Assert.IsFalse(screenCapture.IsDisposed);
+        Assert.ThrowsExactly<ObjectDisposedException>(loop.Start);
+    }
+
+    [TestMethod]
+    public void InvalidArgumentsThrow()
+    {
+        using TestScreenCapture screenCapture = new();
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => new ScreenCaptureLoop(null!));
+
+        ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new ScreenCaptureLoop(screenCapture, 0));
+        Assert.AreEqual("targetFrameRate", exception.ParamName);
+
+        using ScreenCaptureLoop loop = new(screenCapture, 30);
+        Assert.AreEqual(30, loop.TargetFrameRate);
+
+        exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => loop.TargetFrameRate = double.NaN);
+        Assert.AreEqual("value", exception.ParamName);
+        Assert.AreEqual(30, loop.TargetFrameRate);
+    }
+
+    /// <summary>
+    /// Counts the captures of a screen capture.
+    /// </summary>
+    internal sealed class CaptureCounter
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public CaptureCounter(IScreenCapture screenCapture)
+        {
+            screenCapture.Updated += (_, _) => Interlocked.Increment(ref _count);
+        }
+
+        public void WaitFor(int count)
+            => Assert.IsTrue(SpinWait.SpinUntil(() => Count >= count, TIMEOUT), $"Waited for {count} captures, got {Count}.");
+    }
+
+    /// <summary>
+    /// A capture that breaks the contract of <see cref="IScreenCapture.CaptureScreen"/> by throwing.
+    /// </summary>
+    internal sealed class ThrowingScreenCapture(Exception exception) : IScreenCapture
+    {
+        private readonly TestScreenCapture _screenCapture = new();
+
+        public Display Display => _screenCapture.Display;
+        public bool IsDisposed => _screenCapture.IsDisposed;
+        public Exception? LastError => _screenCapture.LastError;
+
+        public event EventHandler<ScreenCaptureUpdatedEventArgs>? Updated
+        {
+            add => _screenCapture.Updated += value;
+            remove => _screenCapture.Updated -= value;
+        }
+
+        public event EventHandler<ScreenCaptureErrorEventArgs>? ErrorOccurred
+        {
+            add => _screenCapture.ErrorOccurred += value;
+            remove => _screenCapture.ErrorOccurred -= value;
+        }
+
+        public event EventHandler<ScreenCaptureDisplayChangedEventArgs>? DisplayChanged
+        {
+            add => _screenCapture.DisplayChanged += value;
+            remove => _screenCapture.DisplayChanged -= value;
+        }
+
+        public CaptureResult CaptureScreen() => throw exception;
+
+        public ICaptureZone RegisterCaptureZone(CaptureRegion region, int downscaleLevel = 0) => _screenCapture.RegisterCaptureZone(region, downscaleLevel);
+        public bool UnregisterCaptureZone(ICaptureZone captureZone) => ((IScreenCapture)_screenCapture).UnregisterCaptureZone(captureZone);
+        public void UpdateCaptureZone(ICaptureZone captureZone, CaptureRegion? region = null, int? downscaleLevel = null) => ((IScreenCapture)_screenCapture).UpdateCaptureZone(captureZone, region, downscaleLevel);
+        public void Restart() => _screenCapture.Restart();
+        public void Dispose() => _screenCapture.Dispose();
+    }
+}

@@ -1,0 +1,11 @@
+<Project>
+  <!-- Intentionally does not import the root Directory.Build.props: samples get no package metadata. -->
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

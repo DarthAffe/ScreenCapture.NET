@@ -1,23 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 using HPPH;
 using SharpGen.Runtime;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
-using Vortice.Mathematics;
-using MapFlags = Vortice.Direct3D11.MapFlags;
 using ResultCode = Vortice.DXGI.ResultCode;
 
 namespace ScreenCapture.NET;
 
 /// <summary>
-/// Represents a ScreenCapture using DirectX 11 desktop duplicaton.
+/// Represents a ScreenCapture using DirectX 11 desktop duplication.
 /// https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
 /// </summary>
+/// <remarks>
+/// A display mode change ends the duplication; the next capture restarts it (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
@@ -35,26 +34,47 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
 
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
-
-    private readonly bool _useNewDuplicationAdapter;
+    // Guards the DirectX objects, the zone pipeline and the immediate context. The pipeline's own lock is taken after this one.
+    private readonly Lock _captureLock = new();
 
     /// <summary>
-    /// Gets or sets the timeout in ms used for screen-capturing. (default 1000ms)
-    /// This is used in <see cref="PerformScreenCapture"/> https://docs.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgioutputduplication-acquirenextframe
+    /// Gets the options this capture was created with.
     /// </summary>
-    // ReSharper disable once MemberCanBePrivate.Global
-    public int Timeout { get; set; } = 1000;
+    public DX11CaptureOptions Options { get; }
+
+    // In ms, an int so it's atomic.
+    private int _timeout;
+
+    /// <summary>
+    /// Gets or sets how long <see cref="IScreenCapture.CaptureScreen"/> waits for a new frame before it returns <see cref="CaptureResult.Timeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// Starts with <see cref="DX11CaptureOptions.Timeout"/> and can be changed at any time. Rounded up to whole milliseconds; 0 doesn't wait.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative (including <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>) or greater than <see cref="DX11CaptureOptions.MaxTimeout"/>.</exception>
+    public TimeSpan Timeout
+    {
+        get => TimeSpan.FromMilliseconds(_timeout);
+        set => _timeout = CaptureTimeout.ToMilliseconds(CaptureTimeout.Validate(value));
+    }
 
     private readonly IDXGIFactory1 _factory;
 
-    private IDXGIOutput? _output;
     private IDXGIOutputDuplication? _duplicatedOutput;
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
-    private ID3D11Texture2D? _captureTexture;
 
-    private readonly Dictionary<CaptureZone<ColorBGRA>, ZoneTextures> _textures = [];
+    private readonly D3D11ZonePipeline _zonePipeline;
+
+    // For the SDR white level of HDR frames.
+    private WindowsDisplayDevices.MonitorTarget? _monitorTarget;
+
+    // Only with DrawCursor. _cursorX/_cursorY are the top left of the shape on the display.
+    private CursorShape? _cursorShape;
+    private bool _cursorVisible;
+    private int _cursorX;
+    private int _cursorY;
+    private byte[] _cursorShapeBuffer = [];
 
     #endregion
 
@@ -63,17 +83,16 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <summary>
     /// Initializes a new instance of the <see cref="DX11ScreenCapture"/> class.
     /// </summary>
-    /// <remarks>
-    /// Note that setting useNewDuplicationAdapter to true requires to call <c>DPIAwareness.Initalize();</c> and prevents the capture from running in a WPF-thread.
-    /// </remarks>
     /// <param name="factory">The <see cref="IDXGIFactory1"/> used to create underlying objects.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    /// <param name="useNewDuplicationAdapter">Indicates if the DuplicateOutput1 interface should be used instead of the older DuplicateOutput. Currently there's no real use in setting this to true.</param>
-    internal DX11ScreenCapture(IDXGIFactory1 factory, Display display, bool useNewDuplicationAdapter = false)
+    /// <param name="options">The options of the capture.</param>
+    internal DX11ScreenCapture(IDXGIFactory1 factory, Display display, DX11CaptureOptions options)
         : base(display)
     {
         this._factory = factory;
-        this._useNewDuplicationAdapter = useNewDuplicationAdapter;
+        this.Options = options;
+        this._timeout = CaptureTimeout.ToMilliseconds(options.Timeout);
+        this._zonePipeline = new D3D11ZonePipeline();
 
         Restart();
     }
@@ -83,185 +102,160 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     #region Methods
 
     /// <inheritdoc />
-    protected override bool PerformScreenCapture()
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        bool result = false;
+        timestamp = 0;
+
         lock (_captureLock)
         {
-            if ((_context == null) || (_duplicatedOutput == null) || (_captureTexture == null))
+            if ((_device == null) || (_duplicatedOutput == null) || !_zonePipeline.IsInitialized)
+                return RestartCapture();
+
+            // E.g. after a driver update or a GPU reset (TDR).
+            if (_device.DeviceRemovedReason is { Failure: true } removedReason)
             {
-                Restart();
-                return false;
+                ReportError(new InvalidOperationException($"The Direct3D device of the capture was removed ({removedReason})."));
+                return RestartCapture();
             }
 
             try
             {
-                IDXGIResource? screenResource = null;
-                try
-                {
-                    _duplicatedOutput.AcquireNextFrame(Timeout, out OutduplFrameInfo duplicateFrameInformation, out screenResource).CheckError();
-                    if ((screenResource == null) || (duplicateFrameInformation.LastPresentTime == 0)) return false;
+                CaptureResult result = AcquireNextFrame(_duplicatedOutput, out timestamp);
+                if (result is CaptureResult.NewFrame or CaptureResult.NoChange or CaptureResult.Timeout)
+                    _zonePipeline.QueueZoneCopies(CaptureZones);
 
-                    using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
-                    _context.CopySubresourceRegion(_captureTexture, 0, 0, 0, 0, screenTexture, 0);
-                }
-                finally
-                {
-                    try
-                    {
-                        screenResource?.Dispose();
-                        _duplicatedOutput?.ReleaseFrame();
-                    }
-                    catch { /**/ }
-                }
-
-                result = true;
+                return result;
             }
-            catch (SharpGenException dxException)
+            catch (SharpGenException dxException) when ((dxException.ResultCode == ResultCode.AccessLost)
+                                                      || (dxException.ResultCode == ResultCode.AccessDenied)
+                                                      || (dxException.ResultCode == ResultCode.InvalidCall)
+                                                      || (dxException.ResultCode == ResultCode.DeviceRemoved))
             {
-                if ((dxException.ResultCode == ResultCode.AccessLost)
-                 || (dxException.ResultCode == ResultCode.AccessDenied)
-                 || (dxException.ResultCode == ResultCode.InvalidCall))
-                {
-                    try
-                    {
-                        Restart();
-                    }
-                    catch { Thread.Sleep(100); }
-                }
+                ReportError(dxException);
+                return RestartCapture();
             }
         }
-
-        return result;
     }
 
-    /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    private CaptureResult AcquireNextFrame(IDXGIOutputDuplication duplicatedOutput, out long timestamp)
     {
-        if (_context == null) return;
+        timestamp = 0;
 
-        lock (_textures)
+        IDXGIResource? screenResource = null;
+        bool acquired = false;
+        try
         {
-            if (!_textures.TryGetValue(captureZone, out ZoneTextures? textures)) return;
+            Result acquireResult = duplicatedOutput.AcquireNextFrame((uint)_timeout, out OutduplFrameInfo frameInfo, out screenResource);
+            if (acquireResult == ResultCode.WaitTimeout) 
+                return CaptureResult.Timeout;
 
-            if (textures.ScalingTexture != null)
+            acquireResult.CheckError();
+            acquired = true;
+
+            // The shape is only available until the frame is released.
+            bool cursorChanged = Options.DrawCursor && UpdateCursor(duplicatedOutput, frameInfo);
+
+            // No present since the last frame (e.g. only the mouse cursor moved).
+            if ((screenResource == null) || (frameInfo.LastPresentTime == 0))
             {
-                _context.CopySubresourceRegion(textures.ScalingTexture, 0, 0, 0, 0, _captureTexture, 0,
-                                               new Box(textures.X, textures.Y, 0,
-                                                       textures.X + textures.UnscaledWidth,
-                                                       textures.Y + textures.UnscaledHeight, 1));
-                _context.GenerateMips(textures.ScalingTextureView);
-                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, textures.ScalingTexture, captureZone.DownscaleLevel);
-            }
-            else
-                _context.CopySubresourceRegion(textures.StagingTexture, 0, 0, 0, 0, _captureTexture, 0,
-                                               new Box(textures.X, textures.Y, 0,
-                                                       textures.X + textures.UnscaledWidth,
-                                                       textures.Y + textures.UnscaledHeight, 1));
-
-            MappedSubresource mapSource = _context.Map(textures.StagingTexture, 0, MapMode.Read, MapFlags.None);
-
-            using IDisposable @lock = captureZone.Lock();
-            {
-                ReadOnlySpan<byte> source = mapSource.AsSpan(mapSource.RowPitch * textures.Height);
-                switch (Display.Rotation)
+                // The drawn pointer changed: write the zones again from the last frame.
+                if (cursorChanged && _zonePipeline.HasFrame)
                 {
-                    case Rotation.Rotation90:
-                        CopyRotate90(source, mapSource.RowPitch, captureZone, buffer);
-                        break;
-
-                    case Rotation.Rotation180:
-                        CopyRotate180(source, mapSource.RowPitch, captureZone, buffer);
-                        break;
-
-                    case Rotation.Rotation270:
-                        CopyRotate270(source, mapSource.RowPitch, captureZone, buffer);
-                        break;
-
-                    default:
-                        CopyRotate0(source, mapSource.RowPitch, captureZone, buffer);
-                        break;
+                    timestamp = frameInfo.LastMouseUpdateTime;
+                    return CaptureResult.NewFrame;
                 }
+
+                return CaptureResult.NoChange;
             }
 
-            _context.Unmap(textures.StagingTexture, 0);
+            using ID3D11Texture2D screenTexture = screenResource.QueryInterface<ID3D11Texture2D>();
+            _zonePipeline.SetFrame(screenTexture, _monitorTarget);
+
+            timestamp = frameInfo.LastPresentTime;
+
+            return CaptureResult.NewFrame;
+        }
+        finally
+        {
+            try
+            {
+                screenResource?.Dispose();
+                if (acquired)
+                    duplicatedOutput.ReleaseFrame();
+            }
+            catch (Exception ex) { ReportError(ex); }
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate0(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    /// <summary>
+    /// Takes the mouse pointer from an acquired frame. Called under <see cref="_captureLock"/>.
+    /// </summary>
+    /// <returns><c>true</c> if the pointer drawn into the zones changed.</returns>
+    private bool UpdateCursor(IDXGIOutputDuplication duplicatedOutput, in OutduplFrameInfo frameInfo)
     {
-        int height = captureZone.Height;
-        int stride = captureZone.Stride;
-        Span<byte> target = buffer;
+        // No pointer update since the last frame.
+        if (frameInfo.LastMouseUpdateTime == 0) return false;
 
-        for (int y = 0; y < height; y++)
+        bool wasDrawn = _cursorVisible && (_cursorShape != null);
+        bool changed = false;
+
+        if (frameInfo.PointerShapeBufferSize > 0)
         {
-            int sourceOffset = y * sourceStride;
-            int targetOffset = y * stride;
-
-            source.Slice(sourceOffset, stride).CopyTo(target.Slice(targetOffset, stride));
+            _cursorShape = ReadCursorShape(duplicatedOutput, (int)frameInfo.PointerShapeBufferSize);
+            changed = true;
         }
+
+        bool visible = frameInfo.PointerPosition.Visible;
+        int x = frameInfo.PointerPosition.Position.X;
+        int y = frameInfo.PointerPosition.Position.Y;
+        changed |= (visible != _cursorVisible) || (x != _cursorX) || (y != _cursorY);
+
+        _cursorVisible = visible;
+        _cursorX = x;
+        _cursorY = y;
+
+        bool isDrawn = _cursorVisible && (_cursorShape != null);
+        return changed && (wasDrawn || isDrawn);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate90(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    private unsafe CursorShape? ReadCursorShape(IDXGIOutputDuplication duplicatedOutput, int size)
     {
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-        int usedBytesPerLine = height * captureZone.ColorFormat.BytesPerPixel;
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
+        if (_cursorShapeBuffer.Length < size)
+            _cursorShapeBuffer = new byte[size];
 
-        for (int x = 0; x < width; x++)
+        uint requiredSize;
+        OutduplPointerShapeInfo shapeInfo;
+        fixed (byte* buffer = _cursorShapeBuffer)
+            duplicatedOutput.GetFramePointerShape((uint)_cursorShapeBuffer.Length, (IntPtr)buffer, out requiredSize, out shapeInfo).CheckError();
+
+        try
         {
-            ReadOnlySpan<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(x * sourceStride, usedBytesPerLine));
-            for (int y = 0; y < src.Length; y++)
-                target[(y * width) + (width - x - 1)] = src[y];
+            return CursorShape.Create((PointerShapeType)shapeInfo.Type, (int)shapeInfo.Width, (int)shapeInfo.Height, (int)shapeInfo.Pitch, _cursorShapeBuffer.AsSpan(0, Math.Min((int)requiredSize, _cursorShapeBuffer.Length)));
         }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate180(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
-    {
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-        int bpp = captureZone.ColorFormat.BytesPerPixel;
-        int usedBytesPerLine = width * bpp;
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
-
-        for (int y = 0; y < height; y++)
+        catch (ArgumentException ex)
         {
-            ReadOnlySpan<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(y * sourceStride, usedBytesPerLine));
-            for (int x = 0; x < src.Length; x++)
-                target[((height - y - 1) * width) + (width - x - 1)] = src[x];
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyRotate270(ReadOnlySpan<byte> source, int sourceStride, CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
-    {
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-        int usedBytesPerLine = height * captureZone.ColorFormat.BytesPerPixel;
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
-
-        for (int x = 0; x < width; x++)
-        {
-            ReadOnlySpan<ColorBGRA> src = MemoryMarshal.Cast<byte, ColorBGRA>(source.Slice(x * sourceStride, usedBytesPerLine));
-            for (int y = 0; y < src.Length; y++)
-                target[((height - y - 1) * width) + x] = src[y];
+            // Not drawn until the next shape.
+            ReportError(ex);
+            return null;
         }
     }
 
     /// <inheritdoc />
-    public override CaptureZone<ColorBGRA> RegisterCaptureZone(int x, int y, int width, int height, int downscaleLevel = 0)
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
     {
-        CaptureZone<ColorBGRA> captureZone = base.RegisterCaptureZone(x, y, width, height, downscaleLevel);
+        ArgumentNullException.ThrowIfNull(captureZone);
 
-        lock (_textures)
-            InitializeCaptureZone(captureZone);
+        // Guards the immediate context against a concurrent capture or restart.
+        lock (_captureLock)
+        {
+            if (!_zonePipeline.WriteZone(captureZone, buffer)) return false;
 
-        return captureZone;
+            // Into the zone, so the staging texture keeps the clean frame.
+            if (_cursorVisible && (_cursorShape != null))
+                _cursorShape.Draw(buffer, captureZone.Region, captureZone.Width, captureZone.Height, captureZone.DownscaleLevel, _cursorX, _cursorY);
+        }
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -269,248 +263,81 @@ public sealed class DX11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         if (!base.UnregisterCaptureZone(captureZone)) return false;
 
-        lock (_textures)
+        _zonePipeline.RemoveZone(captureZone);
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    protected override bool PerformRestart()
+    {
+        lock (_captureLock)
         {
-            if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
+            // Nothing created here may outlive Dispose.
+            if (IsDisposed) return false;
+
+            try
             {
-                textures.Dispose();
-                _textures.Remove(captureZone);
+                DisposeDX();
+
+                (IDXGIAdapter1 foundAdapter, IDXGIOutput foundOutput, Display display, _monitorTarget) = DXGIDevices.FindDisplay(_factory, Display.Id)
+                                                                                                     ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+                using IDXGIAdapter1 adapter = foundAdapter;
+                using IDXGIOutput dxgiOutput = foundOutput;
+
+                D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
+                _context = _device!.ImmediateContext;
+
+                using IDXGIOutput5 output = dxgiOutput.QueryInterface<IDXGIOutput5>();
+
+                // The duplication delivers the native orientation of the output.
+                _zonePipeline.Initialize(_device, _context, display, display.Rotation);
+
+                // DuplicateOutput1 delivers 16-bit frames while the display shows HDR. DuplicateOutput always delivers 8-bit frames converted by Windows.
+                if (Options.CaptureHdr)
+                    _duplicatedOutput = output.DuplicateOutput1(_device, [Format.R16G16B16A16_Float, Format.B8G8R8A8_UNorm]);
+                else
+                    _duplicatedOutput = output.DuplicateOutput(_device);
+
+                SetDisplay(display);
 
                 return true;
             }
-
-            return false;
-        }
-    }
-
-    /// <inheritdoc />
-    public override void UpdateCaptureZone(CaptureZone<ColorBGRA> captureZone, int? x = null, int? y = null, int? width = null, int? height = null, int? downscaleLevel = null)
-    {
-        base.UpdateCaptureZone(captureZone, x, y, width, height, downscaleLevel);
-
-        //TODO DarthAffe 01.05.2022: For now just reinitialize the zone in that case, but this could be optimized to only recreate the textures needed.
-        if ((width != null) || (height != null) || (downscaleLevel != null))
-        {
-            lock (_textures)
+            catch (Exception ex)
             {
-                if (_textures.TryGetValue(captureZone, out ZoneTextures? textures))
-                {
-                    textures.Dispose();
-                    InitializeCaptureZone(captureZone);
-                }
+                // E.g. while a UAC prompt or the lock screen is shown.
+                DisposeDX();
+                ReportError(ex);
+
+                return false;
             }
         }
-    }
-
-    /// <inheritdoc />
-    protected override void ValidateCaptureZoneAndThrow(int x, int y, int width, int height, int downscaleLevel)
-    {
-        if (_device == null) throw new ApplicationException("ScreenCapture isn't initialized.");
-
-        base.ValidateCaptureZoneAndThrow(x, y, width, height, downscaleLevel);
-    }
-
-    private void InitializeCaptureZone(CaptureZone<ColorBGRA> captureZone)
-    {
-        int x;
-        int y;
-        int width;
-        int height;
-        int unscaledWidth;
-        int unscaledHeight;
-
-        if (captureZone.Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
-        {
-            x = captureZone.Y;
-            y = captureZone.X;
-            width = captureZone.Height;
-            height = captureZone.Width;
-            unscaledWidth = captureZone.UnscaledHeight;
-            unscaledHeight = captureZone.UnscaledWidth;
-        }
-        else
-        {
-            x = captureZone.X;
-            y = captureZone.Y;
-            width = captureZone.Width;
-            height = captureZone.Height;
-            unscaledWidth = captureZone.UnscaledWidth;
-            unscaledHeight = captureZone.UnscaledHeight;
-        }
-
-        Texture2DDescription stagingTextureDesc = new()
-        {
-            CPUAccessFlags = CpuAccessFlags.Read,
-            BindFlags = BindFlags.None,
-            Format = Format.B8G8R8A8_UNorm,
-            Width = width,
-            Height = height,
-            MiscFlags = ResourceOptionFlags.None,
-            MipLevels = 1,
-            ArraySize = 1,
-            SampleDescription = { Count = 1, Quality = 0 },
-            Usage = ResourceUsage.Staging
-        };
-        ID3D11Texture2D stagingTexture = _device!.CreateTexture2D(stagingTextureDesc);
-
-        ID3D11Texture2D? scalingTexture = null;
-        ID3D11ShaderResourceView? scalingTextureView = null;
-        if (captureZone.DownscaleLevel > 0)
-        {
-            Texture2DDescription scalingTextureDesc = new()
-            {
-                CPUAccessFlags = CpuAccessFlags.None,
-                BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                Format = Format.B8G8R8A8_UNorm,
-                Width = unscaledWidth,
-                Height = unscaledHeight,
-                MiscFlags = ResourceOptionFlags.GenerateMips,
-                MipLevels = captureZone.DownscaleLevel + 1,
-                ArraySize = 1,
-                SampleDescription = { Count = 1, Quality = 0 },
-                Usage = ResourceUsage.Default
-            };
-            scalingTexture = _device!.CreateTexture2D(scalingTextureDesc);
-            scalingTextureView = _device.CreateShaderResourceView(scalingTexture);
-        }
-
-        _textures[captureZone] = new ZoneTextures(x, y, width, height, unscaledWidth, unscaledHeight, stagingTexture, scalingTexture, scalingTextureView);
-    }
-
-    /// <inheritdoc />
-    public override void Restart()
-    {
-        base.Restart();
-
-        lock (_captureLock)
-            lock (_textures)
-            {
-                try
-                {
-                    foreach (ZoneTextures textures in _textures.Values)
-                        textures.Dispose();
-                    _textures.Clear();
-
-                    DisposeDX();
-
-                    using IDXGIAdapter1 adapter = _factory.GetAdapter1(Display.GraphicsCard.Index) ?? throw new ApplicationException("Couldn't create DirectX-Adapter.");
-
-                    D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.None, FEATURE_LEVELS, out _device).CheckError();
-                    _context = _device!.ImmediateContext;
-
-                    _output = adapter.GetOutput(Display.Index) ?? throw new ApplicationException("Couldn't get DirectX-Output.");
-                    using IDXGIOutput5 output = _output.QueryInterface<IDXGIOutput5>();
-
-                    int width = Display.Width;
-                    int height = Display.Height;
-                    if (Display.Rotation is Rotation.Rotation90 or Rotation.Rotation270)
-                        (width, height) = (height, width);
-
-                    Texture2DDescription captureTextureDesc = new()
-                    {
-                        CPUAccessFlags = CpuAccessFlags.None,
-                        BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                        Format = Format.B8G8R8A8_UNorm,
-                        Width = width,
-                        Height = height,
-                        MiscFlags = ResourceOptionFlags.None,
-                        MipLevels = 1,
-                        ArraySize = 1,
-                        SampleDescription = { Count = 1, Quality = 0 },
-                        Usage = ResourceUsage.Default
-                    };
-                    _captureTexture = _device.CreateTexture2D(captureTextureDesc);
-
-                    foreach (CaptureZone<ColorBGRA> captureZone in CaptureZones)
-                        InitializeCaptureZone(captureZone);
-
-                    if (_useNewDuplicationAdapter)
-                        _duplicatedOutput = output.DuplicateOutput1(_device, new[] { Format.B8G8R8A8_UNorm }); // DarthAffe 27.02.2021: This prepares for the use of 10bit color depth
-                    else
-                        _duplicatedOutput = output.DuplicateOutput(_device);
-                }
-                catch { DisposeDX(); }
-            }
     }
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         lock (_captureLock)
-        {
-            foreach (ZoneTextures textures in _textures.Values)
-                textures.Dispose();
-            _textures.Clear();
-
             DisposeDX();
-        }
+
+        base.Dispose(disposing);
     }
 
     private void DisposeDX()
     {
-        try
-        {
-            try { _duplicatedOutput?.Dispose(); } catch { /**/ }
-            try { _output?.Dispose(); } catch { /**/ }
-            try { _context?.Dispose(); } catch { /**/ }
-            try { _device?.Dispose(); } catch { /**/ }
-            try { _captureTexture?.Dispose(); } catch { /**/ }
+        try { _duplicatedOutput?.Dispose(); } catch { /**/ }
+        _zonePipeline.Release();
+        try { _context?.Dispose(); } catch { /**/ }
+        try { _device?.Dispose(); } catch { /**/ }
 
-            _duplicatedOutput = null;
-            _context = null;
-            _captureTexture = null;
-        }
-        catch { /**/ }
+        _duplicatedOutput = null;
+        _context = null;
+        _device = null;
+
+        // Unknown until the next pointer update.
+        _cursorShape = null;
+        _cursorVisible = false;
     }
 
     #endregion
-
-    private sealed class ZoneTextures : IDisposable
-    {
-        #region Properties & Fields
-
-        public int X { get; }
-        public int Y { get; }
-        public int Width { get; }
-        public int Height { get; }
-        public int UnscaledWidth { get; }
-        public int UnscaledHeight { get; }
-
-        public ID3D11Texture2D StagingTexture { get; }
-        public ID3D11Texture2D? ScalingTexture { get; }
-        public ID3D11ShaderResourceView? ScalingTextureView { get; }
-
-        #endregion
-
-        #region Constructors
-
-        public ZoneTextures(int x, int y, int width, int height, int unscaledWidth, int unscaledHeight,
-                            ID3D11Texture2D stagingTexture, ID3D11Texture2D? scalingTexture, ID3D11ShaderResourceView? scalingTextureView)
-        {
-            this.X = x;
-            this.Y = y;
-            this.Width = width;
-            this.Height = height;
-            this.UnscaledWidth = unscaledWidth;
-            this.UnscaledHeight = unscaledHeight;
-            this.StagingTexture = stagingTexture;
-            this.ScalingTexture = scalingTexture;
-            this.ScalingTextureView = scalingTextureView;
-        }
-
-        #endregion
-
-        #region Methods
-
-        public void Dispose()
-        {
-            StagingTexture.Dispose();
-            ScalingTexture?.Dispose();
-            ScalingTextureView?.Dispose();
-        }
-
-        #endregion
-    }
 }

@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
+using System.Threading;
 using Vortice.DXGI;
 
 namespace ScreenCapture.NET;
@@ -7,14 +10,22 @@ namespace ScreenCapture.NET;
 /// <summary>
 /// Represents a <see cref="IScreenCaptureService"/> using the <see cref="DX11ScreenCapture"/>.
 /// </summary>
-public class DX11ScreenCaptureService : IScreenCaptureService
+/// <remarks>
+/// Captures get the <see cref="Options"/> of the service, or the ones passed to <see cref="GetScreenCapture(Display, DX11CaptureOptions)"/>.
+/// </remarks>
+public sealed class DX11ScreenCaptureService : IScreenCaptureService
 {
     #region Properties & Fields
 
+    // So Dispose never releases the factory while it's used.
+    private readonly Lock _factoryLock = new();
     private readonly IDXGIFactory1 _factory;
-    private readonly Dictionary<Display, DX11ScreenCapture> _screenCaptures = new();
+    private readonly ScreenCaptureCache<DX11ScreenCapture, DX11CaptureOptions> _screenCaptures;
 
-    private bool _isDisposed;
+    /// <summary>
+    /// Gets the options of captures created without their own options.
+    /// </summary>
+    public DX11CaptureOptions Options { get; }
 
     #endregion
 
@@ -23,82 +34,112 @@ public class DX11ScreenCaptureService : IScreenCaptureService
     /// <summary>
     /// Initializes a new instance of the <see cref="DX11ScreenCaptureService"/> class.
     /// </summary>
-    public DX11ScreenCaptureService()
+    /// <param name="options">The options of captures created without their own options; <c>null</c> for <see cref="DX11CaptureOptions.Default"/>.</param>
+    public DX11ScreenCaptureService(DX11CaptureOptions? options = null)
     {
-        DXGI.CreateDXGIFactory1(out _factory!).CheckError();
-    }
+        Options = options ?? DX11CaptureOptions.Default;
 
-    ~DX11ScreenCaptureService() => Dispose();
+        DXGI.CreateDXGIFactory1(out _factory!).CheckError();
+        _screenCaptures = new ScreenCaptureCache<DX11ScreenCapture, DX11CaptureOptions>(this, (display, captureOptions) => new DX11ScreenCapture(_factory, display, captureOptions), capture => capture.Options);
+    }
 
     #endregion
 
     #region Methods
 
+    /// <summary>
+    /// Checks if Desktop Duplication can be used on this system.
+    /// </summary>
+    /// <remarks>
+    /// Doesn't tell if every display can be duplicated: with two graphics cards (e.g. laptops) it can fail for a display of the other card.
+    /// ScreenCapture.NET.WGC can capture those.
+    /// </remarks>
+    /// <returns><c>true</c> if it's supported; otherwise, <c>false</c>.</returns>
+    [SupportedOSPlatformGuard("windows")]
+    public static bool IsSupported()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            return CanCreateFactory();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // Separate, so the DirectX types are only loaded on Windows.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool CanCreateFactory()
+    {
+        bool created = DXGI.CreateDXGIFactory1(out IDXGIFactory1? factory).Success;
+        using (factory)
+            return created;
+    }
+
     /// <inheritdoc />
     public IEnumerable<GraphicsCard> GetGraphicsCards()
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
-
-        int i = 0;
-        while (_factory.EnumAdapters1(i, out IDXGIAdapter1 adapter).Success)
+        // Read right away, so the factory isn't used outside the lock.
+        lock (_factoryLock)
         {
-            yield return new GraphicsCard(i, adapter.Description1.Description, adapter.Description1.VendorId, adapter.Description1.DeviceId);
-            adapter.Dispose();
-            i++;
+            ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
+
+            return DXGIDevices.GetGraphicsCards(_factory);
         }
     }
 
     /// <inheritdoc />
     public IEnumerable<Display> GetDisplays(GraphicsCard graphicsCard)
     {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
-
-        using IDXGIAdapter1? adapter = _factory.GetAdapter1(graphicsCard.Index);
-
-        int i = 0;
-        while (adapter.EnumOutputs(i, out IDXGIOutput output).Success)
+        // Read right away, so the factory isn't used outside the lock.
+        lock (_factoryLock)
         {
-            int width = output.Description.DesktopCoordinates.Right - output.Description.DesktopCoordinates.Left;
-            int height = output.Description.DesktopCoordinates.Bottom - output.Description.DesktopCoordinates.Top;
-            yield return new Display(i, output.Description.DeviceName, width, height, GetRotation(output.Description.Rotation), graphicsCard);
-            output.Dispose();
-            i++;
+            ObjectDisposedException.ThrowIf(_screenCaptures.IsDisposed, this);
+
+            return DXGIDevices.GetDisplays(_factory, graphicsCard);
         }
     }
 
-    private static Rotation GetRotation(ModeRotation rotation) => rotation switch
-    {
-        ModeRotation.Rotate90 => Rotation.Rotation90,
-        ModeRotation.Rotate180 => Rotation.Rotation180,
-        ModeRotation.Rotate270 => Rotation.Rotation270,
-        _ => Rotation.None
-    };
-
     /// <inheritdoc />
     IScreenCapture IScreenCaptureService.GetScreenCapture(Display display) => GetScreenCapture(display);
-    public DX11ScreenCapture GetScreenCapture(Display display)
-    {
-        if (_isDisposed) throw new ObjectDisposedException(GetType().FullName);
 
-        if (!_screenCaptures.TryGetValue(display, out DX11ScreenCapture? screenCapture))
-            _screenCaptures.Add(display, screenCapture = new DX11ScreenCapture(_factory, display));
-        return screenCapture;
+    /// <inheritdoc cref="IScreenCaptureService.GetScreenCapture"/>
+    /// <remarks>
+    /// A new capture gets the <see cref="Options"/> of the service, an existing one keeps its own.
+    /// </remarks>
+    public DX11ScreenCapture GetScreenCapture(Display display) => _screenCaptures.GetOrCreate(display, Options, requireEqualOptions: false);
+
+    /// <summary>
+    /// Creates a <see cref="DX11ScreenCapture"/> with the given options for the given display.
+    /// </summary>
+    /// <remarks>
+    /// There's one capture per <see cref="Display.Id"/>. An existing capture is only returned if it was created with equal options.
+    /// </remarks>
+    /// <param name="display">The display to duplicate.</param>
+    /// <param name="options">The options of the capture.</param>
+    /// <returns>The <see cref="DX11ScreenCapture"/> for the given display.</returns>
+    /// <exception cref="InvalidOperationException">The capture of the display already exists with other options.</exception>
+    public DX11ScreenCapture GetScreenCapture(Display display, DX11CaptureOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return _screenCaptures.GetOrCreate(display, options, requireEqualOptions: true);
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Disposes all captures created by the service. Can be called more than once.
+    /// </remarks>
     public void Dispose()
     {
-        if (_isDisposed) return;
+        // The captures use the factory too.
+        if (!_screenCaptures.DisposeAll()) return;
 
-        foreach (DX11ScreenCapture screenCapture in _screenCaptures.Values)
-            screenCapture.Dispose();
-        _screenCaptures.Clear();
-
-        try { _factory.Dispose(); } catch { /**/ }
-
-        GC.SuppressFinalize(this);
-
-        _isDisposed = true;
+        lock (_factoryLock)
+            try { _factory.Dispose(); } catch { /**/ }
     }
 
     #endregion

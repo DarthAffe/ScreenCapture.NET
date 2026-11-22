@@ -1,30 +1,161 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
 using HPPH;
 
 namespace ScreenCapture.NET.Tests;
 
 internal class TestScreenCapture : AbstractScreenCapture<ColorARGB>
 {
+    #region Properties & Fields
+
+    /// <summary>
+    /// Called at the start of every zone update (with the zone lock held).
+    /// </summary>
+    public Action<CaptureZone<ColorARGB>>? ZoneUpdating { get; set; }
+
+    /// <summary>
+    /// Called at the start of every zone update, with the zone lock but before <see cref="CaptureLock"/>.
+    /// </summary>
+    public Action<CaptureZone<ColorARGB>>? ZoneUpdateStarting { get; set; }
+
+    /// <summary>
+    /// Gets or sets the color written to each pixel of a zone (by its location in the zone).
+    /// </summary>
+    public Func<int, int, ColorARGB> Pattern { get; set; } = GetColorFromLocation;
+
+    /// <summary>
+    /// Gets or sets if zone updates write their buffer. If <c>false</c>, they report that there was nothing to write.
+    /// </summary>
+    public bool WriteZones { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the result of the next screen captures.
+    /// </summary>
+    public CaptureResult Result { get; set; } = CaptureResult.NewFrame;
+
+    /// <summary>
+    /// Gets or sets the timestamp reported with <see cref="CaptureResult.NewFrame"/> (0: the base takes the current time).
+    /// </summary>
+    public long Timestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets an exception thrown by the next screen captures instead of returning <see cref="Result"/>.
+    /// </summary>
+    public Exception? CaptureException { get; set; }
+
+    /// <summary>
+    /// Gets or sets an error reported (not thrown) by the next screen captures under <see cref="CaptureLock"/>.
+    /// </summary>
+    public Exception? ReportedCaptureError { get; set; }
+
+    /// <summary>
+    /// Gets the lock held by <see cref="PerformScreenCapture"/>, like the capture lock of a backend.
+    /// </summary>
+    public Lock CaptureLock { get; } = new();
+
+    /// <summary>
+    /// Gets or sets if the simulated backend runs. While it doesn't, captures restart it instead of returning <see cref="Result"/>.
+    /// </summary>
+    public bool IsRunning { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets if restarts succeed (and make the capture run).
+    /// </summary>
+    public bool RestartSucceeds { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets an exception thrown by the next restarts.
+    /// </summary>
+    public Exception? RestartException { get; set; }
+
+    /// <summary>
+    /// Gets the times of all restart attempts, since the capture was created.
+    /// </summary>
+    public List<TimeSpan> RestartAttempts { get; } = [];
+
+    /// <summary>
+    /// Gets or sets the display the next successful restarts find; <c>null</c> keeps the current one.
+    /// </summary>
+    public Display? NextDisplay { get; set; }
+
+    /// <summary>
+    /// Gets a snapshot of the registered zones.
+    /// </summary>
+    public IReadOnlyList<CaptureZone<ColorARGB>> Zones => CaptureZones;
+
+    private readonly long _created = Stopwatch.GetTimestamp();
+
+    #endregion
+
     #region Constructors
 
-    public TestScreenCapture(Rotation rotation = Rotation.None)
-        : base(new Display(0, "Test", 1920, 1080, rotation, new GraphicsCard(0, "Test", 0, 0)))
+    public TestScreenCapture(ImageRotation rotation = ImageRotation.None)
+        : base(CreateDisplay(1920, 1080, rotation))
     { }
 
     #endregion
 
     #region Methods
 
-    protected override bool PerformScreenCapture() => true;
+    /// <summary>
+    /// Creates the display of the test capture with the given size (the same <see cref="Display.Id"/>).
+    /// </summary>
+    public static Display CreateDisplay(int width, int height, ImageRotation rotation = ImageRotation.None)
+        => new("Test", 0, "Test", string.Empty, 0, 0, width, height, rotation, new GraphicsCard("Test", 0, "Test", 0, 0));
 
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<byte> buffer)
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        Span<ColorARGB> pixels = MemoryMarshal.Cast<byte, ColorARGB>(buffer);
+        lock (CaptureLock)
+        {
+            timestamp = 0;
+            if (!IsRunning) return RestartCapture();
 
-        for (int y = 0; y < captureZone.Height; y++)
-            for (int x = 0; x < captureZone.Width; x++)
-                pixels[(y * captureZone.Width) + x] = GetColorFromLocation(x, y);
+            if (CaptureException != null) throw CaptureException;
+            if (ReportedCaptureError != null) ReportError(ReportedCaptureError);
+
+            timestamp = Timestamp;
+            return Result;
+        }
+    }
+
+    /// <summary>
+    /// Reports an error outside of a capture, like a failed <see cref="AbstractScreenCapture{TColor}.Restart"/>.
+    /// </summary>
+    public void Report(Exception exception) => ReportError(exception);
+
+    protected override bool PerformRestart()
+    {
+        lock (CaptureLock)
+        {
+            RestartAttempts.Add(Stopwatch.GetElapsedTime(_created));
+            if (RestartException != null) throw RestartException;
+
+            IsRunning = RestartSucceeds;
+            if (IsRunning && (NextDisplay is { } display))
+                SetDisplay(display);
+
+            return IsRunning;
+        }
+    }
+
+    // Under CaptureLock like a real backend.
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorARGB> captureZone, Span<ColorARGB> buffer)
+    {
+        ZoneUpdateStarting?.Invoke(captureZone);
+
+        lock (CaptureLock)
+        {
+            ZoneUpdating?.Invoke(captureZone);
+            if (!WriteZones) return false;
+
+            Func<int, int, ColorARGB> pattern = Pattern;
+
+            int width = captureZone.Width;
+            for (int y = 0; y < captureZone.Height; y++)
+                for (int x = 0; x < width; x++)
+                    buffer[(y * width) + x] = pattern(x, y);
+
+            return true;
+        }
     }
 
     public static ColorARGB GetColorFromLocation(int x, int y)

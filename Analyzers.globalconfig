@@ -1,0 +1,11 @@
+is_global = true
+
+# CA1000: Do not declare static members on generic types
+dotnet_diagnostic.CA1000.severity = none
+
+# CA1034: Nested types should not be visible
+dotnet_diagnostic.CA1034.severity = none
+
+# CA1031: Do not catch general exception types
+# Intentional: capturing, restarting and disposing must never throw into the caller's capture loop.
+dotnet_diagnostic.CA1031.severity = none

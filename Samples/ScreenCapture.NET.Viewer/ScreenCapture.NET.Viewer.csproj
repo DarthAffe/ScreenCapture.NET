@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.WGC\ScreenCapture.NET.WGC.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.DX9\ScreenCapture.NET.DX9.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.X11\ScreenCapture.NET.X11.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.Wayland\ScreenCapture.NET.Wayland.csproj" />
+  </ItemGroup>
+
+</Project>

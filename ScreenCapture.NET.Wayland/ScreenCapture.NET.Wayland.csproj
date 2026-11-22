@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Title>ScreenCapture.NET.Wayland</Title>
+    <AssemblyName>ScreenCapture.NET.Wayland</AssemblyName>
+    <AssemblyTitle>ScreenCapture.NET.Wayland</AssemblyTitle>
+    <PackageId>ScreenCapture.NET.Wayland</PackageId>
+    <Description>xdg-desktop-portal and PipeWire based Screen-Capturing (Wayland)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>linux</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Common\*.cs" Link="Shared\Common\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Linux\*.cs" Link="Shared\Linux\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+  </ItemGroup>
+
+</Project>

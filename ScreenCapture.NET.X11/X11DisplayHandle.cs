@@ -1,0 +1,101 @@
+﻿using System;
+using Microsoft.Win32.SafeHandles;
+
+namespace ScreenCapture.NET;
+
+/// <summary>
+/// Owns a connection to an X server (a <c>Display*</c>) opened with <see cref="Open"/>.
+/// </summary>
+/// <remarks>
+/// If the connection can't be opened, the handle is invalid (<see cref="System.Runtime.InteropServices.SafeHandle.IsInvalid"/>) and must not be used.
+/// </remarks>
+internal sealed class X11DisplayHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    #region Properties & Fields
+
+    private X11ErrorRouter.DisplayErrors? _errors;
+
+    /// <summary>
+    /// Gets the last X error of a request on this connection since <see cref="ClearError"/>.
+    /// </summary>
+    public X11Error? LastError => _errors?.LastError;
+
+    /// <summary>
+    /// Gets a value indicating whether the connection broke. Every call on it fails from then on, mostly without a <see cref="LastError"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only with libX11 1.7+, older versions terminate the process (see <see cref="X11ErrorHandler"/>).
+    /// </remarks>
+    public bool IsConnectionLost => _errors?.IsConnectionLost ?? false;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="X11DisplayHandle"/> class. Used by the interop marshaller.
+    /// </summary>
+    public X11DisplayHandle()
+        : base(true)
+    { }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Opens a connection to an X server. Its errors are recorded (<see cref="LastError"/>, <see cref="IsConnectionLost"/>) instead of terminating the process.
+    /// </summary>
+    /// <param name="displayName">The name of the X display (e.g. <c>:0</c>); <c>null</c> for the one named by $DISPLAY.</param>
+    /// <returns>The connection; invalid if it couldn't be opened.</returns>
+    public static X11DisplayHandle Open(string? displayName)
+    {
+        X11DisplayHandle display = X11.XOpenDisplay(displayName);
+        if (display.IsInvalid) return display;
+
+        try
+        {
+            display._errors = X11ErrorHandler.Register(display.handle);
+            return display;
+        }
+        catch
+        {
+            display.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Creates the exception for a connection that couldn't be opened (see <see cref="Open"/>).
+    /// </summary>
+    /// <param name="displayName">The name of the X display that was opened; <c>null</c> for the one named by $DISPLAY.</param>
+    public static InvalidOperationException CreateOpenFailedException(string? displayName)
+    {
+        if (displayName != null)
+            return new InvalidOperationException($"Couldn't connect to the X server '{displayName}'. Check that it's running and accessible. On Wayland, use ScreenCapture.NET.Wayland: XWayland doesn't show the Wayland desktop to X clients.");
+
+        displayName = Environment.GetEnvironmentVariable("DISPLAY");
+        return new InvalidOperationException(string.IsNullOrEmpty(displayName)
+                                                 ? "Couldn't connect to an X server: $DISPLAY isn't set. On Wayland, use ScreenCapture.NET.Wayland: XWayland doesn't show the Wayland desktop to X clients."
+                                                 : $"Couldn't connect to the X server '{displayName}' ($DISPLAY). Check that it's running and accessible. On Wayland, use ScreenCapture.NET.Wayland: XWayland doesn't show the Wayland desktop to X clients.");
+    }
+
+    /// <summary>
+    /// Clears <see cref="LastError"/>.
+    /// </summary>
+    public void ClearError() => _errors?.Clear();
+
+    /// <inheritdoc />
+    protected override bool ReleaseHandle()
+    {
+        _ = X11.XCloseDisplay(handle);
+
+        // Only after closing: errors of the requests XCloseDisplay flushes must not reach Xlib's default handlers.
+        if (_errors != null)
+            X11ErrorHandler.Unregister(handle, _errors);
+
+        return true;
+    }
+
+    #endregion
+}

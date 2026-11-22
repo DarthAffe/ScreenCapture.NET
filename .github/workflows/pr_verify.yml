@@ -1,0 +1,29 @@
+name: PR-Verify
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: |
+          10.0.x
+          11.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore --configuration Release /p:Version=0.0.0
+    - name: Test
+      run: dotnet test --no-build --verbosity normal --configuration Release --filter "TestCategory!=Hardware&TestCategory!=Interactive"
+    - name: Check NativeAOT (Windows backends)
+      run: dotnet publish Samples/ScreenCapture.NET.Sample/ScreenCapture.NET.Sample.csproj --configuration Release --runtime win-x64 -p:PublishAot=true -warnaserror
+    - name: Check trimming (Linux backends)
+      run: dotnet publish Samples/ScreenCapture.NET.Sample/ScreenCapture.NET.Sample.csproj --configuration Release --runtime linux-x64 --self-contained -p:PublishTrimmed=true -warnaserror

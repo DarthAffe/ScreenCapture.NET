@@ -1,25 +1,44 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
-    <Nullable>enable</Nullable>
-
-    <IsPackable>false</IsPackable>
+    <TargetFrameworks>net11.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
     <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
-    <PackageReference Include="MSTest.TestAdapter" Version="3.5.0" />
-    <PackageReference Include="MSTest.TestFramework" Version="3.5.0" />
-    <PackageReference Include="coverlet.collector" Version="6.0.2">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.5.3" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.5.3" />
+    <PackageReference Include="coverlet.collector" Version="10.1.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\ScreenCapture.NET\ScreenCapture.NET.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.DX11\ScreenCapture.NET.DX11.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.DX9\ScreenCapture.NET.DX9.csproj" />
+    <ProjectReference Include="..\..\ScreenCapture.NET.X11\ScreenCapture.NET.X11.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Aliased: WGC compiles the same shared internal types as DX11 (Shared/), the unaliased ones are DX11's. -->
+    <ProjectReference Include="..\..\ScreenCapture.NET.WGC\ScreenCapture.NET.WGC.csproj" Aliases="WGC" />
+    <!-- Aliased: Wayland compiles the same shared internal types as X11 (Shared/Linux), the unaliased ones are X11's. -->
+    <ProjectReference Include="..\..\ScreenCapture.NET.Wayland\ScreenCapture.NET.Wayland.csproj" Aliases="Wayland" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- HdrToneMappingTests compiles it and compares the result with the embedded bytecode. -->
+    <None Include="..\..\Shared\D3D11\Shaders\HdrToneMapping.hlsl" Link="Shaders\HdrToneMapping.hlsl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
 </Project>

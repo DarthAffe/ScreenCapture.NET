@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 using HPPH;
 using SharpGen.Runtime;
@@ -12,18 +10,27 @@ namespace ScreenCapture.NET;
 /// Represents a ScreenCapture using DirectX 9.
 /// https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-getfrontbufferdata
 /// </summary>
+/// <remarks>
+/// A changed resolution makes the capture restart (see <see cref="IScreenCapture.DisplayChanged"/>).
+/// </remarks>
 // ReSharper disable once InconsistentNaming
 public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
 {
     #region Properties & Fields
 
-    private readonly object _captureLock = new();
+    private readonly Lock _captureLock = new();
 
-    private readonly IDirect3D9 _direct3D9;
+    private readonly IDirect3D9Ex _direct3D9;
     private IDirect3DDevice9? _device;
     private IDirect3DSurface9? _surface;
-    private byte[]? _buffer;
-    private int _stride;
+
+    // Only used under _captureLock.
+    private FrameBuffer? _frame;
+
+    /// <summary>
+    /// Gets the options this capture was created with.
+    /// </summary>
+    public DX9CaptureOptions Options { get; }
 
     #endregion
 
@@ -34,10 +41,12 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// </summary>
     /// <param name="direct3D9">The D3D9 instance used.</param>
     /// <param name="display">The <see cref="Display"/> to duplicate.</param>
-    internal DX9ScreenCapture(IDirect3D9 direct3D9, Display display)
+    /// <param name="options">The options of the capture.</param>
+    internal DX9ScreenCapture(IDirect3D9Ex direct3D9, Display display, DX9CaptureOptions options)
         : base(display)
     {
         this._direct3D9 = direct3D9;
+        this.Options = options;
 
         Restart();
     }
@@ -47,113 +56,123 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     #region Methods
 
     /// <inheritdoc />
-    protected override bool PerformScreenCapture()
+    protected override CaptureResult PerformScreenCapture(out long timestamp)
     {
-        bool result = false;
+        // DX9 doesn't tell when the frame was presented.
+        timestamp = 0;
+
         lock (_captureLock)
         {
-            if ((_device == null) || (_surface == null) || (_buffer == null))
-            {
-                Restart();
-                return false;
-            }
+            FrameBuffer? frame = _frame;
+            if ((_device == null) || (_surface == null) || (frame == null))
+                return RestartCapture();
+
+            // GetFrontBufferData needs a surface of the current display mode.
+            if (!IsDisplayModeOf(frame))
+                return RestartCapture();
 
             try
             {
                 _device.GetFrontBufferData(0, _surface);
 
                 LockedRectangle dr = _surface.LockRect(LockFlags.NoSystemLock | LockFlags.ReadOnly);
-
-                nint ptr = dr.DataPointer;
-                for (int y = 0; y < Display.Height; y++)
+                try
                 {
-                    Marshal.Copy(ptr, _buffer, y * _stride, _stride);
-                    ptr += dr.Pitch;
+                    CopySurface(dr, frame);
                 }
+                finally
+                {
+                    _surface.UnlockRect();
+                }
+                frame.HasData = true;
 
-                _surface.UnlockRect();
-
-                result = true;
+                // No change detection: every read counts as a new frame.
+                return CaptureResult.NewFrame;
             }
             catch (SharpGenException dxException)
             {
-                if (dxException.ResultCode == Result.AccessDenied)
-                {
-                    try
-                    {
-                        Restart();
-                    }
-                    catch { Thread.Sleep(100); }
-                }
+                // E.g. a UAC prompt, or a lost device after a GPU reset. A new device is cheap.
+                ReportError(dxException);
+                return RestartCapture();
             }
         }
-
-        return result;
     }
 
-    /// <inheritdoc />
-    protected override void PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    private bool IsDisplayModeOf(FrameBuffer frame)
     {
-        if (_buffer == null) return;
-
-        using IDisposable @lock = captureZone.Lock();
+        try
         {
-            if (captureZone.DownscaleLevel == 0)
-                CopyZone(captureZone, buffer);
-            else
-                DownscaleZone(captureZone, buffer);
+            DisplayMode displayMode = _direct3D9.GetAdapterDisplayMode((uint)Display.Index);
+            return (displayMode.Width == frame.Width) && (displayMode.Height == frame.Height);
+        }
+        catch (SharpGenException)
+        {
+            // E.g. the adapter is gone. The restart finds out.
+            return false;
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void CopyZone(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    /// <inheritdoc />
+    protected override bool PerformCaptureZoneUpdate(CaptureZone<ColorBGRA> captureZone, Span<ColorBGRA> buffer)
     {
-        RefImage<ColorBGRA>.Wrap(_buffer, Display.Width, Display.Height, _stride)[captureZone.X, captureZone.Y, captureZone.Width, captureZone.Height]
-                           .CopyTo(MemoryMarshal.Cast<byte, ColorBGRA>(buffer));
+        ArgumentNullException.ThrowIfNull(captureZone);
+
+        // A concurrent capture could overwrite the frame while it's copied.
+        lock (_captureLock)
+        {
+            // A restart on another thread can have replaced the frame.
+            FrameBuffer? frame = _frame;
+            if ((frame == null) || !frame.HasData || !captureZone.Region.IsWithin(frame.Width, frame.Height)) return false;
+
+            CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(frame.Data, frame.Width, frame.Height), captureZone, buffer);
+
+            return true;
+        }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DownscaleZone(CaptureZone<ColorBGRA> captureZone, Span<byte> buffer)
+    // The last row may end without padding.
+    private static unsafe void CopySurface(LockedRectangle surface, FrameBuffer frame)
     {
-        RefImage<ColorBGRA> source = RefImage<ColorBGRA>.Wrap(_buffer, Display.Width, Display.Height, _stride)[captureZone.X, captureZone.Y, captureZone.UnscaledWidth, captureZone.UnscaledHeight];
-        Span<ColorBGRA> target = MemoryMarshal.Cast<byte, ColorBGRA>(buffer);
-
-        int blockSize = 1 << captureZone.DownscaleLevel;
-
-        int width = captureZone.Width;
-        int height = captureZone.Height;
-
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                target[(y * width) + x] = source[x * blockSize, y * blockSize, blockSize, blockSize].Average();
+        ReadOnlySpan<byte> data = new((void*)surface.DataPointer, (surface.Pitch * (frame.Height - 1)) + (frame.Width * ColorBGRA.ColorFormat.BytesPerPixel));
+        RefImage<ColorBGRA>.Wrap(data, frame.Width, frame.Height, surface.Pitch).CopyTo(frame.Data);
     }
 
     /// <inheritdoc />
-    public override void Restart()
+    protected override bool PerformRestart()
     {
-        base.Restart();
-
         lock (_captureLock)
         {
+            // Nothing created here may outlive Dispose.
+            if (IsDisposed) return false;
+
             DisposeDX();
 
             try
             {
+                Display display = DX9Devices.FindDisplay(_direct3D9, Display.Id) ?? throw new InvalidOperationException($"The display '{Display.Id}' isn't connected.");
+
                 PresentParameters presentParameters = new()
                 {
-                    BackBufferWidth = Display.Width,
-                    BackBufferHeight = Display.Height,
+                    BackBufferWidth = (uint)display.Width,
+                    BackBufferHeight = (uint)display.Height,
                     Windowed = true,
                     SwapEffect = SwapEffect.Discard
                 };
-                _device = _direct3D9.CreateDevice(Display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
-                _surface = _device.CreateOffscreenPlainSurface(Display.Width, Display.Height, Format.A8R8G8B8, Pool.Scratch);
-                _stride = Display.Width * ColorBGRA.ColorFormat.BytesPerPixel;
-                _buffer = new byte[Display.Height * _stride];
+                _device = _direct3D9.CreateDevice((uint)display.Index, DeviceType.Hardware, IntPtr.Zero, CreateFlags.SoftwareVertexProcessing, presentParameters);
+                _surface = _device.CreateOffscreenPlainSurface((uint)display.Width, (uint)display.Height, Format.A8R8G8B8, Pool.Scratch);
+                _frame = new FrameBuffer(display.Width, display.Height);
+
+                SetDisplay(display);
+
+                return true;
             }
-            catch
+            catch (Exception ex)
             {
+                // E.g. while a UAC prompt or the lock screen is shown.
                 DisposeDX();
+                ReportError(ex);
+
+                return false;
             }
         }
     }
@@ -161,24 +180,29 @@ public sealed class DX9ScreenCapture : AbstractScreenCapture<ColorBGRA>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         lock (_captureLock)
             DisposeDX();
+
+        base.Dispose(disposing);
     }
 
     private void DisposeDX()
     {
-        try
-        {
-            try { _surface?.Dispose(); } catch { /**/}
-            try { _device?.Dispose(); } catch { /**/}
-            _buffer = null;
-            _device = null;
-            _surface = null;
-        }
-        catch { /**/ }
+        try { _surface?.Dispose(); } catch { /**/}
+        try { _device?.Dispose(); } catch { /**/}
+        _frame = null;
+        _device = null;
+        _surface = null;
     }
 
     #endregion
+
+    private sealed class FrameBuffer(int width, int height)
+    {
+        public int Width { get; } = width;
+        public int Height { get; } = height;
+        public ColorBGRA[] Data { get; } = new ColorBGRA[width * height];
+
+        public bool HasData { get; set; }
+    }
 }
