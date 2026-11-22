@@ -323,6 +323,39 @@ public sealed partial class X11HardwareTests
     }
 
     /// <summary>
+    /// A restart between the read of a frame and the zone updates (here from DisplayChanged, which runs right there) leaves an empty shared image:
+    /// the zones must not be written from it (they would show a black frame).
+    /// </summary>
+    [TestMethod]
+    public void RestartAfterTheReadDoesntWriteTheEmptyImage()
+    {
+        using XvfbServer server = XvfbServer.Start();
+        using X11ScreenCaptureService service = X11DesktopServer.CreateService(displayName: server.DisplayName);
+        (_, Display display) = HardwareTestHelper.GetFirstDisplay(service);
+
+        // Created with an outdated size: the restart in the constructor corrects it, so the first capture raises DisplayChanged.
+        using X11ScreenCapture screenCapture = new(display with { Width = display.Width - 8 }, X11CaptureOptions.Default, server.DisplayName);
+        CaptureZone<ColorBGRA> zone = screenCapture.RegisterCaptureZone(new CaptureRegion(0, 0, 64, 64));
+
+        int updates = 0;
+        zone.Updated += (_, _) => updates++;
+
+        int restarts = 0;
+        screenCapture.DisplayChanged += (_, _) =>
+        {
+            restarts++;
+            screenCapture.Restart();
+        };
+
+        Assert.AreEqual(CaptureResult.NewFrame, screenCapture.CaptureScreen());
+        Assert.AreEqual(1, restarts, "DisplayChanged wasn't raised by the first capture.");
+        Assert.AreEqual(0, updates, "The zone was written from the image of the restart.");
+
+        Assert.AreEqual(CaptureResult.NewFrame, screenCapture.CaptureScreen());
+        Assert.AreEqual(1, updates);
+    }
+
+    /// <summary>
     /// Reads the description of a real image. With wrongly sized <c>unsigned long</c> masks the format check reads padding and fails.
     /// </summary>
     [TestMethod]

@@ -48,6 +48,9 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     // Only used under _captureLock. Holds the frame of the last capture.
     private X11ImageHandle? _image;
 
+    // Only used under _captureLock. Whether _image holds a frame: a shared image is empty until the first capture after a restart reads one.
+    private bool _hasFrame;
+
     // Only used under _captureLock. Where the display is on its X screen, and its RandR monitor (0 for a whole screen).
     private int _x;
     private int _y;
@@ -117,6 +120,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 return RestartCapture();
             }
 
+            _hasFrame = true;
+
             // X11 has no change detection: every successful read counts as a new frame.
             return CaptureResult.NewFrame;
         }
@@ -138,8 +143,9 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
         // Another thread can capture, restart or dispose meanwhile: without the lock it could overwrite or free the image while it's copied.
         lock (_captureLock)
         {
+            // A restart on another thread can have replaced the image after this capture read its frame.
             X11ImageHandle? image = _image;
-            if ((image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
+            if (!_hasFrame || (image == null) || !captureZone.Region.IsWithin(image.Width, image.Height)) return false;
 
             CaptureZoneWriter.Write(RefImage<ColorBGRA>.Wrap(image.Data, image.Width, image.Height, image.Stride), captureZone, buffer);
 
@@ -175,8 +181,8 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
                 nint screen = X11.XScreenOfDisplay(display, found.Screen);
                 CULong drawable = X11.XRootWindowOfScreen(screen);
 
-                // Zones are only written after a capture read a frame (a restart isn't one), so the shared image is read by the first capture.
-                image = Options.UseSharedMemory ? X11ImageHandle.CreateShared(display, screen, current.Width, current.Height) : null;
+                // The shared image is empty: the first capture reads into it (until then, _hasFrame keeps zones from being written).
+                image =Options.UseSharedMemory ? X11ImageHandle.CreateShared(display, screen, current.Width, current.Height) : null;
                 if (image == null)
                 {
                     image = X11.XGetImage(display, drawable, current.X, current.Y, (uint)current.Width, (uint)current.Height, X11.ALL_PLANES, X11.ZPIXMAP);
@@ -228,6 +234,7 @@ public sealed class X11ScreenCapture : AbstractScreenCapture<ColorBGRA>
     {
         _image?.Dispose();
         _image = null;
+        _hasFrame = false;
 
         _display?.Dispose();
         _display = null;
